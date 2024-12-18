@@ -1,11 +1,11 @@
-import { Pool } from './pool';
+import { Pool } from './Pool';
 import {
   PoolAcquireTimeoutError,
   PoolDrainingError,
   PoolResourceNotFoundError,
 } from '../errors';
-import { IFactory } from '../interfaces/factory.interface';
-import { IPoolOptions } from '../interfaces/pool.interface';
+import { IFactory } from '../interfaces/IFactory';
+import { IPoolOptions } from '../interfaces/IPool';
 
 jest.useFakeTimers();
 jest.mock('../utils/Logger');

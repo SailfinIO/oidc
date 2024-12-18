@@ -59,12 +59,8 @@ import {
   PoolReleaseError,
   PoolResourceNotFoundError,
 } from '../errors';
-import { IFactory } from '../interfaces/factory.interface';
-import {
-  IPool,
-  IPoolOptions,
-  IPoolResource,
-} from '../interfaces/pool.interface';
+import { IFactory } from '../interfaces/IFactory';
+import { IPool, IPoolOptions, IPoolResource } from '../interfaces/IPool';
 import { DEFAULT_POOL_OPTIONS } from '../constants/pool-options.constants';
 import { ILogger } from '../interfaces';
 import { Logger } from '../utils/Logger';

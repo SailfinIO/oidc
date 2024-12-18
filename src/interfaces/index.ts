@@ -1,5 +1,5 @@
 // src/interfaces/index.ts
 
-export * from './factory.interface';
-export * from './pool.interface';
+export * from './IFactory';
+export * from './IPool';
 export * from './ILogger';
