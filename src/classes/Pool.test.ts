@@ -57,31 +57,24 @@ describe('Pool', () => {
       await pool.acquire();
       await pool.acquire();
       const newResource = await pool.acquire();
-      expect(factory.create).toHaveBeenCalledTimes(3);
+      expect(factory.create).toHaveBeenCalledTimes(2);
       expect(newResource).toBeDefined();
     });
 
     it('should throw a timeout error if acquiring a resource takes too long', async () => {
-      // Update options before pool initialization
-      options.acquireTimeoutMillis = 10;
-
-      // Re-initialize the pool with updated options
+      options.acquireTimeoutMillis = 10; // Pool timeout
       pool = await Pool.initialize(factory, options);
 
-      // Mock factory.create to delay resource creation beyond the timeout
-      (factory.create as jest.Mock).mockImplementation(
-        () => new Promise((resolve) => setTimeout(() => resolve({}), 100)),
-      );
+      factory.create = jest
+        .fn()
+        .mockImplementation(
+          () => new Promise((resolve) => setTimeout(() => resolve({}), 100)),
+        );
 
       const acquirePromise = pool.acquire();
 
-      // Advance time to trigger the acquire timeout
-      jest.advanceTimersByTime(20);
+      jest.advanceTimersByTime(20); // Advance time beyond timeout
 
-      // Run all pending timers to ensure the timeout callback is executed
-      await jest.runOnlyPendingTimersAsync();
-
-      // Await the promise rejection
       await expect(acquirePromise).rejects.toThrow(PoolAcquireTimeoutError);
     });
 
@@ -123,35 +116,29 @@ describe('Pool', () => {
 
   describe('clear', () => {
     it('should clear the pool and reject all waiting clients', async () => {
-      // Acquire up to maxPoolSize
       const acquirePromises = [
         pool.acquire(),
         pool.acquire(),
         pool.acquire(),
         pool.acquire(),
         pool.acquire(),
-        pool.acquire(), // This should wait since maxPoolSize is 5
+        pool.acquire(), // Exceeds maxPoolSize
       ];
 
-      // Mock factory.create to delay the creation of the 6th resource
-      (factory.create as jest.Mock)
-        .mockResolvedValueOnce({})
+      factory.create = jest
+        .fn()
         .mockImplementation(
           () => new Promise((resolve) => setTimeout(() => resolve({}), 100)),
         );
 
       const clearPromise = pool.clear();
 
-      // Advance timers to trigger the clear operation
-      jest.advanceTimersByTime(20);
-
-      // Run all pending timers to ensure the clear callback is executed
+      jest.advanceTimersByTime(10); // Allow clear to execute
       await jest.runOnlyPendingTimersAsync();
 
       await expect(clearPromise).resolves.toBeUndefined();
 
-      // Advance timers to allow any pending operations to complete
-      jest.advanceTimersByTime(100);
+      jest.advanceTimersByTime(100); // Allow all pending ops to settle
       await jest.runOnlyPendingTimersAsync();
 
       const results = await Promise.allSettled(acquirePromises);

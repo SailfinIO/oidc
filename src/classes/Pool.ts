@@ -65,6 +65,12 @@ import { DEFAULT_POOL_OPTIONS } from '../constants/pool-options.constants';
 import { ILogger } from '../interfaces';
 import { Logger } from '../utils/Logger';
 
+interface WaitingClient<T> {
+  resolve: (resource: T) => void;
+  reject: (error: any) => void;
+  timeout: NodeJS.Timeout;
+}
+
 /**
  * A generic connection pool implementation for managing reusable resources.
  * It minimizes resource creation overhead and ensures efficient utilization
@@ -108,20 +114,17 @@ export class Pool<T> extends EventEmitter implements IPool<T> {
   private readonly factory: IFactory<T>;
   private readonly options: IPoolOptions;
   private resources: IPoolResource<T>[] = [];
-  private waitingClients: Array<{
-    resolve: (resource: T) => void;
-    reject: (error: any) => void;
-    timeout: NodeJS.Timeout;
-  }> = [];
+  private waitingClients: WaitingClient<T>[] = [];
   private draining: boolean = false;
   private idleCheckInterval: NodeJS.Timeout | null = null;
+  private isLocked: boolean = false;
+  private lockQueue: Array<() => void> = [];
 
-  constructor(factory: IFactory<T>, options: IPoolOptions) {
+  constructor(factory: IFactory<T>, options: IPoolOptions, logger?: ILogger) {
     super();
     this.factory = factory;
     this.options = { ...Pool.DEFAULT_POOL_OPTIONS, ...options };
-
-    this.logger = new Logger(Pool.name, this.options.logLevel, true);
+    this.logger = logger || new Logger(Pool.name, this.options.logLevel, true);
 
     // Set up periodic idle checks
     if (this.options.idleCheckIntervalMillis !== undefined) {
@@ -198,29 +201,44 @@ export class Pool<T> extends EventEmitter implements IPool<T> {
    */
   private checkIdleResources(): void {
     const now = Date.now();
-    for (const res of this.resources) {
-      const hasExceededLifetime = this.options.maxLifetime
-        ? now - res.createdAt > this.options.maxLifetime
-        : false;
-      const hasExceededIdleTime =
-        now - res.lastUsed > (this.options.idleTimeoutMillis || 30000);
-
+    this.resources.forEach((res) => {
       if (
-        !res.inUse &&
-        (hasExceededIdleTime || hasExceededLifetime) &&
+        this.isResourceIdle(res, now) &&
         this.resources.length > this.options.minPoolSize
       ) {
-        this.logger.debug('Destroying idle resource');
+        this.logger.debug('Destroying idle resource.');
         this.destroy(res.resource).catch((err) =>
-          this.emit('destroyError', err),
+          this.handleError('destroyError', err),
         );
       }
-    }
+    });
+    this.handleMinPoolSize();
+  }
 
-    // Replenish the pool to maintain minPoolSize
+  private isResourceIdle(res: IPoolResource<T>, now: number): boolean {
+    const exceededIdleTime =
+      now - res.lastUsed > (this.options.idleTimeoutMillis || 30000);
+    const exceededLifetime = this.options.maxLifetime
+      ? now - res.createdAt > this.options.maxLifetime
+      : false;
+    return !res.inUse && (exceededIdleTime || exceededLifetime);
+  }
+
+  private handleError(event: string, error: Error): void {
+    this.logger.error(`${event} occurred.`, { error });
+    this.emit(event, error);
+  }
+
+  private async handleMinPoolSize(): Promise<void> {
     while (this.resources.length < this.options.minPoolSize) {
-      this.createResource().catch((err) => this.emit('createError', err));
+      await this.createResource();
     }
+  }
+
+  private getAvailableResource(): T | null {
+    const res = this.resources.find((resource) => !resource.inUse);
+    if (res) this.updateResourceState(res.resource, true);
+    return res?.resource || null;
   }
 
   /**
@@ -379,6 +397,40 @@ export class Pool<T> extends EventEmitter implements IPool<T> {
     }
   }
 
+  private handleAndEmitError(event: string, error: Error): void {
+    this.logger.error(`${event} occurred.`, { error });
+    this.emit(event, error);
+  }
+
+  private async acquireLock(): Promise<void> {
+    return new Promise((resolve) => {
+      if (!this.isLocked) {
+        this.isLocked = true;
+        resolve();
+      } else {
+        this.lockQueue.push(resolve);
+      }
+    });
+  }
+
+  private releaseLock(): void {
+    if (this.lockQueue.length > 0) {
+      const resolve = this.lockQueue.shift();
+      if (resolve) resolve();
+    } else {
+      this.isLocked = false;
+    }
+  }
+
+  private async synchronized<T>(fn: () => Promise<T>): Promise<T> {
+    await this.acquireLock();
+    try {
+      return await fn();
+    } finally {
+      this.releaseLock();
+    }
+  }
+
   /**
    * Acquires a resource from the pool, creating a new one if necessary
    * and within the pool size limits.
@@ -403,33 +455,27 @@ export class Pool<T> extends EventEmitter implements IPool<T> {
    * const resource = await pool.acquire();
    * ```
    */
-  public acquire(): Promise<T> {
-    return new Promise<T>((resolve, reject) => {
+  public async acquire(): Promise<T> {
+    return this.synchronized(async () => {
       if (this.draining) {
         this.logger.warn('Cannot acquire resource: pool is draining.');
-        return reject(new PoolDrainingError());
+        throw new PoolDrainingError();
       }
 
-      const availableResource = this.resources.find((res) => !res.inUse);
+      const availableResource = this.getAvailableResource();
       if (availableResource) {
-        this.logger.info('Acquiring available resource.', {
-          resourceId: availableResource.resource,
-        });
-        availableResource.inUse = true;
-        this.emit('acquire', availableResource.resource);
-        return resolve(availableResource.resource);
+        return availableResource;
       }
 
       const canCreateNewResource =
         this.resources.length < this.options.maxPoolSize;
-
       const canAddToWaitingQueue =
         this.options.maxWaitingClients === undefined ||
         this.waitingClients.length < this.options.maxWaitingClients;
 
       if (canCreateNewResource && canAddToWaitingQueue) {
         this.logger.debug(
-          'No available resource; adding to waiting clients queue and creating a new resource.',
+          'No available resource; adding to waiting queue and creating a new resource.',
           {
             currentPoolSize: this.resources.length,
             maxPoolSize: this.options.maxPoolSize,
@@ -438,26 +484,9 @@ export class Pool<T> extends EventEmitter implements IPool<T> {
           },
         );
 
-        const timeout = setTimeout(() => {
-          const index = this.waitingClients.findIndex(
-            (c) => c.timeout === timeout,
-          );
-          if (index !== -1) {
-            const client = this.waitingClients.splice(index, 1)[0];
-            this.logger.error('Acquire timeout exceeded for waiting client.');
-            client.reject(new PoolAcquireTimeoutError());
-          }
-        }, this.options.acquireTimeoutMillis || 30000);
-
-        this.waitingClients.push({ resolve, reject, timeout });
-
-        this.logger.info('Creating new resource for waiting client.');
-        this.createResource().catch((err) => {
-          this.logger.error('Failed to create resource for waiting client.', {
-            error: err,
-          });
-          this.emit('createError', err);
-          reject(new PoolCreateResourceError(err));
+        return new Promise<T>((resolve, reject) => {
+          this.addWaitingClient(resolve, reject);
+          this.createResource();
         });
       } else if (canAddToWaitingQueue) {
         this.logger.debug(
@@ -468,18 +497,9 @@ export class Pool<T> extends EventEmitter implements IPool<T> {
           },
         );
 
-        const timeout = setTimeout(() => {
-          const index = this.waitingClients.findIndex(
-            (c) => c.timeout === timeout,
-          );
-          if (index !== -1) {
-            const client = this.waitingClients.splice(index, 1)[0];
-            this.logger.error('Acquire timeout exceeded for waiting client.');
-            client.reject(new PoolAcquireTimeoutError());
-          }
-        }, this.options.acquireTimeoutMillis || 30000);
-
-        this.waitingClients.push({ resolve, reject, timeout });
+        return new Promise<T>((resolve, reject) => {
+          this.addWaitingClient(resolve, reject);
+        });
       } else {
         this.logger.error(
           'Max waiting clients limit exceeded; rejecting acquire request.',
@@ -488,7 +508,7 @@ export class Pool<T> extends EventEmitter implements IPool<T> {
             waitingClientsCount: this.waitingClients.length,
           },
         );
-        reject(new PoolMaxWaitingClientsError());
+        throw new PoolMaxWaitingClientsError();
       }
     });
   }
@@ -520,19 +540,7 @@ export class Pool<T> extends EventEmitter implements IPool<T> {
         'Pool is draining. Destroying resource instead of releasing.',
         { resource },
       );
-      try {
-        await this.destroy(resource);
-        this.logger.info('Resource destroyed successfully during draining.', {
-          resource,
-        });
-      } catch (err) {
-        this.logger.error('Failed to destroy resource during draining.', {
-          resource,
-          error: err,
-        });
-        this.emit('destroyError', err);
-        throw err; // Re-throw the error to ensure the promise rejects
-      }
+      await this.destroy(resource);
       return;
     }
 
@@ -540,74 +548,73 @@ export class Pool<T> extends EventEmitter implements IPool<T> {
       (res) => res.resource === resource,
     );
     if (!poolResource) {
-      this.logger.error(
-        'Attempted to release a resource not found in the pool.',
-        { resource },
-      );
       const error = new PoolResourceNotFoundError();
-      this.emit('releaseError', error);
-      throw error; // Throw the error to reject the promise
+      this.emitError('releaseError', error);
+      throw error;
     }
 
+    if (!(await this.validateResource(resource))) {
+      await this.destroy(resource);
+      await this.maintainMinPoolSize();
+      return;
+    }
+
+    this.updateResourceState(resource, false);
+    this.logger.info('Resource released successfully.', { resource });
+    this.emit('release', resource);
+    this.checkWaitingClients();
+  }
+
+  private emitError(event: string, error: any): void {
+    this.logger.error(`${event} occurred.`, { error });
+    this.emit(event, error);
+  }
+
+  private async validateResource(resource: T): Promise<boolean> {
     if (typeof this.factory.validate === 'function') {
       try {
-        this.logger.debug('Validating resource before release.', { resource });
-        const isValid = await this.factory.validate(resource);
-        if (!isValid) {
-          this.logger.warn('Resource validation failed. Destroying resource.', {
-            resource,
-          });
-          const error = new PoolReleaseError(
-            'Resource validation failed during release.',
-          );
-          this.emit('releaseError', error);
-
-          await this.destroy(resource).catch((destroyError) => {
-            this.logger.error('Failed to destroy invalid resource.', {
-              resource,
-              error: destroyError,
-            });
-            this.emit('destroyError', destroyError);
-          });
-
-          // Ensure minPoolSize is maintained
-          if (
-            !this.draining &&
-            this.resources.length < this.options.minPoolSize
-          ) {
-            this.logger.info('Replenishing pool to maintain minimum size.');
-            this.createResource().catch((err) => {
-              this.logger.error(
-                'Failed to create resource while replenishing pool.',
-                { error: err },
-              );
-              this.emit('createError', err);
-            });
-          }
-
-          this.logger.debug(
-            'Checking waiting clients after destroying invalid resource.',
-          );
-          this.checkWaitingClients();
-          return;
-        }
-      } catch (validationError) {
+        return await this.factory.validate(resource);
+      } catch (error) {
         this.logger.error('Error occurred during resource validation.', {
           resource,
-          error: validationError,
+          error,
         });
-        this.emit('releaseError', validationError);
-        throw validationError; // Throw to reject the promise
+        throw new PoolReleaseError('Resource validation failed.');
       }
-    } else {
-      poolResource.inUse = false;
-      poolResource.lastUsed = Date.now();
-      this.logger.info('Resource released successfully.', { resource });
-      this.emit('release', resource);
-
-      this.logger.debug('Checking waiting clients after releasing resource.');
-      this.checkWaitingClients();
     }
+    return true; // Default to valid if no validate function is provided
+  }
+
+  private async maintainMinPoolSize(): Promise<void> {
+    while (this.resources.length < this.options.minPoolSize) {
+      await this.createResource();
+    }
+  }
+
+  private updateResourceState(resource: T, inUse: boolean): void {
+    const poolResource = this.resources.find(
+      (res) => res.resource === resource,
+    );
+    if (poolResource) {
+      poolResource.inUse = inUse;
+      poolResource.lastUsed = Date.now();
+    }
+  }
+
+  private addWaitingClient(
+    resolve: (resource: T) => void,
+    reject: (error: any) => void,
+  ): void {
+    const timeout = setTimeout(() => {
+      const index = this.waitingClients.findIndex((c) => c.timeout === timeout);
+      if (index !== -1) {
+        const client = this.waitingClients.splice(index, 1)[0];
+        this.logger.error('Acquire timeout exceeded for waiting client.');
+        client.reject(new PoolAcquireTimeoutError());
+      }
+    }, this.options.acquireTimeoutMillis || 30000);
+
+    this.waitingClients.push({ resolve, reject, timeout });
   }
 
   /**
