@@ -7,6 +7,7 @@ import { Logger } from '../utils/Logger';
 import { ClientError } from '../errors/ClientError';
 import { Helpers } from '../utils/Helpers';
 import { HTTPClient } from '../utils/HTTPClient';
+import { ITokenResponse } from '../interfaces';
 
 export class AuthClient {
   private config: IClientConfig;
@@ -65,14 +66,17 @@ export class AuthClient {
 
     try {
       const response = await this.httpClient.post(tokenEndpoint, body);
-      this.tokenManager.setTokens(response);
+      const tokenResponse: ITokenResponse = JSON.parse(response);
+      this.tokenManager.setTokens(tokenResponse);
       this.logger.info('Exchanged authorization code for tokens');
     } catch (error) {
       this.logger.error(
         'Failed to exchange authorization code for tokens',
         error,
       );
-      throw new ClientError('Token exchange failed', 'TOKEN_EXCHANGE_ERROR');
+      throw new ClientError('Token exchange failed', 'TOKEN_EXCHANGE_ERROR', {
+        originalError: error,
+      });
     }
   }
 

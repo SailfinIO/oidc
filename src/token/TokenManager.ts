@@ -1,6 +1,6 @@
 // src/token/TokenManager.ts
 
-import { ITokenResponse } from '../interfaces';
+import { IClientConfig, ITokenResponse } from '../interfaces';
 import { ClientError } from '../errors/ClientError';
 import { Logger } from '../utils/Logger';
 import { HTTPClient } from '../utils/HTTPClient';
@@ -19,26 +19,21 @@ export class TokenManager {
     this.httpClient = new HTTPClient(this.logger);
   }
 
-  public setTokens(tokenResponse: string): void {
-    try {
-      const tokens: ITokenResponse = JSON.parse(tokenResponse);
-      this.accessToken = tokens.access_token;
-      this.refreshToken = tokens.refresh_token || null;
-      this.expiresAt = tokens.expires_in
-        ? Date.now() + tokens.expires_in * 1000
-        : null;
-      this.logger.debug('Tokens set successfully', { tokens });
-    } catch (error) {
-      this.logger.error('Failed to parse token response', error);
-      throw new ClientError(
-        'Invalid token response format',
-        'TOKEN_PARSE_ERROR',
-      );
-    }
+  public setTokens(tokenResponse: ITokenResponse): void {
+    this.accessToken = tokenResponse.access_token;
+    this.refreshToken = tokenResponse.refresh_token || null;
+    this.expiresAt = tokenResponse.expires_in
+      ? Date.now() + tokenResponse.expires_in * 1000
+      : null;
+    this.logger.debug('Tokens set successfully', { tokenResponse });
   }
 
-  public getAccessToken(): string | null {
+  public async getAccessToken(config: IClientConfig): Promise<string | null> {
     if (this.accessToken && this.isTokenValid()) {
+      return this.accessToken;
+    }
+    if (this.refreshToken) {
+      await this.refreshAccessToken(config);
       return this.accessToken;
     }
     return null;
@@ -49,7 +44,7 @@ export class TokenManager {
     return Date.now() < this.expiresAt;
   }
 
-  public async refreshAccessToken(config: any): Promise<void> {
+  public async refreshAccessToken(config: IClientConfig): Promise<void> {
     if (!this.refreshToken) {
       throw new ClientError('No refresh token available', 'NO_REFRESH_TOKEN');
     }
@@ -72,7 +67,8 @@ export class TokenManager {
 
     try {
       const response = await this.httpClient.post(tokenEndpoint, body);
-      this.setTokens(response);
+      const tokenResponse: ITokenResponse = JSON.parse(response);
+      this.setTokens(tokenResponse);
       this.logger.info('Access token refreshed successfully');
     } catch (error) {
       this.logger.error('Failed to refresh access token', error);

@@ -1,16 +1,16 @@
 // src/session/SessionManager.ts
 
+import { ISessionData } from '../interfaces';
 import { Logger } from '../utils/Logger';
-import { LogLevel } from '../enums';
-import { Helpers } from '../utils/Helpers';
+import { randomUUID } from 'crypto';
 
 export class SessionManager {
-  private sessions: Map<string, any>;
+  private sessions: Map<string, ISessionData>;
   private logger: Logger;
 
-  constructor() {
+  constructor(logger: Logger) {
     this.sessions = new Map();
-    this.logger = new Logger('SessionManager', LogLevel.INFO, false);
+    this.logger = logger;
   }
 
   /**
@@ -19,7 +19,7 @@ export class SessionManager {
    * @returns The generated session ID.
    */
   public createSession(data: any): string {
-    const sessionId = Helpers.generateUUID();
+    const sessionId = randomUUID();
     this.sessions.set(sessionId, data);
     this.logger.debug('Session created', { sessionId });
     return sessionId;

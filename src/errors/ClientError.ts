@@ -2,13 +2,14 @@
 
 export class ClientError extends Error {
   public code: string;
+  public context?: any;
 
-  constructor(message: string, code: string = 'CLIENT_ERROR') {
+  constructor(message: string, code: string = 'CLIENT_ERROR', context?: any) {
     super(message);
     this.name = this.constructor.name;
     this.code = code;
+    this.context = context;
 
-    // Maintains proper stack trace for where our error was thrown (only available on V8)
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, this.constructor);
     }

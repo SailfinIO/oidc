@@ -2,12 +2,13 @@
 import { URL, URLSearchParams } from 'url';
 import { ClientError } from '../errors/ClientError';
 import { AuthUrlParams } from '../interfaces/AuthUrlParams';
+import { randomBytes, randomUUID } from 'crypto';
 
 export class Helpers {
   /**
    * Builds a URL-encoded string from the given parameters.
    * @param params - An object containing key-value pairs to encode.
-   * @returns A URL-encoded string.
+   * @returns {string} A URL-encoded string.
    */
   public static buildUrlEncodedBody(params: Record<string, string>): string {
     return Object.entries(params)
@@ -21,9 +22,12 @@ export class Helpers {
   /**
    * Builds an authorization URL using the given parameters.
    * @param params - An object containing authorization URL parameters.
-   * @returns The built authorization URL.
+   * @returns {string} The built authorization URL.
    */
-  public static buildAuthorizationUrl(params: AuthUrlParams): string {
+  public static buildAuthorizationUrl(
+    params: AuthUrlParams,
+    additionalParams?: Record<string, string>,
+  ): string {
     try {
       const url = new URL(params.authorizationEndpoint);
       const searchParams = new URLSearchParams({
@@ -42,69 +46,19 @@ export class Helpers {
         );
       }
 
+      if (additionalParams) {
+        Object.entries(additionalParams).forEach(([key, value]) => {
+          searchParams.append(key, value);
+        });
+      }
+
       url.search = searchParams.toString();
       return url.toString();
     } catch (error) {
       throw new ClientError(
         'Failed to build authorization URL',
         'URL_BUILD_ERROR',
-      );
-    }
-  }
-
-  /**
-   * Generates a UUID v4 string.
-   * @returns A UUID v4 string.
-   */
-  public static generateUUID(): string {
-    // Check if the environment supports crypto for better randomness
-    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-      const buf = new Uint8Array(16);
-      crypto.getRandomValues(buf);
-
-      // Set the version to 4 (0100)
-      buf[6] = (buf[6] & 0x0f) | 0x40;
-      // Set the variant to 10xx
-      buf[8] = (buf[8] & 0x3f) | 0x80;
-
-      const byteToHex: string[] = [];
-      for (let i = 0; i < 256; ++i) {
-        byteToHex.push((i + 0x100).toString(16).substr(1));
-      }
-
-      const uuid = (
-        byteToHex[buf[0]] +
-        byteToHex[buf[1]] +
-        byteToHex[buf[2]] +
-        byteToHex[buf[3]] +
-        '-' +
-        byteToHex[buf[4]] +
-        byteToHex[buf[5]] +
-        '-' +
-        byteToHex[buf[6]] +
-        byteToHex[buf[7]] +
-        '-' +
-        byteToHex[buf[8]] +
-        byteToHex[buf[9]] +
-        '-' +
-        byteToHex[buf[10]] +
-        byteToHex[buf[11]] +
-        byteToHex[buf[12]] +
-        byteToHex[buf[13]] +
-        byteToHex[buf[14]] +
-        byteToHex[buf[15]]
-      ).toLowerCase();
-
-      return uuid;
-    } else {
-      // Fallback to Math.random based generator
-      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(
-        /[xy]/g,
-        function (c) {
-          const r = (Math.random() * 16) | 0;
-          const v = c === 'x' ? r : (r & 0x3) | 0x8;
-          return v.toString(16);
-        },
+        { originalError: error },
       );
     }
   }
