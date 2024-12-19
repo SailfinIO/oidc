@@ -6,3 +6,4 @@ export * from './IClientConfig';
 export * from './ITokenResponse';
 export * from './IUserInfo';
 export * from './UnknownObject';
+export * from './AuthUrlParams';

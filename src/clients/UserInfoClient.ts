@@ -11,6 +11,7 @@ export class UserInfoClient {
   private tokenManager: TokenManager;
   private discoveryConfig: IDiscoveryConfig;
   private logger: Logger;
+  private httpClient: HTTPClient;
 
   constructor(
     tokenManager: TokenManager,
@@ -20,6 +21,7 @@ export class UserInfoClient {
     this.tokenManager = tokenManager;
     this.discoveryConfig = discoveryConfig;
     this.logger = logger;
+    this.httpClient = new HTTPClient(this.logger);
   }
 
   public async getUserInfo(): Promise<IUserInfo> {
@@ -37,7 +39,7 @@ export class UserInfoClient {
     };
 
     try {
-      const response = await HTTPClient.get(userInfoEndpoint, headers);
+      const response = await this.httpClient.get(userInfoEndpoint, headers);
       const userInfo: IUserInfo = JSON.parse(response);
       this.logger.debug('Fetched user info successfully', { userInfo });
       return userInfo;

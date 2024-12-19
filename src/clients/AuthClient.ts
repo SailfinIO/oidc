@@ -4,9 +4,7 @@ import { IClientConfig } from '../interfaces/IClientConfig';
 import { DiscoveryClient } from './DiscoveryClient';
 import { TokenManager } from '../token/TokenManager';
 import { Logger } from '../utils/Logger';
-import { LogLevel } from '../enums';
 import { ClientError } from '../errors/ClientError';
-import { URLBuilder } from '../utils/URLBuilder';
 import { Helpers } from '../utils/Helpers';
 import { HTTPClient } from '../utils/HTTPClient';
 
@@ -15,10 +13,12 @@ export class AuthClient {
   private discoveryClient: DiscoveryClient;
   private tokenManager: TokenManager;
   private logger: Logger;
+  private httpClient: HTTPClient;
 
-  constructor(config: IClientConfig) {
+  constructor(config: IClientConfig, logger: Logger) {
     this.config = config;
-    this.logger = new Logger(AuthClient.name, LogLevel.INFO, false);
+    this.logger = logger;
+    this.httpClient = new HTTPClient(this.logger);
     this.discoveryClient = new DiscoveryClient(
       config.discoveryUrl,
       this.logger,
@@ -31,7 +31,7 @@ export class AuthClient {
     codeChallenge?: string,
   ): Promise<string> {
     const discoveryConfig = await this.discoveryClient.fetchDiscoveryConfig();
-    const url = URLBuilder.buildAuthorizationUrl({
+    const url = Helpers.buildAuthorizationUrl({
       authorizationEndpoint: discoveryConfig.authorization_endpoint,
       clientId: this.config.clientId,
       redirectUri: this.config.redirectUri,
@@ -64,7 +64,7 @@ export class AuthClient {
     const body = Helpers.buildUrlEncodedBody(params);
 
     try {
-      const response = await HTTPClient.post(tokenEndpoint, body);
+      const response = await this.httpClient.post(tokenEndpoint, body);
       this.tokenManager.setTokens(response);
       this.logger.info('Exchanged authorization code for tokens');
     } catch (error) {

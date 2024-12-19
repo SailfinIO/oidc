@@ -7,20 +7,27 @@ import { UserInfoClient } from './UserInfoClient';
 import { Logger } from '../utils/Logger';
 import { LogLevel } from '../enums';
 import { DiscoveryClient } from './DiscoveryClient';
-import { IDiscoveryConfig } from 'src/interfaces';
+import { IDiscoveryConfig, ILogger } from 'src/interfaces';
 
 export class OIDCClient {
   private config: IClientConfig;
   private authClient: AuthClient;
   private tokenManager: TokenManager;
   private userInfoClient: UserInfoClient;
-  private logger: Logger;
+  private logger: ILogger;
   private discoveryConfig: IDiscoveryConfig;
 
   constructor(config: IClientConfig) {
     this.config = config;
-    this.logger = new Logger(OIDCClient.name, LogLevel.INFO, true);
-    this.authClient = new AuthClient(config);
+    const envLogLevel = process.env.OIDC_LOG_LEVEL as LogLevel;
+    this.logger =
+      config.logger ||
+      new Logger(
+        OIDCClient.name,
+        config.logLevel || envLogLevel || LogLevel.INFO,
+        true,
+      );
+    this.authClient = new AuthClient(config, this.logger as Logger);
     this.tokenManager = this.authClient.getTokenManager();
   }
 
@@ -28,15 +35,19 @@ export class OIDCClient {
     this.logger.debug('Initializing OIDC Client');
     const discoveryClient = new DiscoveryClient(
       this.config.discoveryUrl,
-      this.logger,
+      this.logger as Logger,
     );
     this.discoveryConfig = await discoveryClient.fetchDiscoveryConfig();
     this.userInfoClient = new UserInfoClient(
       this.tokenManager,
       this.discoveryConfig,
-      this.logger,
+      this.logger as Logger,
     );
     this.logger.info('OIDC Client initialized successfully');
+  }
+
+  public setLogLevel(level: LogLevel): void {
+    this.logger.setLogLevel(level);
   }
 
   public async getAuthorizationUrl(

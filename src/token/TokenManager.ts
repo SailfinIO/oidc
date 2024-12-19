@@ -12,9 +12,11 @@ export class TokenManager {
   private refreshToken: string | null = null;
   private expiresAt: number | null = null;
   private logger: Logger;
+  private httpClient: HTTPClient;
 
   constructor(logger: Logger) {
     this.logger = logger;
+    this.httpClient = new HTTPClient(this.logger);
   }
 
   public setTokens(tokenResponse: string): void {
@@ -69,7 +71,7 @@ export class TokenManager {
     const body = Helpers.buildUrlEncodedBody(params);
 
     try {
-      const response = await HTTPClient.post(tokenEndpoint, body);
+      const response = await this.httpClient.post(tokenEndpoint, body);
       this.setTokens(response);
       this.logger.info('Access token refreshed successfully');
     } catch (error) {

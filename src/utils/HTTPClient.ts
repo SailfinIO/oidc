@@ -1,12 +1,17 @@
+// src/utils/HTTPClient.ts
+
 import { ClientError } from '../errors/ClientError';
 import { Logger } from './Logger';
-import { LogLevel } from '../enums';
 import { URL } from 'url';
 
 export class HTTPClient {
-  private static logger = new Logger(HTTPClient.name, LogLevel.INFO, false);
+  private logger: Logger;
 
-  public static get(
+  constructor(logger: Logger) {
+    this.logger = logger;
+  }
+
+  public get(
     url: string,
     headers: Record<string, string> = {},
   ): Promise<string> {
@@ -29,7 +34,7 @@ export class HTTPClient {
           if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
             resolve(data);
           } else {
-            HTTPClient.logger.error(
+            this.logger.error(
               `HTTP GET request failed with status ${res.statusCode}`,
               { body: data },
             );
@@ -44,7 +49,7 @@ export class HTTPClient {
       });
 
       req.on('error', (err: any) => {
-        HTTPClient.logger.error('HTTP GET request encountered an error', err);
+        this.logger.error('HTTP GET request encountered an error', err);
         reject(
           new ClientError(
             'HTTP GET request encountered an error',
@@ -57,7 +62,7 @@ export class HTTPClient {
     });
   }
 
-  public static post(
+  public post(
     url: string,
     body: string,
     headers: Record<string, string> = {},
@@ -85,7 +90,7 @@ export class HTTPClient {
           if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
             resolve(data);
           } else {
-            HTTPClient.logger.error(
+            this.logger.error(
               `HTTP POST request failed with status ${res.statusCode}`,
               { body: data },
             );
@@ -100,7 +105,7 @@ export class HTTPClient {
       });
 
       req.on('error', (err: any) => {
-        HTTPClient.logger.error('HTTP POST request encountered an error', err);
+        this.logger.error('HTTP POST request encountered an error', err);
         reject(
           new ClientError(
             'HTTP POST request encountered an error',

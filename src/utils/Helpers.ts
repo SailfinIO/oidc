@@ -1,3 +1,8 @@
+// src/utils/Helpers.ts
+import { URL, URLSearchParams } from 'url';
+import { ClientError } from '../errors/ClientError';
+import { AuthUrlParams } from '../interfaces/AuthUrlParams';
+
 export class Helpers {
   /**
    * Builds a URL-encoded string from the given parameters.
@@ -11,6 +16,40 @@ export class Helpers {
           `${encodeURIComponent(key)}=${encodeURIComponent(value)}`,
       )
       .join('&');
+  }
+
+  /**
+   * Builds an authorization URL using the given parameters.
+   * @param params - An object containing authorization URL parameters.
+   * @returns The built authorization URL.
+   */
+  public static buildAuthorizationUrl(params: AuthUrlParams): string {
+    try {
+      const url = new URL(params.authorizationEndpoint);
+      const searchParams = new URLSearchParams({
+        response_type: params.responseType,
+        client_id: params.clientId,
+        redirect_uri: params.redirectUri,
+        scope: params.scope,
+        state: params.state,
+      });
+
+      if (params.codeChallenge) {
+        searchParams.append('code_challenge', params.codeChallenge);
+        searchParams.append(
+          'code_challenge_method',
+          params.codeChallengeMethod || 'S256',
+        );
+      }
+
+      url.search = searchParams.toString();
+      return url.toString();
+    } catch (error) {
+      throw new ClientError(
+        'Failed to build authorization URL',
+        'URL_BUILD_ERROR',
+      );
+    }
   }
 
   /**

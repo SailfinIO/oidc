@@ -2,16 +2,18 @@
 
 import { IDiscoveryConfig } from '../interfaces';
 import { ClientError } from '../errors/ClientError';
-import { HTTPClient } from '../utils/HTTPClient';
 import { Logger } from '../utils/Logger';
+import { HTTPClient } from '../utils/HTTPClient';
 
 export class DiscoveryClient {
   private discoveryUrl: string;
   private logger: Logger;
+  private httpClient: HTTPClient;
 
   constructor(discoveryUrl: string, logger: Logger) {
     this.discoveryUrl = discoveryUrl;
     this.logger = logger;
+    this.httpClient = new HTTPClient(this.logger);
   }
 
   public async fetchDiscoveryConfig(): Promise<IDiscoveryConfig> {
@@ -19,7 +21,7 @@ export class DiscoveryClient {
       discoveryUrl: this.discoveryUrl,
     });
     try {
-      const response = await HTTPClient.get(this.discoveryUrl);
+      const response = await this.httpClient.get(this.discoveryUrl);
       const config: IDiscoveryConfig = JSON.parse(response);
       this.logger.info('Successfully fetched discovery document');
       return config;
