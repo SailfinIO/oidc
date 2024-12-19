@@ -21,19 +21,6 @@ const oidcClient = new OidcClient({
   issuer: 'https://your-oidc-provider.com',
   redirectUri: 'https://your-redirect-uri.com',
   scopes: ['openid', 'profile', 'email'],
-  responseType: 'code',
-  responseMode: 'query',
-  prompt: 'consent',
-  nonce: 'your-nonce',
-  state: 'your-state',
-  codeVerifier: 'your-code-verifier',
-  codeChallenge: 'your-code-challenge',
-  codeChallengeMethod: 'S256',
-  tokenEndpointAuthMethod: 'client_secret_basic',
-  grantType: 'authorization_code',
-  tokenEndpointAuthSigningAlg: 'RS256',
-  idTokenSigningAlg: 'RS256',
-  idTokenEncryptionAlg: 'RSA-OAEP',
 });
 
 const authorizationUrl = oidcClient.getAuthorizationUrl();
