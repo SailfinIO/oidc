@@ -5,7 +5,8 @@ import { ClientError } from '../errors/ClientError';
 import { Logger } from '../utils/Logger';
 import { HTTPClient } from '../utils/HTTPClient';
 import { DiscoveryClient } from '../clients/DiscoveryClient';
-import { Helpers } from 'src/utils/Helpers';
+import { Helpers } from '../utils/Helpers';
+import { GrantType } from '../enums/GrantType';
 
 export class TokenManager {
   private accessToken: string | null = null;
@@ -13,10 +14,17 @@ export class TokenManager {
   private expiresAt: number | null = null;
   private logger: Logger;
   private httpClient: HTTPClient;
+  private config: IClientConfig;
+  private discoveryClient: DiscoveryClient;
 
-  constructor(logger: Logger) {
+  constructor(logger: Logger, config: IClientConfig) {
     this.logger = logger;
+    this.config = config;
     this.httpClient = new HTTPClient(this.logger);
+    this.discoveryClient = new DiscoveryClient(
+      this.config.discoveryUrl,
+      this.logger,
+    );
   }
 
   public setTokens(tokenResponse: ITokenResponse): void {
@@ -28,12 +36,12 @@ export class TokenManager {
     this.logger.debug('Tokens set successfully', { tokenResponse });
   }
 
-  public async getAccessToken(config: IClientConfig): Promise<string | null> {
+  public async getAccessToken(): Promise<string | null> {
     if (this.accessToken && this.isTokenValid()) {
       return this.accessToken;
     }
     if (this.refreshToken) {
-      await this.refreshAccessToken(config);
+      await this.refreshAccessToken();
       return this.accessToken;
     }
     return null;
@@ -44,23 +52,19 @@ export class TokenManager {
     return Date.now() < this.expiresAt;
   }
 
-  public async refreshAccessToken(config: IClientConfig): Promise<void> {
+  public async refreshAccessToken(): Promise<void> {
     if (!this.refreshToken) {
       throw new ClientError('No refresh token available', 'NO_REFRESH_TOKEN');
     }
 
-    const discoveryClient = new DiscoveryClient(
-      config.discoveryUrl,
-      this.logger,
-    );
-    const discoveryConfig = await discoveryClient.fetchDiscoveryConfig();
+    const discoveryConfig = await this.discoveryClient.fetchDiscoveryConfig();
     const tokenEndpoint = discoveryConfig.token_endpoint;
 
-    const params = {
-      grant_type: 'refresh_token',
+    const params: Record<string, string> = {
+      grant_type: GrantType.RefreshToken,
       refresh_token: this.refreshToken,
-      client_id: config.clientId,
-      client_secret: config.clientSecret || '',
+      client_id: this.config.clientId,
+      client_secret: this.config.clientSecret || '',
     };
 
     const body = Helpers.buildUrlEncodedBody(params);
@@ -72,7 +76,9 @@ export class TokenManager {
       this.logger.info('Access token refreshed successfully');
     } catch (error) {
       this.logger.error('Failed to refresh access token', error);
-      throw new ClientError('Token refresh failed', 'TOKEN_REFRESH_ERROR');
+      throw new ClientError('Token refresh failed', 'TOKEN_REFRESH_ERROR', {
+        originalError: error,
+      });
     }
   }
 }

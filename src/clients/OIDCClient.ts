@@ -94,5 +94,13 @@ export class OIDCClient {
     return this.userInfoClient.getUserInfo();
   }
 
+  public getTokenManager(): TokenManager {
+    return this.tokenManager;
+  }
+
+  public getAuthClient(): AuthClient {
+    return this.authClient;
+  }
+
   // Add more methods as needed, such as logout, token refresh, etc.
 }

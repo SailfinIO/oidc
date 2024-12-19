@@ -8,6 +8,7 @@ import { ClientError } from '../errors/ClientError';
 import { Helpers } from '../utils/Helpers';
 import { HTTPClient } from '../utils/HTTPClient';
 import { ITokenResponse } from '../interfaces';
+import { GrantType } from '../enums/GrantType';
 
 export class AuthClient {
   private config: IClientConfig;
@@ -24,7 +25,7 @@ export class AuthClient {
       config.discoveryUrl,
       this.logger,
     );
-    this.tokenManager = new TokenManager(this.logger);
+    this.tokenManager = new TokenManager(this.logger, this.config);
   }
 
   public async getAuthorizationUrl(
@@ -32,6 +33,19 @@ export class AuthClient {
     codeChallenge?: string,
   ): Promise<string> {
     const discoveryConfig = await this.discoveryClient.fetchDiscoveryConfig();
+
+    // Ensure the grant type supports authorization URLs
+    if (
+      this.config.grantType !== GrantType.AuthorizationCode &&
+      this.config.grantType !== GrantType.Implicit &&
+      this.config.grantType !== GrantType.DeviceCode
+    ) {
+      throw new ClientError(
+        `Grant type ${this.config.grantType} does not support authorization URLs.`,
+        'INVALID_GRANT_TYPE',
+      );
+    }
+
     const url = Helpers.buildAuthorizationUrl({
       authorizationEndpoint: discoveryConfig.authorization_endpoint,
       clientId: this.config.clientId,
@@ -53,14 +67,75 @@ export class AuthClient {
     const discoveryConfig = await this.discoveryClient.fetchDiscoveryConfig();
     const tokenEndpoint = discoveryConfig.token_endpoint;
 
-    const params = {
-      grant_type: this.config.grantType || 'authorization_code',
-      code,
-      redirect_uri: this.config.redirectUri,
+    // Determine the grant type and set parameters accordingly
+    let params: Record<string, string> = {
+      grant_type: this.config.grantType,
       client_id: this.config.clientId,
+      redirect_uri: this.config.redirectUri,
       client_secret: this.config.clientSecret || '',
-      code_verifier: codeVerifier || '',
     };
+
+    switch (this.config.grantType) {
+      case GrantType.AuthorizationCode:
+        params = {
+          ...params,
+          code,
+          code_verifier: codeVerifier || '',
+        };
+        break;
+
+      case GrantType.RefreshToken:
+        params = {
+          ...params,
+          refresh_token: code, // Here, 'code' represents the refresh token
+        };
+        break;
+
+      case GrantType.ClientCredentials:
+        // Typically, no additional parameters are needed
+        break;
+
+      case GrantType.Password:
+        // Assuming 'code' here represents the password or token
+        params = {
+          ...params,
+          username: code, // You might want to adjust based on actual usage
+          password: codeVerifier || '',
+        };
+        break;
+
+      case GrantType.DeviceCode:
+        params = {
+          ...params,
+          device_code: code,
+        };
+        break;
+
+      case GrantType.JWTBearer:
+        params = {
+          ...params,
+          assertion: code, // 'code' represents the JWT assertion
+          scope: this.config.scopes.join(' '),
+        };
+        break;
+
+      case GrantType.SAML2Bearer:
+        params = {
+          ...params,
+          assertion: code, // 'code' represents the SAML assertion
+        };
+        break;
+
+      case GrantType.Custom:
+        // Handle custom grant types as needed
+        break;
+
+      default:
+        throw new ClientError(
+          `Unsupported grant type: ${this.config.grantType}`,
+          'UNSUPPORTED_GRANT_TYPE',
+        );
+    }
 
     const body = Helpers.buildUrlEncodedBody(params);
 
@@ -68,12 +143,14 @@ export class AuthClient {
       const response = await this.httpClient.post(tokenEndpoint, body);
       const tokenResponse: ITokenResponse = JSON.parse(response);
       this.tokenManager.setTokens(tokenResponse);
-      this.logger.info('Exchanged authorization code for tokens');
+      this.logger.info('Exchanged grant for tokens', {
+        grantType: this.config.grantType,
+      });
     } catch (error) {
-      this.logger.error(
-        'Failed to exchange authorization code for tokens',
+      this.logger.error('Failed to exchange grant for tokens', {
         error,
-      );
+        grantType: this.config.grantType,
+      });
       throw new ClientError('Token exchange failed', 'TOKEN_EXCHANGE_ERROR', {
         originalError: error,
       });

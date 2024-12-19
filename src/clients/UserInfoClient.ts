@@ -25,7 +25,7 @@ export class UserInfoClient {
   }
 
   public async getUserInfo(): Promise<IUserInfo> {
-    const accessToken = this.tokenManager.getAccessToken();
+    const accessToken = await this.tokenManager.getAccessToken();
     if (!accessToken) {
       throw new ClientError(
         'No valid access token available',
@@ -39,13 +39,18 @@ export class UserInfoClient {
     };
 
     try {
-      const response = await this.httpClient.get(userInfoEndpoint, headers);
+      const response = await this.httpClient.get(
+        userInfoEndpoint,
+        JSON.stringify(headers),
+      );
       const userInfo: IUserInfo = JSON.parse(response);
       this.logger.debug('Fetched user info successfully', { userInfo });
       return userInfo;
     } catch (error) {
       this.logger.error('Failed to fetch user info', error);
-      throw new ClientError('User info retrieval failed', 'USERINFO_ERROR');
+      throw new ClientError('User info retrieval failed', 'USERINFO_ERROR', {
+        originalError: error,
+      });
     }
   }
 }
