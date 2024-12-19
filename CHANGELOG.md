@@ -1,3 +1,9 @@
+## [0.0.2-beta.2](https://github.com/SailfinIO/oidc/compare/v0.0.2-beta.1...v0.0.2-beta.2) (2024-12-19)
+
+### Bug Fixes
+
+* expanded config options ([904fe67](https://github.com/SailfinIO/oidc/commit/904fe67ccc0395bbf0d7f94306f0feca8262c9d8))
+
 ## [0.0.2-beta.1](https://github.com/SailfinIO/oidc/compare/v0.0.1...v0.0.2-beta.1) (2024-12-19)
 
 ### Bug Fixes
