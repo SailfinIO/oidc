@@ -1,4 +1,4 @@
-# @sailfin/pool
+# @sailfin/oidc
 
 ## License
 

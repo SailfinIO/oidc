@@ -1,9 +1,9 @@
-// src/errors/PoolError.ts
+// src/errors/ClientError.ts
 
-export class PoolError extends Error {
+export class ClientError extends Error {
   public code: string;
 
-  constructor(message: string, code: string = 'POOL_ERROR') {
+  constructor(message: string, code: string = 'CLIENT_ERROR') {
     super(message);
     this.name = this.constructor.name;
     this.code = code;
