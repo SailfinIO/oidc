@@ -1,3 +1,5 @@
+// src/utils/ColorCodes.ts
+
 import { LabelSelector } from '../types';
 import { LogLevel } from '../enums';
 

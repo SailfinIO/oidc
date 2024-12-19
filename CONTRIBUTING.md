@@ -1,6 +1,6 @@
-# Contributing to @sailfin/pool
+# Contributing to @sailfin/oidc
 
-Thank you for considering contributing to @sailfin/pool! Your contributions are valuable to us, and this guide will help you understand our development process, how to report issues, and how to contribute code effectively.
+Thank you for considering contributing to @sailfin/oidc! Your contributions are valuable to us, and this guide will help you understand our development process, how to report issues, and how to contribute code effectively.
 
 ## Table of Contents
 
@@ -27,7 +27,7 @@ This project adheres to the Contributor Covenant [Code of Conduct](CODE_OF_CONDU
 
 ### Reporting Bugs
 
-If you find a bug in the source code, you can help us by [submitting an issue](https://github.com/SailfinIO/pool/issues). Before submitting a bug report, please check if an issue already exists. If it does, add any additional information you have as a comment.
+If you find a bug in the source code, you can help us by [submitting an issue](https://github.com/SailfinIO/oidc/issues). Before submitting a bug report, please check if an issue already exists. If it does, add any additional information you have as a comment.
 
 When reporting a bug, please include:
 
@@ -39,7 +39,7 @@ When reporting a bug, please include:
 
 ### Suggesting Features
 
-We welcome feature suggestions! To suggest a new feature, please [submit an issue](https://github.com/SailfinIO/pool/issues) and describe the feature you'd like to see, the problem it solves, and any relevant examples or use cases. This will help us understand the context and potential impact of the feature.
+We welcome feature suggestions! To suggest a new feature, please [submit an issue](https://github.com/SailfinIO/oidc/issues) and describe the feature you'd like to see, the problem it solves, and any relevant examples or use cases. This will help us understand the context and potential impact of the feature.
 
 ### Improving Documentation
 
@@ -49,17 +49,17 @@ Documentation is key to any open-source project. You can contribute by improving
 - **Improve existing explanations**.
 - **Add new examples** or use cases.
 
-Submit documentation improvements directly as a [pull request](https://github.com/SailfinIO/pool/pulls).
+Submit documentation improvements directly as a [pull request](https://github.com/SailfinIO/oidc/pulls).
 
 ### Submitting Code Changes
 
 #### 1. Fork the Repository
 
-Fork the [mail repository](https://github.com/SailfinIO/pool) on GitHub, and clone your fork to your local machine:
+Fork the [mail repository](https://github.com/SailfinIO/oidc) on GitHub, and clone your fork to your local machine:
 
 ```bash
-git clone https://github.com/your-username/pool.git
-cd pool
+git clone https://github.com/your-username/oidc.git
+cd oidc
 ```
 
 #### 2. Create a Branch
@@ -100,7 +100,7 @@ git push origin my-feature-branch
 
 #### 7. Submit a Pull Request
 
-Submit a pull request from your fork to the `main` branch of the `pool` repository. Include a detailed description of your changes and why they should be merged.
+Submit a pull request from your fork to the `main` branch of the `oidc` repository. Include a detailed description of your changes and why they should be merged.
 
 ## Development Setup
 
@@ -117,7 +117,7 @@ To set up the project for development, clone the repository and install the depe
 
 ```bash
 git clone
-cd pool
+cd oidc
 npm install
 ```
 
@@ -154,6 +154,6 @@ To submit a pull request:
 2. Make your changes and run the tests.
 3. Commit your changes with a descriptive commit message.
 4. Push your changes to your fork on GitHub.
-5. Submit a pull request to the `main` branch of the `@sailfin/pool` repository.
+5. Submit a pull request to the `main` branch of the `@sailfin/oidc` repository.
 
 ## Thank You!

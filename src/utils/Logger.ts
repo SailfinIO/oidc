@@ -1,3 +1,5 @@
+// src/utils/Logger.ts
+
 import { ILogger } from '../interfaces';
 import { LogLevel } from '../enums';
 import { ColorCodes, ResetCode } from './ColorCodes';
@@ -6,6 +8,10 @@ import { ColorCodes, ResetCode } from './ColorCodes';
  * A simple, customizable logger class for logging messages at various log levels.
  * Provides options for colored output and context-based logging.
  *
+ * @remarks This class is intended for use in Node.js applications.
+ * @public
+ * @implements {ILogger}
+ *
  * @module Logger
  * @example
  * const logger = new Logger('MyClass', LogLevel.INFO, true);
@@ -13,7 +19,6 @@ import { ColorCodes, ResetCode } from './ColorCodes';
  * logger.error('This is an error message');
  * logger.warn('This is a warning message');
  * logger.debug('This is a debug message');
- * logger.verbose('This is a verbose message');
  */
 export class Logger implements ILogger {
   private context: string;
@@ -39,6 +44,10 @@ export class Logger implements ILogger {
   /**
    * Sets the log level for the logger, defining the minimum severity of messages to log.
    * @param level - The log level to apply (e.g., LogLevel.ERROR, LogLevel.DEBUG).
+   * @remarks Log levels are hierarchical, with DEBUG being the most verbose and ERROR the least.
+   * @remarks Messages at or above the specified level will be logged.
+   * @remarks The default log level is INFO.
+   * @returns {void}
    * @example
    * logger.setLogLevel(LogLevel.DEBUG);
    */
@@ -49,7 +58,8 @@ export class Logger implements ILogger {
   /**
    * Determines whether a given log level should be logged based on the current log level setting.
    * @param level - The log level to evaluate.
-   * @returns True if the specified level meets or exceeds the current log level; otherwise, false.
+   * @remarks This method is used internally to determine whether to log a message.
+   * @returns {boolean} True if the specified level meets or exceeds the current log level; otherwise, false.
    */
   private shouldLog(level: LogLevel): boolean {
     const levels: LogLevel[] = [
@@ -64,7 +74,8 @@ export class Logger implements ILogger {
   /**
    * Converts unknown data types into a log-friendly string format.
    * @param data - The data to process.
-   * @returns A stringified version of the data, or a message indicating a failure to stringify.
+   * @remarks This method is used internally to format additional data for log messages.
+   * @returns {string} A stringified version of the data, or a message indicating a failure to stringify.
    */
   private processUnknown(data?: unknown): string {
     if (data === undefined) {
@@ -85,6 +96,7 @@ export class Logger implements ILogger {
 
   /**
    * Provides a replacer function to handle circular references in objects.
+   * @remarks This method is used internally to prevent JSON.stringify from throwing an error.
    * @returns A function that replaces circular references with "[Circular]".
    */
   private circularReplacer() {
@@ -102,7 +114,8 @@ export class Logger implements ILogger {
 
   /**
    * Generates a human-readable timestamp for log messages.
-   * @returns The current date and time in a readable string format.
+   * @remarks This method is used internally to provide a consistent timestamp format.
+   * @returns {string} The current date and time in a readable string format.
    * @example
    * const timestamp = this.formatTimestamp();
    * console.log(timestamp);
@@ -125,10 +138,11 @@ export class Logger implements ILogger {
 
   /**
    * Constructs and formats a log message with optional colors and additional data.
+   * @remarks This method is used internally to create a formatted log message.
    * @param level - The log level of the message (e.g., LogLevel.ERROR).
    * @param message - The main message to log.
    * @param additionalData - Optional additional data to include with the message.
-   * @returns A formatted string ready for logging.
+   * @returns {string} A formatted string ready for logging.
    */
   private formatMessage(
     level: LogLevel,
@@ -157,8 +171,10 @@ export class Logger implements ILogger {
 
   /**
    * Logs an error message to the console, with optional trace information.
+   * @remarks This method is used to log error messages and stack traces.
    * @param message - The error message.
    * @param trace - Optional trace data to include.
+   * @returns {void} Logs the message to the console.
    * @example
    * logger.error('An error occurred', new Error('Error details'));
    */
@@ -173,8 +189,10 @@ export class Logger implements ILogger {
 
   /**
    * Logs a warning message to the console, with optional context.
+   * @remarks This method is used to log potential issues or non-critical warnings.
    * @param message - The warning message.
    * @param context - Optional additional context.
+   * @returns {void} Logs the message to the console.
    * @example
    * logger.warn('Potential issue detected');
    */
@@ -189,8 +207,10 @@ export class Logger implements ILogger {
 
   /**
    * Logs an informational message to the console, with optional context.
+   * @remarks This method is used to log general information or status updates.
    * @param message - The informational message.
    * @param context - Optional additional context.
+   * @returns {void} Logs the message to the console.
    * @example
    * logger.info('System operational');
    */
@@ -205,8 +225,10 @@ export class Logger implements ILogger {
 
   /**
    * Logs a debug message to the console, with optional context for troubleshooting.
+   * @remarks This method is used to log detailed debugging information.
    * @param message - The debug message.
    * @param context - Optional additional context.
+   * @returns {void} Logs the message to the console.
    * @example
    * logger.debug('Debugging application flow');
    */

@@ -1,7 +1,7 @@
 {
-  "name": "@sailfin/pool",
-  "version": "0.0.1",
-  "description": "A generic pool for Node.js",
+  "name": "@sailfin/oidc",
+  "version": "0.0.2-beta.1",
+  "description": "An OIDC client for Node.js",
   "author": "Michael Curtis <michael@sailfin.io>",
   "readme": "README.md",
   "contributors": [
@@ -23,15 +23,30 @@
   "type": "commonjs",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/SailfinIO/pool/issues"
+    "url": "https://github.com/SailfinIO/oidc/issues"
   },
-  "homepage": "https://github.com/SailfinIO/pool#readme",
+  "homepage": "https://github.com/SailfinIO/oidc#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/SailfinIO/pool.git"
+    "url": "git+https://github.com/SailfinIO/oidc.git"
   },
   "keywords": [
-    "pool",
+    "oidc",
+    "openid",
+    "openid connect",
+    "ouath2",
+    "oauth",
+    "auth",
+    "authentication",
+    "authorization",
+    "identity",
+    "identity provider",
+    "identity management",
+    "identity federation",
+    "identity token",
+    "identity token provider",
+    "identity token management",
+    "identity token federation",
     "typescript",
     "nodejs"
   ],

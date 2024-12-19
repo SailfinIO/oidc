@@ -1,3 +1,5 @@
+// src/interfaces/ILogger.ts
+
 import { LogLevel } from '../enums';
 
 /**
