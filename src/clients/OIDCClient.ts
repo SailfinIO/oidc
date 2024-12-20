@@ -4,12 +4,17 @@ import { IClientConfig } from '../interfaces/IClientConfig';
 import { AuthClient } from './AuthClient';
 import { TokenClient } from './TokenClient';
 import { UserInfoClient } from './UserInfoClient';
-import { Logger, JwtValidator } from '../utils';
-import { BinaryToTextEncoding, GrantType, LogLevel } from '../enums';
+import { Logger, JwtValidator, generateRandomString } from '../utils';
+import { GrantType, LogLevel } from '../enums';
 import { DiscoveryClient } from './DiscoveryClient';
-import { IDiscoveryConfig, ILogger, IUserInfo } from '../interfaces';
+import {
+  IDiscoveryConfig,
+  ILogger,
+  ITokenIntrospectionResponse,
+  ITokenResponse,
+  IUserInfo,
+} from '../interfaces';
 import { ClientError } from '../errors';
-import { randomBytes } from 'crypto';
 
 export class OIDCClient {
   private readonly config: IClientConfig;
@@ -86,6 +91,10 @@ export class OIDCClient {
     this.logger.setLogLevel(level);
   }
 
+  /**
+   * Generates the authorization URL to initiate the OAuth2/OIDC flow.
+   * @returns The authorization URL.
+   */
   public async getAuthorizationUrl(): Promise<{ url: string }> {
     if (this.stateMap.size > 0) {
       throw new ClientError(
@@ -94,8 +103,8 @@ export class OIDCClient {
       );
     }
 
-    const state = this.generateRandomString();
-    const nonce = this.generateRandomString();
+    const state = generateRandomString();
+    const nonce = generateRandomString();
 
     // Store state -> nonce mapping
     this.stateMap.set(state, nonce);
@@ -104,6 +113,12 @@ export class OIDCClient {
     return { url };
   }
 
+  /**
+   * Handles the redirect callback for authorization code flow.
+   * Exchanges the authorization code for tokens.
+   * @param code The authorization code received from the provider.
+   * @param returnedState The state returned in the redirect to validate against CSRF.
+   */
   public async handleRedirect(
     code: string,
     returnedState: string,
@@ -138,6 +153,11 @@ export class OIDCClient {
     }
   }
 
+  /**
+   * Handles the redirect callback for implicit flow.
+   * Extracts tokens from the URL fragment.
+   * @param fragment The URL fragment containing tokens.
+   */
   public handleRedirectForImplicitFlow(fragment: string): void {
     if (this.config.grantType !== GrantType.Implicit) {
       throw new ClientError(
@@ -171,29 +191,105 @@ export class OIDCClient {
     this.logger.info('Tokens set from implicit flow fragment');
   }
 
+  /**
+   * Retrieves user information from the UserInfo endpoint.
+   * @returns User information.
+   */
   public async getUserInfo(): Promise<IUserInfo> {
     this.ensureInitialized();
     return this.userInfoClient.getUserInfo();
   }
 
-  public async introspectToken(token: string) {
+  /**
+   * Introspects a token to verify its validity and retrieve its metadata.
+   * @param token The token to introspect.
+   * @returns The introspection response.
+   */
+  public async introspectToken(
+    token: string,
+  ): Promise<ITokenIntrospectionResponse> {
     this.ensureInitialized();
     return this.tokenClient.introspectToken(token);
   }
 
+  /**
+   * Revokes a token (access or refresh token).
+   * @param token The token to revoke.
+   * @param tokenTypeHint Optional hint about the type of token: 'refresh_token' or 'access_token'.
+   */
   public async revokeToken(
     token: string,
     tokenTypeHint?: 'refresh_token' | 'access_token',
-  ) {
+  ): Promise<void> {
     this.ensureInitialized();
     return this.tokenClient.revokeToken(token, tokenTypeHint);
   }
 
-  public getAuthClient(): AuthClient {
-    return this.authClient;
+  /**
+   * Initiates the device authorization flow.
+   * @returns Device authorization details.
+   */
+  public async startDeviceAuthorization(): Promise<{
+    device_code: string;
+    user_code: string;
+    verification_uri: string;
+    expires_in: number;
+    interval: number;
+  }> {
+    this.ensureInitialized();
+    return this.authClient.startDeviceAuthorization();
   }
 
-  private generateRandomString(length = 32): string {
-    return randomBytes(length).toString(BinaryToTextEncoding.HEX);
+  /**
+   * Polls the token endpoint to obtain tokens for the device authorization flow.
+   * @param device_code The device code obtained from device authorization.
+   * @param interval Polling interval in seconds.
+   * @param timeout Maximum time to wait in milliseconds.
+   */
+  public async pollDeviceToken(
+    device_code: string,
+    interval: number = 5,
+    timeout?: number,
+  ): Promise<void> {
+    this.ensureInitialized();
+    return this.authClient.pollDeviceToken(device_code, interval, timeout);
+  }
+
+  /**
+   * Retrieves the current access token, refreshing it if necessary.
+   * @returns The access token or null if not available.
+   */
+  public async getAccessToken(): Promise<string | null> {
+    this.ensureInitialized();
+    return this.tokenClient.getAccessToken();
+  }
+
+  /**
+   * Retrieves all stored tokens.
+   * @returns The token response or null if no tokens are stored.
+   */
+  public getTokens(): ITokenResponse | null {
+    this.ensureInitialized();
+    return this.tokenClient.getTokens();
+  }
+
+  /**
+   * Clears all stored tokens.
+   */
+  public clearTokens(): void {
+    this.ensureInitialized();
+    this.tokenClient.clearTokens();
+  }
+
+  /**
+   * Initiates the logout flow.
+   * @param idTokenHint Optional ID token to hint the logout request.
+   * @returns The logout URL to which the user should be redirected.
+   */
+  public async logout(idTokenHint?: string): Promise<string> {
+    this.ensureInitialized();
+    const logoutUrl = await this.authClient.getLogoutUrl(idTokenHint);
+    this.logger.info('Logout initiated', { logoutUrl });
+    return logoutUrl;
   }
 }

@@ -4,9 +4,14 @@ import { IClientConfig } from '../interfaces/IClientConfig';
 import { DiscoveryClient } from './DiscoveryClient';
 import { TokenClient } from './TokenClient';
 import { ClientError } from '../errors/ClientError';
-import { Logger, buildAuthorizationUrl, buildUrlEncodedBody } from '../utils';
+import {
+  Logger,
+  buildAuthorizationUrl,
+  buildLogoutUrl,
+  buildUrlEncodedBody,
+} from '../utils';
 import { HTTPClient } from './HTTPClient';
-import { ITokenResponse } from '../interfaces';
+import { ILogoutUrlParams, ITokenResponse } from '../interfaces';
 import { GrantType } from '../enums/GrantType';
 import { createHash, randomBytes } from 'crypto';
 import { Algorithm } from '../enums/Algorithm';
@@ -370,6 +375,38 @@ export class AuthClient {
         }
       }
     }
+  }
+
+  /**
+   * Generates the logout URL to initiate the logout flow.
+   * @param idTokenHint Optional ID token to hint the logout request.
+   * @returns The logout URL.
+   */
+  public async getLogoutUrl(
+    idTokenHint?: string,
+    state?: string,
+  ): Promise<string> {
+    const discoveryConfig = await this.discoveryClient.fetchDiscoveryConfig();
+
+    if (!discoveryConfig.end_session_endpoint) {
+      throw new ClientError(
+        'No end_session_endpoint found in discovery configuration.',
+        'END_SESSION_ENDPOINT_MISSING',
+      );
+    }
+
+    const logoutParams: ILogoutUrlParams = {
+      endSessionEndpoint: discoveryConfig.end_session_endpoint,
+      clientId: this.config.clientId,
+      postLogoutRedirectUri: this.config.postLogoutRedirectUri,
+      idTokenHint,
+      state,
+    };
+
+    const logoutUrl = buildLogoutUrl(logoutParams);
+
+    this.logger.debug('Logout URL generated', { logoutUrl });
+    return logoutUrl;
   }
 
   private async sleep(ms: number): Promise<void> {

@@ -33,17 +33,12 @@ export class UserInfoClient {
     }
 
     const userInfoEndpoint = this.discoveryConfig.userinfo_endpoint;
-    const body = null;
     const headers = {
       Authorization: `Bearer ${accessToken}`,
     };
 
     try {
-      const response = await this.httpClient.get(
-        userInfoEndpoint,
-        body,
-        headers,
-      );
+      const response = await this.httpClient.get(userInfoEndpoint, headers);
       const userInfo: IUserInfo = JSON.parse(response);
       this.logger.debug('Fetched user info successfully', { userInfo });
       return userInfo;

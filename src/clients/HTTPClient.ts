@@ -1,3 +1,4 @@
+// src/clients/HTTPClient.ts
 import { URL } from 'url';
 import {
   request as httpRequest,
@@ -7,13 +8,16 @@ import {
   request as httpsRequest,
   RequestOptions as HttpsRequestOptions,
 } from 'https';
-import { IHttpLibrary } from '../interfaces/IHttpLibrary';
-import { ILogger } from '../interfaces/ILogger';
+import {
+  ILogger,
+  IHttpClient,
+  IHttpLibrary,
+  MakeRequestOptions,
+} from '../interfaces';
 import { HTTPMethod } from '../types/HTTPMethod';
 import { ClientError } from '../errors/ClientError';
-import { MakeRequestOptions } from '../interfaces/MakeRequestOptions';
 
-export class HTTPClient {
+export class HTTPClient implements IHttpClient {
   private logger: ILogger;
   private httpLib?: IHttpLibrary;
 
@@ -121,31 +125,62 @@ export class HTTPClient {
     });
   }
 
-  // Dynamically create methods for each HTTP verb
-  private createMethod(method: HTTPMethod) {
-    return (
-      url: string,
-      body?: string,
-      headers?: Record<string, string>,
-    ): Promise<string> => {
-      if (
-        ['GET', 'DELETE', 'HEAD', 'OPTIONS', 'TRACE', 'CONNECT'].includes(
-          method,
-        )
-      ) {
-        return this.makeRequest({ method, url, headers });
-      }
-      return this.makeRequest({ method, url, body, headers });
-    };
+  // Define methods without 'body' parameter
+  public get(url: string, headers?: Record<string, string>): Promise<string> {
+    return this.makeRequest({ method: 'GET', url, headers });
   }
 
-  public get = this.createMethod('GET');
-  public post = this.createMethod('POST');
-  public put = this.createMethod('PUT');
-  public patch = this.createMethod('PATCH');
-  public delete = this.createMethod('DELETE');
-  public options = this.createMethod('OPTIONS');
-  public head = this.createMethod('HEAD');
-  public connect = this.createMethod('CONNECT');
-  public trace = this.createMethod('TRACE');
+  public delete(
+    url: string,
+    headers?: Record<string, string>,
+  ): Promise<string> {
+    return this.makeRequest({ method: 'DELETE', url, headers });
+  }
+
+  public head(url: string, headers?: Record<string, string>): Promise<string> {
+    return this.makeRequest({ method: 'HEAD', url, headers });
+  }
+
+  public options(
+    url: string,
+    headers?: Record<string, string>,
+  ): Promise<string> {
+    return this.makeRequest({ method: 'OPTIONS', url, headers });
+  }
+
+  public trace(url: string, headers?: Record<string, string>): Promise<string> {
+    return this.makeRequest({ method: 'TRACE', url, headers });
+  }
+
+  public connect(
+    url: string,
+    headers?: Record<string, string>,
+  ): Promise<string> {
+    return this.makeRequest({ method: 'CONNECT', url, headers });
+  }
+
+  // Define methods with 'body' parameter
+  public post(
+    url: string,
+    body: string,
+    headers?: Record<string, string>,
+  ): Promise<string> {
+    return this.makeRequest({ method: 'POST', url, body, headers });
+  }
+
+  public put(
+    url: string,
+    body: string,
+    headers?: Record<string, string>,
+  ): Promise<string> {
+    return this.makeRequest({ method: 'PUT', url, body, headers });
+  }
+
+  public patch(
+    url: string,
+    body: string,
+    headers?: Record<string, string>,
+  ): Promise<string> {
+    return this.makeRequest({ method: 'PATCH', url, body, headers });
+  }
 }

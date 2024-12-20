@@ -1,12 +1,15 @@
 import {
   buildUrlEncodedBody,
   buildAuthorizationUrl,
+  buildLogoutUrl,
   base64UrlEncode,
   base64UrlDecode,
+  generateRandomString,
 } from './urlUtils';
-import { AuthUrlParams } from '../interfaces/AuthUrlParams';
+import { IAuthorizationUrlParams } from '../interfaces/IAuthorizationUrlParams';
 import { Algorithm } from '../enums';
 import { ClientError } from '../errors/ClientError';
+import { ILogoutUrlParams } from '../interfaces';
 
 describe('urlUtils', () => {
   describe('buildUrlEncodedBody', () => {
@@ -62,7 +65,7 @@ describe('urlUtils', () => {
   });
 
   describe('buildAuthorizationUrl', () => {
-    const baseParams: AuthUrlParams = {
+    const baseParams: IAuthorizationUrlParams = {
       authorizationEndpoint: 'https://auth.example.com/oauth2/authorize',
       clientId: 'myclientid',
       redirectUri: 'https://example.com/callback',
@@ -118,99 +121,219 @@ describe('urlUtils', () => {
     });
   });
 
-  describe('base64 utilities', () => {
-    describe('base64UrlEncode', () => {
-      it('should encode a buffer to a base64url string', () => {
-        const input = Buffer.from('Hello World');
-        const encoded = base64UrlEncode(input);
-        // The standard Base64 for "Hello World" is "SGVsbG8gV29ybGQ="
-        // After base64url encoding (removing '=' and making it URL safe), we get "SGVsbG8gV29ybGQ"
-        expect(encoded).toBe('SGVsbG8gV29ybGQ');
-      });
+  describe('buildLogoutUrl', () => {
+    const baseLogoutParams: ILogoutUrlParams = {
+      endSessionEndpoint: 'https://auth.example.com/oauth2/logout',
+      clientId: 'myclientid',
+      postLogoutRedirectUri: 'https://example.com/logout-callback',
+    };
 
-      it('should throw ClientError if input is not a Buffer', () => {
-        // @ts-expect-error Testing runtime behavior with invalid input
-        expect(() => base64UrlEncode('not a buffer')).toThrow(ClientError);
-        // @ts-expect-error Testing runtime behavior with invalid input
-        expect(() => base64UrlEncode(123)).toThrow(ClientError);
+    it('should build a valid logout URL with minimal parameters', () => {
+      const url = buildLogoutUrl(baseLogoutParams);
+      const expectedUrl =
+        'https://auth.example.com/oauth2/logout?client_id=myclientid&post_logout_redirect_uri=https%3A%2F%2Fexample.com%2Flogout-callback';
+      expect(url).toBe(expectedUrl);
+    });
 
-        expect(() => base64UrlEncode(null)).toThrow(ClientError);
-      });
+    it('should include id_token_hint if provided', () => {
+      const paramsWithIdToken = {
+        ...baseLogoutParams,
+        idTokenHint: 'idToken123',
+      };
+      const url = buildLogoutUrl(paramsWithIdToken);
+      const expectedUrl =
+        'https://auth.example.com/oauth2/logout?client_id=myclientid&post_logout_redirect_uri=https%3A%2F%2Fexample.com%2Flogout-callback&id_token_hint=idToken123';
+      expect(url).toBe(expectedUrl);
+    });
 
-      it('should throw ClientError if encoding fails', () => {
-        // It's challenging to force Buffer.toString to throw, but we can mock it
-        const originalToString = Buffer.prototype.toString;
-        Buffer.prototype.toString = jest.fn(() => {
-          throw new Error('Encoding failed');
+    it('should include state if provided', () => {
+      const paramsWithState = {
+        ...baseLogoutParams,
+        state: 'logoutState456',
+      };
+      const url = buildLogoutUrl(paramsWithState);
+      const expectedUrl =
+        'https://auth.example.com/oauth2/logout?client_id=myclientid&post_logout_redirect_uri=https%3A%2F%2Fexample.com%2Flogout-callback&state=logoutState456';
+      expect(url).toBe(expectedUrl);
+    });
+
+    it('should include both id_token_hint and state if provided', () => {
+      const params = {
+        ...baseLogoutParams,
+        idTokenHint: 'idToken123',
+        state: 'logoutState456',
+      };
+      const url = buildLogoutUrl(params);
+      const expectedUrl =
+        'https://auth.example.com/oauth2/logout?client_id=myclientid&post_logout_redirect_uri=https%3A%2F%2Fexample.com%2Flogout-callback&id_token_hint=idToken123&state=logoutState456';
+      expect(url).toBe(expectedUrl);
+    });
+
+    it('should throw a ClientError if endSessionEndpoint is invalid', () => {
+      const invalidParams = {
+        ...baseLogoutParams,
+        endSessionEndpoint: 'not a valid url',
+      };
+      expect(() => buildLogoutUrl(invalidParams)).toThrow(ClientError);
+    });
+
+    it('should throw a ClientError if required parameters are missing', () => {
+      // @ts-expect-error Testing runtime behavior with missing parameters
+      expect(() => buildLogoutUrl({})).toThrow(ClientError);
+    });
+
+    describe('base64 utilities', () => {
+      describe('base64UrlEncode', () => {
+        it('should encode a buffer to a base64url string', () => {
+          const input = Buffer.from('Hello World');
+          const encoded = base64UrlEncode(input);
+          // The standard Base64 for "Hello World" is "SGVsbG8gV29ybGQ="
+          // After base64url encoding (removing '=' and making it URL safe), we get "SGVsbG8gV29ybGQ"
+          expect(encoded).toBe('SGVsbG8gV29ybGQ');
         });
 
-        const input = Buffer.from('Test');
-        expect(() => base64UrlEncode(input)).toThrow(ClientError);
+        it('should throw ClientError if input is not a Buffer', () => {
+          // @ts-expect-error Testing runtime behavior with invalid input
+          expect(() => base64UrlEncode('not a buffer')).toThrow(ClientError);
+          // @ts-expect-error Testing runtime behavior with invalid input
+          expect(() => base64UrlEncode(123)).toThrow(ClientError);
 
-        // Restore the original method
-        Buffer.prototype.toString = originalToString;
+          expect(() => base64UrlEncode(null)).toThrow(ClientError);
+        });
+
+        it('should throw ClientError if encoding fails', () => {
+          // It's challenging to force Buffer.toString to throw, but we can mock it
+          const originalToString = Buffer.prototype.toString;
+          Buffer.prototype.toString = jest.fn(() => {
+            throw new Error('Encoding failed');
+          });
+
+          const input = Buffer.from('Test');
+          expect(() => base64UrlEncode(input)).toThrow(ClientError);
+
+          // Restore the original method
+          Buffer.prototype.toString = originalToString;
+        });
+      });
+
+      describe('base64UrlDecode', () => {
+        it('should decode a base64url string to a buffer', () => {
+          const input = 'SGVsbG8gV29ybGQ';
+          const decoded = base64UrlDecode(input);
+          expect(decoded.toString('utf8')).toBe('Hello World');
+        });
+
+        it('should encode and decode back to the original buffer', () => {
+          const originalStr = 'Testing base64url!';
+          const originalBuffer = Buffer.from(originalStr, 'utf8');
+
+          const encoded = base64UrlEncode(originalBuffer);
+          const decoded = base64UrlDecode(encoded);
+
+          expect(decoded.equals(originalBuffer)).toBe(true);
+          expect(decoded.toString('utf8')).toBe(originalStr);
+        });
+
+        it('should handle padding correctly', () => {
+          // Some Base64 strings require multiple '=' characters to pad out their length.
+          // Let's test a scenario that would require padding.
+          const originalStr = 'foo';
+          const originalBuffer = Buffer.from(originalStr, 'utf8');
+
+          const encoded = base64UrlEncode(originalBuffer);
+          // "foo" in base64 is "Zm9v"
+          // Base64url encoded: "Zm9v" (no padding needed in this case)
+          expect(encoded).toBe('Zm9v');
+
+          const decoded = base64UrlDecode(encoded);
+          expect(decoded.toString('utf8')).toBe(originalStr);
+        });
+
+        it('should correctly handle characters that would normally be replaced in base64url', () => {
+          // Test a value that includes '+' and '/' in its standard Base64 form.
+          // For example, the byte 0xFB (in hex) is '+' and '/' in standard Base64. Let's try something that produces these chars.
+          const inputBuffer = Buffer.from([0xfb, 0xff, 0x00]); // arbitrary bytes
+          const encoded = base64UrlEncode(inputBuffer);
+          // This would normally contain '+' and '/' in its Base64 representation.
+          // Check that it's been replaced properly.
+          expect(encoded).not.toContain('+');
+          expect(encoded).not.toContain('/');
+
+          const decoded = base64UrlDecode(encoded);
+          expect(decoded.equals(inputBuffer)).toBe(true);
+        });
+
+        // New Error Handling Tests
+        it('should throw ClientError if input is not a string', () => {
+          expect(() => base64UrlDecode(null)).toThrow(ClientError);
+          // @ts-expect-error Testing runtime behavior with invalid input
+          expect(() => base64UrlDecode(123)).toThrow(ClientError);
+          // @ts-expect-error Testing runtime behavior with invalid input
+          expect(() => base64UrlDecode({})).toThrow(ClientError);
+        });
+
+        it('should throw ClientError if decoding fails due to malformed input', () => {
+          const malformedInput = '!!!invalid-base64url!!!';
+          expect(() => base64UrlDecode(malformedInput)).toThrow(ClientError);
+        });
       });
     });
 
-    describe('base64UrlDecode', () => {
-      it('should decode a base64url string to a buffer', () => {
-        const input = 'SGVsbG8gV29ybGQ';
-        const decoded = base64UrlDecode(input);
-        expect(decoded.toString('utf8')).toBe('Hello World');
+    describe('generateRandomString', () => {
+      afterEach(() => {
+        jest.resetAllMocks();
       });
 
-      it('should encode and decode back to the original buffer', () => {
-        const originalStr = 'Testing base64url!';
-        const originalBuffer = Buffer.from(originalStr, 'utf8');
-
-        const encoded = base64UrlEncode(originalBuffer);
-        const decoded = base64UrlDecode(encoded);
-
-        expect(decoded.equals(originalBuffer)).toBe(true);
-        expect(decoded.toString('utf8')).toBe(originalStr);
+      it('should generate a random string with default length', () => {
+        const str = generateRandomString();
+        expect(typeof str).toBe('string');
+        expect(str).toHaveLength(64); // 32 bytes * 2 for HEX encoding
       });
 
-      it('should handle padding correctly', () => {
-        // Some Base64 strings require multiple '=' characters to pad out their length.
-        // Let's test a scenario that would require padding.
-        const originalStr = 'foo';
-        const originalBuffer = Buffer.from(originalStr, 'utf8');
-
-        const encoded = base64UrlEncode(originalBuffer);
-        // "foo" in base64 is "Zm9v"
-        // Base64url encoded: "Zm9v" (no padding needed in this case)
-        expect(encoded).toBe('Zm9v');
-
-        const decoded = base64UrlDecode(encoded);
-        expect(decoded.toString('utf8')).toBe(originalStr);
+      it('should generate a random string with specified length', () => {
+        const length = 16;
+        const str = generateRandomString(length);
+        expect(str).toHaveLength(32); // 16 bytes * 2 for HEX encoding
       });
 
-      it('should correctly handle characters that would normally be replaced in base64url', () => {
-        // Test a value that includes '+' and '/' in its standard Base64 form.
-        // For example, the byte 0xFB (in hex) is '+' and '/' in standard Base64. Let's try something that produces these chars.
-        const inputBuffer = Buffer.from([0xfb, 0xff, 0x00]); // arbitrary bytes
-        const encoded = base64UrlEncode(inputBuffer);
-        // This would normally contain '+' and '/' in its Base64 representation.
-        // Check that it's been replaced properly.
-        expect(encoded).not.toContain('+');
-        expect(encoded).not.toContain('/');
-
-        const decoded = base64UrlDecode(encoded);
-        expect(decoded.equals(inputBuffer)).toBe(true);
+      it('should generate different strings on multiple calls', () => {
+        const str1 = generateRandomString();
+        const str2 = generateRandomString();
+        expect(str1).not.toBe(str2);
       });
 
-      // New Error Handling Tests
-      it('should throw ClientError if input is not a string', () => {
-        expect(() => base64UrlDecode(null)).toThrow(ClientError);
+      it('should throw ClientError if length is not a positive integer', () => {
+        // Test with zero
+        expect(() => generateRandomString(0)).toThrow(ClientError);
+        // Test with negative number
+        expect(() => generateRandomString(-5)).toThrow(ClientError);
+        // Test with non-integer number
+        expect(() => generateRandomString(3.14)).toThrow(ClientError);
+        // Test with non-number types
         // @ts-expect-error Testing runtime behavior with invalid input
-        expect(() => base64UrlDecode(123)).toThrow(ClientError);
+        expect(() => generateRandomString('32')).toThrow(ClientError);
+
+        expect(() => generateRandomString(null)).toThrow(ClientError);
+
         // @ts-expect-error Testing runtime behavior with invalid input
-        expect(() => base64UrlDecode({})).toThrow(ClientError);
+        expect(() => generateRandomString({})).toThrow(ClientError);
       });
 
-      it('should throw ClientError if decoding fails due to malformed input', () => {
-        const malformedInput = '!!!invalid-base64url!!!';
-        expect(() => base64UrlDecode(malformedInput)).toThrow(ClientError);
+      it('should throw ClientError if length exceeds maximum allowed', () => {
+        const MAX_LENGTH = 1024;
+        expect(() => generateRandomString(MAX_LENGTH + 1)).toThrow(ClientError);
+      });
+
+      it('should return a hexadecimal string', () => {
+        const str = generateRandomString(10);
+        // HEX characters are 0-9 and a-f
+        expect(/^[a-f0-9]+$/.test(str)).toBe(true);
+      });
+
+      it('should handle maximum allowed length', () => {
+        const MAX_LENGTH = 1024;
+        const str = generateRandomString(MAX_LENGTH);
+        expect(str).toHaveLength(MAX_LENGTH * 2); // HEX encoding
       });
     });
   });

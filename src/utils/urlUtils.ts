@@ -10,8 +10,10 @@
 
 import { URL, URLSearchParams } from 'url';
 import { ClientError } from '../errors/ClientError';
-import { AuthUrlParams } from '../interfaces/AuthUrlParams';
+import { IAuthorizationUrlParams } from '../interfaces/IAuthorizationUrlParams';
 import { Algorithm, BinaryToTextEncoding } from '../enums';
+import { randomBytes } from 'crypto';
+import { ILogoutUrlParams } from '../interfaces';
 
 /**
  * Builds a URL-encoded string from the given key-value parameters.
@@ -91,7 +93,7 @@ export const buildUrlEncodedBody = (params: Record<string, string>): string => {
  * ```
  */
 export const buildAuthorizationUrl = (
-  params: AuthUrlParams,
+  params: IAuthorizationUrlParams,
   additionalParams?: Record<string, string>,
 ): string => {
   try {
@@ -126,6 +128,62 @@ export const buildAuthorizationUrl = (
       'URL_BUILD_ERROR',
       { originalError: error },
     );
+  }
+};
+
+/**
+ * Builds a logout URL using the provided parameters.
+ *
+ * This function constructs a complete logout URL by appending the necessary
+ * query parameters to the specified end session endpoint.
+ *
+ * @param {ILogoutUrlParams} params - An object containing logout URL parameters.
+ * @returns {string} The fully constructed logout URL.
+ *
+ * @throws {ClientError} If building the URL fails due to invalid parameters or URL construction issues.
+ *
+ * @example
+ * ```typescript
+ * const logoutParams: ILogoutUrlParams = {
+ *   endSessionEndpoint: 'https://auth.example.com/oauth2/logout',
+ *   clientId: 'your-client-id',
+ *   postLogoutRedirectUri: 'https://yourapp.com/logout-callback',
+ *   idTokenHint: 'idToken123',
+ * };
+ * const logoutUrl = buildLogoutUrl(logoutParams);
+ * console.log(logoutUrl);
+ * // Outputs a URL like:
+ * // "https://auth.example.com/oauth2/logout?client_id=your-client-id&post_logout_redirect_uri=https%3A%2F%2Fyourapp.com%2Flogout-callback&id_token_hint=idToken123"
+ * ```
+ */
+export const buildLogoutUrl = (params: ILogoutUrlParams): string => {
+  try {
+    const url = new URL(params.endSessionEndpoint);
+    const searchParams = new URLSearchParams({
+      client_id: params.clientId,
+      post_logout_redirect_uri: params.postLogoutRedirectUri,
+    });
+
+    if (params.idTokenHint) {
+      searchParams.append('id_token_hint', params.idTokenHint);
+    }
+
+    if (params.state) {
+      searchParams.append('state', params.state);
+    }
+
+    // Add any additional parameters as needed
+    // e.g., logout_hint, ui_locales, etc.
+    // if (params.logoutHint) {
+    //   searchParams.append('logout_hint', params.logoutHint);
+    // }
+
+    url.search = searchParams.toString();
+    return url.toString();
+  } catch (error) {
+    throw new ClientError('Failed to build logout URL', 'URL_BUILD_ERROR', {
+      originalError: error,
+    });
   }
 };
 
@@ -209,5 +267,57 @@ export const base64UrlDecode = (input: string): Buffer => {
     throw new ClientError('Failed to decode base64url', 'DECODE_ERROR', {
       originalError: error,
     });
+  }
+};
+
+/**
+ * Generates a cryptographically secure random string.
+ *
+ * This function creates a random string of the specified byte length using
+ * the `crypto` module's `randomBytes` method. The output is encoded in hexadecimal
+ * format. The default length is 32 bytes, resulting in a 64-character hexadecimal string.
+ *
+ * @param {number} [length=32] - The number of random bytes to generate.
+ * @returns {string} A hexadecimal string representing the generated random bytes.
+ * @throws {ClientError} If the `length` is not a positive integer or exceeds the maximum allowed length.
+ * @throws {ClientError} If random byte generation fails.
+ *
+ * @example
+ * ```typescript
+ * const randomStr = generateRandomString();
+ * console.log(randomStr); // e.g., "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+ *
+ * const shorterStr = generateRandomString(16);
+ * console.log(shorterStr); // e.g., "4e07408562bedb8b60ce05c1decfe3ad"
+ * ```
+ */
+export const generateRandomString = (length = 32): string => {
+  // Define maximum allowed length to prevent excessive resource usage
+  const MAX_LENGTH = 1024;
+
+  // Validate that length is a positive integer
+  if (typeof length !== 'number' || !Number.isInteger(length) || length <= 0) {
+    throw new ClientError(
+      'Length must be a positive integer',
+      'INVALID_LENGTH',
+    );
+  }
+
+  // Enforce maximum length constraint
+  if (length > MAX_LENGTH) {
+    throw new ClientError(
+      `Length must not exceed ${MAX_LENGTH} bytes`,
+      'LENGTH_EXCEEDED',
+    );
+  }
+
+  try {
+    return randomBytes(length).toString(BinaryToTextEncoding.HEX);
+  } catch (error) {
+    throw new ClientError(
+      'Failed to generate random string',
+      'RANDOM_GENERATION_ERROR',
+      { originalError: error },
+    );
   }
 };

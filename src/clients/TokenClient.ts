@@ -110,7 +110,7 @@ export class TokenClient {
     };
   }
 
-  private clearTokens(): void {
+  public clearTokens(): void {
     this.accessToken = null;
     this.refreshToken = null;
     this.idToken = null;

@@ -8,4 +8,5 @@ export interface IDiscoveryConfig {
   jwks_uri: string;
   introspection_endpoint?: string;
   revocation_endpoint?: string;
+  end_session_endpoint?: string;
 }
