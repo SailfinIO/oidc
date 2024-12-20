@@ -1,3 +1,9 @@
+## [0.0.2-beta.5](https://github.com/SailfinIO/oidc/compare/v0.0.2-beta.4...v0.0.2-beta.5) (2024-12-20)
+
+### Bug Fixes
+
+* add coverage and fix jwks client ([fdff5e8](https://github.com/SailfinIO/oidc/commit/fdff5e80940d3e64fce8fc97e06862daf03dfa0e))
+
 ## [0.0.2-beta.4](https://github.com/SailfinIO/oidc/compare/v0.0.2-beta.3...v0.0.2-beta.4) (2024-12-20)
 
 ### Bug Fixes
