@@ -7,3 +7,4 @@ export * from './ecKeyConverter';
 export * from './rsaKeyConverter';
 export * from './pem';
 export * from './urlUtils';
+export * from './JwtValidator';

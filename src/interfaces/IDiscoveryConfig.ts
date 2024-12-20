@@ -6,4 +6,6 @@ export interface IDiscoveryConfig {
   token_endpoint: string;
   userinfo_endpoint: string;
   jwks_uri: string;
+  introspection_endpoint?: string;
+  revocation_endpoint?: string;
 }

@@ -2,7 +2,7 @@
 
 import { IClientConfig } from '../interfaces/IClientConfig';
 import { DiscoveryClient } from './DiscoveryClient';
-import { TokenManager } from '../token/TokenManager';
+import { TokenClient } from './TokenClient';
 import { ClientError } from '../errors/ClientError';
 import { Logger, buildAuthorizationUrl, buildUrlEncodedBody } from '../utils';
 import { HTTPClient } from './HTTPClient';
@@ -15,7 +15,7 @@ import { BinaryToTextEncoding } from '../enums/BinaryToTextEncoding';
 export class AuthClient {
   private config: IClientConfig;
   private discoveryClient: DiscoveryClient;
-  private tokenManager: TokenManager;
+  private tokenClient: TokenClient;
   private logger: Logger;
   private httpClient: HTTPClient;
 
@@ -29,7 +29,7 @@ export class AuthClient {
       config.discoveryUrl,
       this.logger,
     );
-    this.tokenManager = new TokenManager(this.logger, this.config);
+    this.tokenClient = new TokenClient(this.logger, this.config);
   }
 
   public async getAuthorizationUrl(
@@ -51,9 +51,14 @@ export class AuthClient {
 
     let codeVerifier: string | undefined;
     let codeChallenge: string | undefined;
-    if (this.config.pkce) {
+
+    // Only generate PKCE if grantType is authorization_code and PKCE is enabled
+    if (
+      this.config.pkce &&
+      this.config.grantType === GrantType.AuthorizationCode
+    ) {
       codeVerifier = this.generateCodeVerifier();
-      this.codeVerifier = codeVerifier; // store internally
+      this.codeVerifier = codeVerifier;
       codeChallenge = this.generateCodeChallenge(codeVerifier);
     }
 
@@ -66,7 +71,10 @@ export class AuthClient {
         scope: this.config.scopes.join(' '),
         state,
         codeChallenge,
-        codeChallengeMethod: this.config.pkceMethod || Algorithm.SHA256,
+        codeChallengeMethod:
+          codeChallenge && this.config.pkceMethod !== 'plain'
+            ? this.config.pkceMethod || Algorithm.SHA256
+            : undefined,
       },
       nonce ? { nonce } : undefined,
     );
@@ -175,7 +183,7 @@ export class AuthClient {
     try {
       const response = await this.httpClient.post(tokenEndpoint, body, headers);
       const tokenResponse: ITokenResponse = JSON.parse(response);
-      this.tokenManager.setTokens(tokenResponse);
+      this.tokenClient.setTokens(tokenResponse);
       this.logger.info('Exchanged grant for tokens', {
         grantType: this.config.grantType,
       });
@@ -190,8 +198,8 @@ export class AuthClient {
     }
   }
 
-  public getTokenManager(): TokenManager {
-    return this.tokenManager;
+  public getTokenManager(): TokenClient {
+    return this.tokenClient;
   }
 
   private generateCodeVerifier(): string {
@@ -199,6 +207,12 @@ export class AuthClient {
   }
 
   private generateCodeChallenge(verifier: string): string {
+    // If pkceMethod is "plain", just return the verifier
+    if (this.config.pkceMethod === 'plain') {
+      return verifier;
+    }
+
+    // Otherwise, default to S256
     return createHash(Algorithm.SHA256.toLowerCase())
       .update(verifier)
       .digest(BinaryToTextEncoding.BASE_64_URL);
@@ -290,7 +304,6 @@ export class AuthClient {
 
     const discoveryConfig = await this.discoveryClient.fetchDiscoveryConfig();
     const tokenEndpoint = discoveryConfig.token_endpoint;
-
     const startTime = Date.now();
 
     while (true) {
@@ -315,24 +328,35 @@ export class AuthClient {
           headers,
         );
         const tokenResponse = JSON.parse(response);
-        this.tokenManager.setTokens(tokenResponse);
+        this.tokenClient.setTokens(tokenResponse);
         this.logger.info('Device authorized and tokens obtained');
         return;
       } catch (error: any) {
-        // If error is authorization_pending or slow_down, continue polling
-        const errorBody = error.context?.body
-          ? JSON.parse(error.context.body)
-          : {};
+        let errorBody: any = {};
+        if (error.context?.body) {
+          try {
+            errorBody = JSON.parse(error.context.body);
+          } catch (parseError) {
+            this.logger.warn('Failed to parse error response as JSON', {
+              originalError: parseError,
+            });
+            // If parsing fails, just continue with empty object or default handling
+
+            // If the error response is not JSON, log the raw response
+            this.logger.warn('Error response from token endpoint', {
+              response: error.context.body,
+            });
+          }
+        }
+
         if (errorBody.error === 'authorization_pending') {
-          // Just wait the interval and try again
           await this.sleep(interval * 1000);
           continue;
         } else if (errorBody.error === 'slow_down') {
-          interval += 5; // or use a different backoff strategy
+          interval += 5;
           await this.sleep(interval * 1000);
           continue;
         } else if (errorBody.error === 'expired_token') {
-          // Device code expired
           throw new ClientError('Device code expired', 'DEVICE_CODE_EXPIRED');
         } else {
           // Some other error

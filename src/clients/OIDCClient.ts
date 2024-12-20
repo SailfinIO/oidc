@@ -2,20 +2,19 @@
 
 import { IClientConfig } from '../interfaces/IClientConfig';
 import { AuthClient } from './AuthClient';
-import { TokenManager } from '../token/TokenManager';
+import { TokenClient } from './TokenClient';
 import { UserInfoClient } from './UserInfoClient';
-import { Logger } from '../utils/Logger';
+import { Logger, JwtValidator } from '../utils';
 import { BinaryToTextEncoding, GrantType, LogLevel } from '../enums';
 import { DiscoveryClient } from './DiscoveryClient';
 import { IDiscoveryConfig, ILogger, IUserInfo } from '../interfaces';
 import { ClientError } from '../errors';
 import { randomBytes } from 'crypto';
-import { JwtValidator } from 'src/token/JwtValidator';
 
 export class OIDCClient {
   private readonly config: IClientConfig;
   private readonly authClient: AuthClient;
-  private readonly tokenManager: TokenManager;
+  private readonly tokenClient: TokenClient;
   private readonly logger: ILogger;
   private userInfoClient: UserInfoClient;
   private discoveryConfig: IDiscoveryConfig;
@@ -23,12 +22,9 @@ export class OIDCClient {
   private initialized: boolean = false;
 
   private stateMap: Map<string, string> = new Map(); // state -> nonce
-  private activeState: string | null = null;
-  private activeNonce: string | null = null;
 
   constructor(config: IClientConfig) {
     this.config = config;
-    this.validateConfig(config);
     const envLogLevel = process.env.OIDC_LOG_LEVEL as LogLevel;
     this.logger =
       config.logger ||
@@ -37,12 +33,12 @@ export class OIDCClient {
         config.logLevel || envLogLevel || LogLevel.INFO,
         true,
       );
+    this.validateConfig(config);
     this.authClient = new AuthClient(config, this.logger as Logger);
-    this.tokenManager = this.authClient.getTokenManager();
+    this.tokenClient = this.authClient.getTokenManager();
   }
 
   private validateConfig(config: IClientConfig): void {
-    this.logger.debug('Validating OIDC Client configuration');
     if (!config.clientId)
       throw new ClientError('clientId is required', 'CONFIG_ERROR');
     if (!config.redirectUri)
@@ -51,6 +47,14 @@ export class OIDCClient {
       throw new ClientError('At least one scope is required', 'CONFIG_ERROR');
     if (!config.discoveryUrl)
       throw new ClientError('discoveryUrl is required', 'CONFIG_ERROR');
+
+    // Default grantType if not provided
+    if (!config.grantType) {
+      this.logger.debug(
+        'No grantType specified, defaulting to authorization_code',
+      );
+      config.grantType = GrantType.AuthorizationCode;
+    }
   }
 
   public async initialize(): Promise<void> {
@@ -61,7 +65,7 @@ export class OIDCClient {
     );
     this.discoveryConfig = await discoveryClient.fetchDiscoveryConfig();
     this.userInfoClient = new UserInfoClient(
-      this.tokenManager,
+      this.tokenClient,
       this.discoveryConfig,
       this.logger as Logger,
     );
@@ -83,14 +87,18 @@ export class OIDCClient {
   }
 
   public async getAuthorizationUrl(): Promise<{ url: string }> {
+    if (this.stateMap.size > 0) {
+      throw new ClientError(
+        'An authorization flow is already in progress',
+        'FLOW_IN_PROGRESS',
+      );
+    }
+
     const state = this.generateRandomString();
     const nonce = this.generateRandomString();
 
-    // Store them so we can validate later.
-    // We can store them together, keyed by state, or individually.
+    // Store state -> nonce mapping
     this.stateMap.set(state, nonce);
-    this.activeState = state;
-    this.activeNonce = nonce;
 
     const { url } = await this.authClient.getAuthorizationUrl(state, nonce);
     return { url };
@@ -100,19 +108,23 @@ export class OIDCClient {
     code: string,
     returnedState: string,
   ): Promise<void> {
-    if (!this.activeState || !this.stateMap.has(returnedState)) {
-      throw new ClientError('State does not match', 'STATE_MISMATCH');
+    const expectedNonce = this.stateMap.get(returnedState);
+    if (!expectedNonce) {
+      throw new ClientError(
+        'State does not match or not found',
+        'STATE_MISMATCH',
+      );
     }
 
-    const expectedNonce = this.stateMap.get(returnedState);
-    // Now exchange code for token
     await this.authClient.exchangeCodeForToken(
       code,
       this.authClient.getCodeVerifier(),
     );
 
+    // After token is obtained and validated, remove the state entry
+    this.stateMap.delete(returnedState);
     // After token is obtained:
-    const tokens = this.tokenManager.getTokens();
+    const tokens = this.tokenClient.getTokens();
     if (tokens.id_token) {
       const jwtValidator = new JwtValidator(
         this.logger as Logger,
@@ -124,11 +136,6 @@ export class OIDCClient {
     } else {
       this.logger.warn('No ID token returned to validate');
     }
-
-    // Cleanup
-    this.stateMap.delete(returnedState);
-    this.activeState = null;
-    this.activeNonce = null;
   }
 
   public handleRedirectForImplicitFlow(fragment: string): void {
@@ -160,7 +167,7 @@ export class OIDCClient {
       id_token: idToken || undefined,
     };
 
-    this.tokenManager.setTokens(tokenResponse);
+    this.tokenClient.setTokens(tokenResponse);
     this.logger.info('Tokens set from implicit flow fragment');
   }
 
@@ -169,8 +176,17 @@ export class OIDCClient {
     return this.userInfoClient.getUserInfo();
   }
 
-  public getTokenManager(): TokenManager {
-    return this.tokenManager;
+  public async introspectToken(token: string) {
+    this.ensureInitialized();
+    return this.tokenClient.introspectToken(token);
+  }
+
+  public async revokeToken(
+    token: string,
+    tokenTypeHint?: 'refresh_token' | 'access_token',
+  ) {
+    this.ensureInitialized();
+    return this.tokenClient.revokeToken(token, tokenTypeHint);
   }
 
   public getAuthClient(): AuthClient {

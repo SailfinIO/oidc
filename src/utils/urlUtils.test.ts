@@ -1,5 +1,3 @@
-// src/utils/urlUtils.test.ts
-
 import {
   buildUrlEncodedBody,
   buildAuthorizationUrl,
@@ -38,6 +36,28 @@ describe('urlUtils', () => {
       };
       const encoded = buildUrlEncodedBody(params);
       expect(encoded).toBe('param=foo%20bar&another=foo%2Bbar%2Fbaz%3F');
+    });
+
+    // New Error Handling Tests
+    it('should throw ClientError if params is not an object', () => {
+      expect(() => buildUrlEncodedBody(null)).toThrow(ClientError);
+      // @ts-expect-error Testing runtime behavior with invalid input
+      expect(() => buildUrlEncodedBody('invalid')).toThrow(ClientError);
+      // @ts-expect-error Testing runtime behavior with invalid input
+      expect(() => buildUrlEncodedBody(123)).toThrow(ClientError);
+    });
+
+    it('should throw ClientError if any key or value is not a string', () => {
+      const paramsWithNonStringValue = { key1: 'value1', key2: 123 };
+      // @ts-expect-error Testing runtime behavior with invalid input
+      expect(() => buildUrlEncodedBody(paramsWithNonStringValue)).toThrow(
+        ClientError,
+      );
+
+      const paramsWithNonStringKey = { [Symbol('key')]: 'value' };
+      expect(() => buildUrlEncodedBody(paramsWithNonStringKey)).toThrow(
+        ClientError,
+      );
     });
   });
 
@@ -99,58 +119,99 @@ describe('urlUtils', () => {
   });
 
   describe('base64 utilities', () => {
-    it('should encode a buffer to a base64url string', () => {
-      const input = Buffer.from('Hello World');
-      const encoded = base64UrlEncode(input);
-      // The standard Base64 for "Hello World" is "SGVsbG8gV29ybGQ="
-      // After base64url encoding (removing '=' and making it URL safe), we get "SGVsbG8gV29ybGQ"
-      expect(encoded).toBe('SGVsbG8gV29ybGQ');
+    describe('base64UrlEncode', () => {
+      it('should encode a buffer to a base64url string', () => {
+        const input = Buffer.from('Hello World');
+        const encoded = base64UrlEncode(input);
+        // The standard Base64 for "Hello World" is "SGVsbG8gV29ybGQ="
+        // After base64url encoding (removing '=' and making it URL safe), we get "SGVsbG8gV29ybGQ"
+        expect(encoded).toBe('SGVsbG8gV29ybGQ');
+      });
+
+      it('should throw ClientError if input is not a Buffer', () => {
+        // @ts-expect-error Testing runtime behavior with invalid input
+        expect(() => base64UrlEncode('not a buffer')).toThrow(ClientError);
+        // @ts-expect-error Testing runtime behavior with invalid input
+        expect(() => base64UrlEncode(123)).toThrow(ClientError);
+
+        expect(() => base64UrlEncode(null)).toThrow(ClientError);
+      });
+
+      it('should throw ClientError if encoding fails', () => {
+        // It's challenging to force Buffer.toString to throw, but we can mock it
+        const originalToString = Buffer.prototype.toString;
+        Buffer.prototype.toString = jest.fn(() => {
+          throw new Error('Encoding failed');
+        });
+
+        const input = Buffer.from('Test');
+        expect(() => base64UrlEncode(input)).toThrow(ClientError);
+
+        // Restore the original method
+        Buffer.prototype.toString = originalToString;
+      });
     });
 
-    it('should decode a base64url string to a buffer', () => {
-      const input = 'SGVsbG8gV29ybGQ';
-      const decoded = base64UrlDecode(input);
-      expect(decoded.toString('utf8')).toBe('Hello World');
-    });
+    describe('base64UrlDecode', () => {
+      it('should decode a base64url string to a buffer', () => {
+        const input = 'SGVsbG8gV29ybGQ';
+        const decoded = base64UrlDecode(input);
+        expect(decoded.toString('utf8')).toBe('Hello World');
+      });
 
-    it('should encode and decode back to the original buffer', () => {
-      const originalStr = 'Testing base64url!';
-      const originalBuffer = Buffer.from(originalStr, 'utf8');
+      it('should encode and decode back to the original buffer', () => {
+        const originalStr = 'Testing base64url!';
+        const originalBuffer = Buffer.from(originalStr, 'utf8');
 
-      const encoded = base64UrlEncode(originalBuffer);
-      const decoded = base64UrlDecode(encoded);
+        const encoded = base64UrlEncode(originalBuffer);
+        const decoded = base64UrlDecode(encoded);
 
-      expect(decoded.equals(originalBuffer)).toBe(true);
-      expect(decoded.toString('utf8')).toBe(originalStr);
-    });
+        expect(decoded.equals(originalBuffer)).toBe(true);
+        expect(decoded.toString('utf8')).toBe(originalStr);
+      });
 
-    it('should handle padding correctly', () => {
-      // Some Base64 strings require multiple '=' characters to pad out their length.
-      // Let's test a scenario that would require padding.
-      const originalStr = 'foo';
-      const originalBuffer = Buffer.from(originalStr, 'utf8');
+      it('should handle padding correctly', () => {
+        // Some Base64 strings require multiple '=' characters to pad out their length.
+        // Let's test a scenario that would require padding.
+        const originalStr = 'foo';
+        const originalBuffer = Buffer.from(originalStr, 'utf8');
 
-      const encoded = base64UrlEncode(originalBuffer);
-      // "foo" in base64 is "Zm9v"
-      // Base64url encoded: "Zm9v" (no padding needed in this case)
-      expect(encoded).toBe('Zm9v');
+        const encoded = base64UrlEncode(originalBuffer);
+        // "foo" in base64 is "Zm9v"
+        // Base64url encoded: "Zm9v" (no padding needed in this case)
+        expect(encoded).toBe('Zm9v');
 
-      const decoded = base64UrlDecode(encoded);
-      expect(decoded.toString('utf8')).toBe(originalStr);
-    });
+        const decoded = base64UrlDecode(encoded);
+        expect(decoded.toString('utf8')).toBe(originalStr);
+      });
 
-    it('should correctly handle characters that would normally be replaced in base64url', () => {
-      // Test a value that includes '+' and '/' in its standard Base64 form.
-      // For example, the byte 0xFB (in hex) is '+/8=' in standard Base64. Let's try something that produces these chars.
-      const inputBuffer = Buffer.from([0xfb, 0xff, 0x00]); // arbitrary bytes
-      const encoded = base64UrlEncode(inputBuffer);
-      // This would normally contain '+' and '/' in its Base64 representation.
-      // Check that it's been replaced properly.
-      expect(encoded).not.toContain('+');
-      expect(encoded).not.toContain('/');
+      it('should correctly handle characters that would normally be replaced in base64url', () => {
+        // Test a value that includes '+' and '/' in its standard Base64 form.
+        // For example, the byte 0xFB (in hex) is '+' and '/' in standard Base64. Let's try something that produces these chars.
+        const inputBuffer = Buffer.from([0xfb, 0xff, 0x00]); // arbitrary bytes
+        const encoded = base64UrlEncode(inputBuffer);
+        // This would normally contain '+' and '/' in its Base64 representation.
+        // Check that it's been replaced properly.
+        expect(encoded).not.toContain('+');
+        expect(encoded).not.toContain('/');
 
-      const decoded = base64UrlDecode(encoded);
-      expect(decoded.equals(inputBuffer)).toBe(true);
+        const decoded = base64UrlDecode(encoded);
+        expect(decoded.equals(inputBuffer)).toBe(true);
+      });
+
+      // New Error Handling Tests
+      it('should throw ClientError if input is not a string', () => {
+        expect(() => base64UrlDecode(null)).toThrow(ClientError);
+        // @ts-expect-error Testing runtime behavior with invalid input
+        expect(() => base64UrlDecode(123)).toThrow(ClientError);
+        // @ts-expect-error Testing runtime behavior with invalid input
+        expect(() => base64UrlDecode({})).toThrow(ClientError);
+      });
+
+      it('should throw ClientError if decoding fails due to malformed input', () => {
+        const malformedInput = '!!!invalid-base64url!!!';
+        expect(() => base64UrlDecode(malformedInput)).toThrow(ClientError);
+      });
     });
   });
 });

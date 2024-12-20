@@ -1,30 +1,30 @@
 // src/clients/UserInfoClient.ts
 
-import { TokenManager } from '../token/TokenManager';
+import { TokenClient } from './TokenClient';
 import { IDiscoveryConfig, IUserInfo } from '../interfaces';
 import { ClientError } from '../errors/ClientError';
 import { HTTPClient } from './HTTPClient';
 import { Logger } from '../utils/Logger';
 
 export class UserInfoClient {
-  private tokenManager: TokenManager;
+  private tokenClient: TokenClient;
   private discoveryConfig: IDiscoveryConfig;
   private logger: Logger;
   private httpClient: HTTPClient;
 
   constructor(
-    tokenManager: TokenManager,
+    tokenClient: TokenClient,
     discoveryConfig: IDiscoveryConfig,
     logger: Logger,
   ) {
-    this.tokenManager = tokenManager;
+    this.tokenClient = tokenClient;
     this.discoveryConfig = discoveryConfig;
     this.logger = logger;
     this.httpClient = new HTTPClient(this.logger);
   }
 
   public async getUserInfo(): Promise<IUserInfo> {
-    const accessToken = await this.tokenManager.getAccessToken();
+    const accessToken = await this.tokenClient.getAccessToken();
     if (!accessToken) {
       throw new ClientError(
         'No valid access token available',

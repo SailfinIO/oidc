@@ -28,7 +28,7 @@ export interface JwtHeader {
    * @required
    * @example "JWT"
    */
-  typ: string;
+  typ?: string;
 
   /**
    * The signing algorithm used to secure the JWT. This should match one of the

@@ -1,12 +1,4 @@
-/**
- * @fileoverview
- * Utility functions for converting RSA keys between different formats.
- * This module provides functionality to transform RSA keys from JSON Web Key (JWK) format
- * to Privacy-Enhanced Mail (PEM) format, facilitating interoperability with various cryptographic
- * libraries and systems that utilize PEM-encoded keys.
- *
- * @module src/utils/rsaKeyConverter
- */
+// src/utils/rsaKeyConverter.ts
 
 import { BinaryToTextEncoding } from '../enums';
 import { base64UrlDecode } from './urlUtils';
@@ -30,33 +22,29 @@ const RSA_OID = '1.2.840.113549.1.1.1';
 /**
  * Converts RSA public key components from JWK format to PEM format.
  *
- * This function takes the modulus (`n`) and exponent (`e`) of an RSA public key,
- * both encoded in Base64URL format, decodes them, and constructs a PEM-encoded
- * public key using DER encoding standards. The resulting PEM string can be used
- * in various cryptographic operations and libraries that require PEM-formatted keys.
- *
  * @param {string} n - The modulus component of the RSA public key, Base64URL-encoded.
  * @param {string} e - The exponent component of the RSA public key, Base64URL-encoded.
  * @returns {string} The PEM-encoded RSA public key.
  *
  * @throws {Error} If the modulus (`n`) or exponent (`e`) cannot be decoded from Base64URL.
- *
- * @example
- * ```typescript
- * const n = 'sXch6...'; // Base64URL-encoded modulus
- * const e = 'AQAB'; // Base64URL-encoded exponent
- * const pem = rsaJwkToPem(n, e);
- * console.log(pem);
- * // Outputs:
- * // -----BEGIN PUBLIC KEY-----
- * // MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsXch6...
- * // -----END PUBLIC KEY-----
- * ```
  */
 export const rsaJwkToPem = (n: string, e: string): string => {
-  // Decode the modulus and exponent from Base64URL to Buffer
-  const modulus = base64UrlDecode(n);
-  const exponent = base64UrlDecode(e);
+  let modulus: Buffer;
+  let exponent: Buffer;
+
+  // Attempt to decode the modulus
+  try {
+    modulus = base64UrlDecode(n);
+  } catch (error) {
+    throw new Error('Invalid modulus (n), could not decode base64url');
+  }
+
+  // Attempt to decode the exponent
+  try {
+    exponent = base64UrlDecode(e);
+  } catch (error) {
+    throw new Error('Invalid exponent (e), could not decode base64url');
+  }
 
   // Validate decoded modulus
   if (modulus.length === 0) {

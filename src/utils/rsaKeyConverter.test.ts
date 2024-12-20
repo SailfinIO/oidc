@@ -1,20 +1,36 @@
 // src/utils/rsaKeyConverter.test.ts
 
 import { rsaJwkToPem } from './rsaKeyConverter';
-import { ClientError } from '../errors';
 import { BinaryToTextEncoding } from '../enums';
+import { base64UrlDecode } from './urlUtils';
 
-// A known good RSA public JWK (example):
-// Public key from a known PEM:
-// -----BEGIN PUBLIC KEY-----
-// MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A...
-// -----END PUBLIC KEY-----
-// Convert its modulus and exponent to base64url JWK format.
-const n = 'ALICE...'; // Replace with valid base64url-encoded modulus
-const e = 'AQAB'; // Common exponent (65537 in base64url)
+// Mock the base64UrlDecode function
+jest.mock('./urlUtils', () => ({
+  base64UrlDecode: jest.fn(),
+}));
+
+const mockedBase64UrlDecode = base64UrlDecode as jest.MockedFunction<
+  typeof base64UrlDecode
+>;
+
+/**
+ * Sample RSA JWK (Public Key)
+ */
+const n =
+  'sXch6vZ3N9nndrQmbXEps2aiAFbWhM78LhWx4cbbfAAtQ9jYy5V9k7qJAsFDcQBUQM0E9sYbVjk40D19bXq9xLqGQ8GaPoVTVQeAUn0pFB1ZkWQQaTMeQFRt4ZtNTS7vkTl6T8tVQXoQoi8wS5fvAKX9uY4oVBcYecOgL';
+const e = 'AQAB';
 
 describe('rsaJwkToPem', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('should convert a valid RSA JWK to a PEM public key', () => {
+    // Mock base64UrlDecode to return valid buffers
+    mockedBase64UrlDecode.mockImplementation((input) =>
+      Buffer.from(input, 'base64url'),
+    );
+
     const pem = rsaJwkToPem(n, e);
     expect(pem).toMatch(/^-----BEGIN PUBLIC KEY-----\n/);
     expect(pem).toMatch(/\n-----END PUBLIC KEY-----$/);
@@ -30,18 +46,87 @@ describe('rsaJwkToPem', () => {
     ).not.toThrow();
   });
 
-  it('should throw if n is not valid base64url', () => {
-    expect(() => rsaJwkToPem('###', e)).toThrow(Error); // or ClientError depending on how urlDecode is handled.
+  it('should throw "Invalid modulus (n), could not decode base64url" if base64UrlDecode(n) throws', () => {
+    // Mock base64UrlDecode to throw an error when decoding 'n'
+    mockedBase64UrlDecode.mockImplementation((input) => {
+      if (input === '###') {
+        throw new Error('Input contains invalid Base64URL characters');
+      }
+      return Buffer.from(input, 'base64url');
+    });
+
+    expect(() => rsaJwkToPem('###', e)).toThrow(
+      'Invalid modulus (n), could not decode base64url',
+    );
   });
 
-  it('should throw if e is not valid base64url', () => {
-    expect(() => rsaJwkToPem(n, '%%%')).toThrow(Error);
+  it('should throw "Invalid exponent (e), could not decode base64url" if base64UrlDecode(e) throws', () => {
+    // Mock base64UrlDecode to throw an error when decoding 'e'
+    mockedBase64UrlDecode.mockImplementation((input) => {
+      if (input === '%%%') {
+        throw new Error('Input contains invalid Base64URL characters');
+      }
+      return Buffer.from(input, 'base64url');
+    });
+
+    expect(() => rsaJwkToPem(n, '%%%')).toThrow(
+      'Invalid exponent (e), could not decode base64url',
+    );
   });
 
-  it('should handle empty n or e', () => {
-    // If your code doesn't currently check this, you might want to add a check in rsaJwkToPem
-    // and expect a certain type of error. For now, just ensure it doesn't produce a valid key.
-    expect(() => rsaJwkToPem('', e)).toThrow(Error);
-    expect(() => rsaJwkToPem(n, '')).toThrow(Error);
+  it('should throw "Invalid modulus (n), could not decode base64url" if n is empty', () => {
+    // Mock base64UrlDecode to return an empty buffer when 'n' is empty
+    mockedBase64UrlDecode.mockImplementation((input) => {
+      if (input === '') {
+        return Buffer.from([]);
+      }
+      return Buffer.from(input, 'base64url');
+    });
+
+    expect(() => rsaJwkToPem('', e)).toThrow(
+      'Invalid modulus (n), could not decode base64url',
+    );
+  });
+
+  it('should throw "Invalid exponent (e), could not decode base64url" if e is empty', () => {
+    // Mock base64UrlDecode to return an empty buffer when 'e' is empty
+    mockedBase64UrlDecode.mockImplementation((input) => {
+      if (input === '') {
+        return Buffer.from([]);
+      }
+      return Buffer.from(input, 'base64url');
+    });
+
+    expect(() => rsaJwkToPem(n, '')).toThrow(
+      'Invalid exponent (e), could not decode base64url',
+    );
+  });
+
+  it('should throw "Invalid modulus (n), could not decode base64url" if base64UrlDecode(n) returns empty buffer', () => {
+    // Mock base64UrlDecode to return an empty buffer for 'n'
+    mockedBase64UrlDecode.mockImplementation((input) => {
+      if (input === 'emptyN') {
+        return Buffer.from([]);
+      }
+      return Buffer.from(input, 'base64url');
+    });
+
+    expect(() => rsaJwkToPem('emptyN', e)).toThrow(
+      'Invalid modulus (n), could not decode base64url',
+    );
+  });
+
+  it('should throw "Invalid exponent (e), could not decode base64url" if base64UrlDecode(e) returns empty buffer', () => {
+    // Mock base64UrlDecode to return an empty buffer for 'e'
+    mockedBase64UrlDecode.mockImplementation((input) => {
+      if (input === 'emptyE') {
+        return Buffer.from([]);
+      }
+      return Buffer.from(input, 'base64url');
+    });
+
+    expect(() => rsaJwkToPem(n, 'emptyE')).toThrow(
+      'Invalid exponent (e), could not decode base64url',
+    );
   });
 });

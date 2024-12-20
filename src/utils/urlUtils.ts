@@ -21,6 +21,7 @@ import { Algorithm, BinaryToTextEncoding } from '../enums';
  *
  * @param {Record<string, string>} params - An object containing key-value pairs to encode.
  * @returns {string} A URL-encoded string representing the input parameters.
+ * @throws {ClientError} If `params` is not a valid object or contains non-string keys/values.
  *
  * @example
  * ```typescript
@@ -30,11 +31,30 @@ import { Algorithm, BinaryToTextEncoding } from '../enums';
  * ```
  */
 export const buildUrlEncodedBody = (params: Record<string, string>): string => {
-  return Object.entries(params)
-    .map(
-      ([key, value]) =>
-        `${encodeURIComponent(key)}=${encodeURIComponent(value)}`,
-    )
+  if (typeof params !== 'object' || params === null) {
+    throw new ClientError(
+      'Parameters must be a non-null object',
+      'INVALID_PARAMS',
+    );
+  }
+
+  // Use Reflect.ownKeys to include symbol keys
+  return Reflect.ownKeys(params)
+    .map((key) => {
+      if (typeof key !== 'string') {
+        throw new ClientError('All keys must be strings', 'INVALID_PARAM_TYPE');
+      }
+
+      const value = params[key as string];
+      if (typeof value !== 'string') {
+        throw new ClientError(
+          'All values must be strings',
+          'INVALID_PARAM_TYPE',
+        );
+      }
+
+      return `${encodeURIComponent(key as string)}=${encodeURIComponent(value)}`;
+    })
     .join('&');
 };
 
@@ -118,6 +138,7 @@ export const buildAuthorizationUrl = (
  *
  * @param {Buffer} input - The buffer containing binary data to encode.
  * @returns {string} The Base64URL-encoded string.
+ * @throws {ClientError} If the input is not a Buffer or encoding fails.
  *
  * @example
  * ```typescript
@@ -127,11 +148,21 @@ export const buildAuthorizationUrl = (
  * ```
  */
 export const base64UrlEncode = (input: Buffer): string => {
-  return input
-    .toString(BinaryToTextEncoding.BASE_64)
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=/g, '');
+  if (!Buffer.isBuffer(input)) {
+    throw new ClientError('Input must be a Buffer', 'INVALID_INPUT');
+  }
+
+  try {
+    return input
+      .toString(BinaryToTextEncoding.BASE_64)
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '');
+  } catch (error) {
+    throw new ClientError('Failed to encode to base64url', 'ENCODE_ERROR', {
+      originalError: error,
+    });
+  }
 };
 
 /**
@@ -143,6 +174,7 @@ export const base64UrlEncode = (input: Buffer): string => {
  *
  * @param {string} input - The Base64URL-encoded string to decode.
  * @returns {Buffer} A buffer containing the decoded binary data.
+ * @throws {ClientError} If the input is not a string or decoding fails.
  *
  * @example
  * ```typescript
@@ -151,10 +183,31 @@ export const base64UrlEncode = (input: Buffer): string => {
  * console.log(decoded.toString()); // Outputs: "Hello World"
  * ```
  */
+
 export const base64UrlDecode = (input: string): Buffer => {
-  input = input.replace(/-/g, '+').replace(/_/g, '/');
-  while (input.length % 4 !== 0) {
-    input += '=';
+  if (typeof input !== 'string') {
+    throw new ClientError('Input must be a string', 'INVALID_INPUT');
   }
-  return Buffer.from(input, BinaryToTextEncoding.BASE_64);
+
+  // Regular expression to validate Base64URL string
+  const base64UrlRegex = /^[A-Za-z0-9\-_]+$/;
+
+  if (!base64UrlRegex.test(input)) {
+    throw new ClientError(
+      'Input contains invalid Base64URL characters',
+      'DECODE_ERROR',
+    );
+  }
+
+  try {
+    input = input.replace(/-/g, '+').replace(/_/g, '/');
+    while (input.length % 4 !== 0) {
+      input += '=';
+    }
+    return Buffer.from(input, BinaryToTextEncoding.BASE_64);
+  } catch (error) {
+    throw new ClientError('Failed to decode base64url', 'DECODE_ERROR', {
+      originalError: error,
+    });
+  }
 };
