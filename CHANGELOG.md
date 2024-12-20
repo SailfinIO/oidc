@@ -1,3 +1,9 @@
+## [0.0.2-beta.3](https://github.com/SailfinIO/oidc/compare/v0.0.2-beta.2...v0.0.2-beta.3) (2024-12-20)
+
+### Bug Fixes
+
+* increase test coverage ([3722f8a](https://github.com/SailfinIO/oidc/commit/3722f8adb425831f25e5b27ca7868e0543ee2a06))
+
 ## [0.0.2-beta.2](https://github.com/SailfinIO/oidc/compare/v0.0.2-beta.1...v0.0.2-beta.2) (2024-12-19)
 
 ### Bug Fixes
