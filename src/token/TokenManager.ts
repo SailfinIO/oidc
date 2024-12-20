@@ -2,15 +2,15 @@
 
 import { IClientConfig, ITokenResponse } from '../interfaces';
 import { ClientError } from '../errors/ClientError';
-import { Logger } from '../utils/Logger';
-import { HTTPClient } from '../utils/HTTPClient';
+import { Logger, buildUrlEncodedBody } from '../utils';
+import { HTTPClient } from '../clients/HTTPClient';
 import { DiscoveryClient } from '../clients/DiscoveryClient';
-import { Helpers } from '../utils/Helpers';
 import { GrantType } from '../enums/GrantType';
 
 export class TokenManager {
   private accessToken: string | null = null;
   private refreshToken: string | null = null;
+  private idToken: string | null = null;
   private expiresAt: number | null = null;
   private logger: Logger;
   private httpClient: HTTPClient;
@@ -33,9 +33,12 @@ export class TokenManager {
     this.expiresAt = tokenResponse.expires_in
       ? Date.now() + tokenResponse.expires_in * 1000
       : null;
+    if (tokenResponse.id_token) {
+      // Store it for later validation
+      (this as any).idToken = tokenResponse.id_token;
+    }
     this.logger.debug('Tokens set successfully', { tokenResponse });
   }
-
   public async getAccessToken(): Promise<string | null> {
     if (this.accessToken && this.isTokenValid()) {
       return this.accessToken;
@@ -49,7 +52,9 @@ export class TokenManager {
 
   private isTokenValid(): boolean {
     if (!this.expiresAt) return true;
-    return Date.now() < this.expiresAt;
+    const now = Date.now();
+    const threshold = (this.config.tokenRefreshThreshold || 60) * 1000; // default 60 seconds
+    return now < this.expiresAt - threshold;
   }
 
   public async refreshAccessToken(): Promise<void> {
@@ -67,10 +72,14 @@ export class TokenManager {
       client_secret: this.config.clientSecret || '',
     };
 
-    const body = Helpers.buildUrlEncodedBody(params);
+    const headers = {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    };
+
+    const body = buildUrlEncodedBody(params);
 
     try {
-      const response = await this.httpClient.post(tokenEndpoint, body);
+      const response = await this.httpClient.post(tokenEndpoint, body, headers);
       const tokenResponse: ITokenResponse = JSON.parse(response);
       this.setTokens(tokenResponse);
       this.logger.info('Access token refreshed successfully');
@@ -80,5 +89,20 @@ export class TokenManager {
         originalError: error,
       });
     }
+  }
+
+  public getTokens(): ITokenResponse | null {
+    if (!this.accessToken) {
+      return null;
+    }
+    return {
+      access_token: this.accessToken,
+      refresh_token: this.refreshToken || undefined,
+      expires_in: this.expiresAt
+        ? (this.expiresAt - Date.now()) / 1000
+        : undefined,
+      token_type: 'Bearer',
+      id_token: this.idToken,
+    };
   }
 }

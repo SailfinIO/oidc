@@ -10,3 +10,5 @@ export * from './ISessionStore';
 export * from './UnknownObject';
 export * from './AuthUrlParams';
 export * from './IHttpLibrary';
+export * from './Jwk';
+export * from './Jwt';

@@ -1,10 +1,9 @@
 // src/clients/UserInfoClient.ts
 
 import { TokenManager } from '../token/TokenManager';
-import { IDiscoveryConfig } from '../interfaces/IDiscoveryConfig';
-import { IUserInfo } from '../interfaces/IUserInfo';
+import { IDiscoveryConfig, IUserInfo } from '../interfaces';
 import { ClientError } from '../errors/ClientError';
-import { HTTPClient } from '../utils/HTTPClient';
+import { HTTPClient } from './HTTPClient';
 import { Logger } from '../utils/Logger';
 
 export class UserInfoClient {
@@ -34,6 +33,7 @@ export class UserInfoClient {
     }
 
     const userInfoEndpoint = this.discoveryConfig.userinfo_endpoint;
+    const body = null;
     const headers = {
       Authorization: `Bearer ${accessToken}`,
     };
@@ -41,7 +41,8 @@ export class UserInfoClient {
     try {
       const response = await this.httpClient.get(
         userInfoEndpoint,
-        JSON.stringify(headers),
+        body,
+        headers,
       );
       const userInfo: IUserInfo = JSON.parse(response);
       this.logger.debug('Fetched user info successfully', { userInfo });

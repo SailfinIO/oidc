@@ -1,16 +1,17 @@
+// src/session/InMemorySessionStore.ts
+
 import { ISessionStore } from '../interfaces/ISessionStore';
 import { ISessionData } from '../interfaces/ISessionData';
 import { Logger } from '../utils/Logger';
-import { LogLevel } from '../enums';
 import { randomUUID } from 'crypto';
 
 export class InMemorySessionStore implements ISessionStore {
   private sessions: Map<string, ISessionData>;
   private logger: Logger;
 
-  constructor() {
+  constructor(logger: Logger) {
     this.sessions = new Map();
-    this.logger = new Logger('InMemorySessionStore', LogLevel.INFO, false);
+    this.logger = logger;
   }
 
   public createSession(data: ISessionData): string {

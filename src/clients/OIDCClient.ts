@@ -5,10 +5,12 @@ import { AuthClient } from './AuthClient';
 import { TokenManager } from '../token/TokenManager';
 import { UserInfoClient } from './UserInfoClient';
 import { Logger } from '../utils/Logger';
-import { LogLevel } from '../enums';
+import { BinaryToTextEncoding, GrantType, LogLevel } from '../enums';
 import { DiscoveryClient } from './DiscoveryClient';
 import { IDiscoveryConfig, ILogger, IUserInfo } from '../interfaces';
 import { ClientError } from '../errors';
+import { randomBytes } from 'crypto';
+import { JwtValidator } from 'src/token/JwtValidator';
 
 export class OIDCClient {
   private readonly config: IClientConfig;
@@ -17,7 +19,12 @@ export class OIDCClient {
   private readonly logger: ILogger;
   private userInfoClient: UserInfoClient;
   private discoveryConfig: IDiscoveryConfig;
+
   private initialized: boolean = false;
+
+  private stateMap: Map<string, string> = new Map(); // state -> nonce
+  private activeState: string | null = null;
+  private activeNonce: string | null = null;
 
   constructor(config: IClientConfig) {
     this.config = config;
@@ -75,18 +82,86 @@ export class OIDCClient {
     this.logger.setLogLevel(level);
   }
 
-  public async getAuthorizationUrl(
-    state: string,
-    codeVerifier?: string,
-  ): Promise<string> {
-    return this.authClient.getAuthorizationUrl(state, codeVerifier);
+  public async getAuthorizationUrl(): Promise<{ url: string }> {
+    const state = this.generateRandomString();
+    const nonce = this.generateRandomString();
+
+    // Store them so we can validate later.
+    // We can store them together, keyed by state, or individually.
+    this.stateMap.set(state, nonce);
+    this.activeState = state;
+    this.activeNonce = nonce;
+
+    const { url } = await this.authClient.getAuthorizationUrl(state, nonce);
+    return { url };
   }
 
   public async handleRedirect(
     code: string,
-    codeVerifier?: string,
+    returnedState: string,
   ): Promise<void> {
-    await this.authClient.exchangeCodeForToken(code, codeVerifier);
+    if (!this.activeState || !this.stateMap.has(returnedState)) {
+      throw new ClientError('State does not match', 'STATE_MISMATCH');
+    }
+
+    const expectedNonce = this.stateMap.get(returnedState);
+    // Now exchange code for token
+    await this.authClient.exchangeCodeForToken(
+      code,
+      this.authClient.getCodeVerifier(),
+    );
+
+    // After token is obtained:
+    const tokens = this.tokenManager.getTokens();
+    if (tokens.id_token) {
+      const jwtValidator = new JwtValidator(
+        this.logger as Logger,
+        this.discoveryConfig,
+        this.config.clientId,
+      );
+      await jwtValidator.validateIdToken(tokens.id_token, expectedNonce);
+      this.logger.info('ID token validated successfully');
+    } else {
+      this.logger.warn('No ID token returned to validate');
+    }
+
+    // Cleanup
+    this.stateMap.delete(returnedState);
+    this.activeState = null;
+    this.activeNonce = null;
+  }
+
+  public handleRedirectForImplicitFlow(fragment: string): void {
+    if (this.config.grantType !== GrantType.Implicit) {
+      throw new ClientError(
+        `handleRedirectForImplicitFlow() is only applicable for implicit flows. Current grantType: ${this.config.grantType}`,
+        'INVALID_GRANT_TYPE',
+      );
+    }
+
+    // The fragment might look like: #access_token=xyz&id_token=abc&expires_in=3600&...
+    const params = new URLSearchParams(fragment.replace(/^#/, ''));
+    const accessToken = params.get('access_token');
+    const idToken = params.get('id_token');
+    const expiresIn = params.get('expires_in');
+    const tokenType = params.get('token_type') || 'Bearer';
+
+    if (!accessToken) {
+      throw new ClientError(
+        'No access_token found in redirect fragment for implicit flow',
+        'TOKEN_MISSING',
+      );
+    }
+
+    const tokenResponse = {
+      access_token: accessToken,
+      token_type: tokenType,
+      expires_in: expiresIn ? parseInt(expiresIn, 10) : undefined,
+      id_token: idToken || undefined,
+    };
+
+    this.tokenManager.setTokens(tokenResponse);
+    this.logger.info('Tokens set from implicit flow fragment');
   }
 
   public async getUserInfo(): Promise<IUserInfo> {
@@ -102,5 +177,7 @@ export class OIDCClient {
     return this.authClient;
   }
 
-  // Add more methods as needed, such as logout, token refresh, etc.
+  private generateRandomString(length = 32): string {
+    return randomBytes(length).toString(BinaryToTextEncoding.HEX);
+  }
 }

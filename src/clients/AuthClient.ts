@@ -3,12 +3,14 @@
 import { IClientConfig } from '../interfaces/IClientConfig';
 import { DiscoveryClient } from './DiscoveryClient';
 import { TokenManager } from '../token/TokenManager';
-import { Logger } from '../utils/Logger';
 import { ClientError } from '../errors/ClientError';
-import { Helpers } from '../utils/Helpers';
-import { HTTPClient } from '../utils/HTTPClient';
+import { Logger, buildAuthorizationUrl, buildUrlEncodedBody } from '../utils';
+import { HTTPClient } from './HTTPClient';
 import { ITokenResponse } from '../interfaces';
 import { GrantType } from '../enums/GrantType';
+import { createHash, randomBytes } from 'crypto';
+import { Algorithm } from '../enums/Algorithm';
+import { BinaryToTextEncoding } from '../enums/BinaryToTextEncoding';
 
 export class AuthClient {
   private config: IClientConfig;
@@ -16,6 +18,8 @@ export class AuthClient {
   private tokenManager: TokenManager;
   private logger: Logger;
   private httpClient: HTTPClient;
+
+  private codeVerifier: string | null = null;
 
   constructor(config: IClientConfig, logger: Logger) {
     this.config = config;
@@ -30,11 +34,10 @@ export class AuthClient {
 
   public async getAuthorizationUrl(
     state: string,
-    codeChallenge?: string,
-  ): Promise<string> {
+    nonce?: string,
+  ): Promise<{ url: string; codeVerifier?: string }> {
     const discoveryConfig = await this.discoveryClient.fetchDiscoveryConfig();
 
-    // Ensure the grant type supports authorization URLs
     if (
       this.config.grantType !== GrantType.AuthorizationCode &&
       this.config.grantType !== GrantType.Implicit &&
@@ -46,23 +49,45 @@ export class AuthClient {
       );
     }
 
-    const url = Helpers.buildAuthorizationUrl({
-      authorizationEndpoint: discoveryConfig.authorization_endpoint,
-      clientId: this.config.clientId,
-      redirectUri: this.config.redirectUri,
-      responseType: this.config.responseType || 'code',
-      scope: this.config.scopes.join(' '),
-      state,
-      codeChallenge,
-      codeChallengeMethod: 'S256',
-    });
+    let codeVerifier: string | undefined;
+    let codeChallenge: string | undefined;
+    if (this.config.pkce) {
+      codeVerifier = this.generateCodeVerifier();
+      this.codeVerifier = codeVerifier; // store internally
+      codeChallenge = this.generateCodeChallenge(codeVerifier);
+    }
+
+    const url = buildAuthorizationUrl(
+      {
+        authorizationEndpoint: discoveryConfig.authorization_endpoint,
+        clientId: this.config.clientId,
+        redirectUri: this.config.redirectUri,
+        responseType: this.config.responseType || 'code',
+        scope: this.config.scopes.join(' '),
+        state,
+        codeChallenge,
+        codeChallengeMethod: this.config.pkceMethod || Algorithm.SHA256,
+      },
+      nonce ? { nonce } : undefined,
+    );
+
     this.logger.debug('Authorization URL generated', { url });
-    return url;
+    return { url, codeVerifier };
+  }
+
+  /**
+   * Retrieve the previously generated code verifier.
+   * @returns The code verifier if available.
+   */
+  public getCodeVerifier(): string | null {
+    return this.codeVerifier;
   }
 
   public async exchangeCodeForToken(
     code: string,
     codeVerifier?: string,
+    username?: string,
+    password?: string,
   ): Promise<void> {
     const discoveryConfig = await this.discoveryClient.fetchDiscoveryConfig();
     const tokenEndpoint = discoveryConfig.token_endpoint;
@@ -96,11 +121,16 @@ export class AuthClient {
         break;
 
       case GrantType.Password:
-        // Assuming 'code' here represents the password or token
+        if (!username || !password) {
+          throw new ClientError(
+            'Username and password are required for Password grant type',
+            'INVALID_REQUEST',
+          );
+        }
         params = {
           ...params,
-          username: code, // You might want to adjust based on actual usage
-          password: codeVerifier || '',
+          username,
+          password,
         };
         break;
 
@@ -137,10 +167,13 @@ export class AuthClient {
         );
     }
 
-    const body = Helpers.buildUrlEncodedBody(params);
+    const headers = {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    };
+    const body = buildUrlEncodedBody(params);
 
     try {
-      const response = await this.httpClient.post(tokenEndpoint, body);
+      const response = await this.httpClient.post(tokenEndpoint, body, headers);
       const tokenResponse: ITokenResponse = JSON.parse(response);
       this.tokenManager.setTokens(tokenResponse);
       this.logger.info('Exchanged grant for tokens', {
@@ -159,5 +192,163 @@ export class AuthClient {
 
   public getTokenManager(): TokenManager {
     return this.tokenManager;
+  }
+
+  private generateCodeVerifier(): string {
+    return randomBytes(32).toString(BinaryToTextEncoding.BASE_64_URL);
+  }
+
+  private generateCodeChallenge(verifier: string): string {
+    return createHash(Algorithm.SHA256.toLowerCase())
+      .update(verifier)
+      .digest(BinaryToTextEncoding.BASE_64_URL);
+  }
+
+  /**
+   * Initiates the device authorization request to obtain a device_code and user_code.
+   */
+  public async startDeviceAuthorization(): Promise<{
+    device_code: string;
+    user_code: string;
+    verification_uri: string;
+    expires_in: number;
+    interval: number;
+  }> {
+    if (this.config.grantType !== GrantType.DeviceCode) {
+      throw new ClientError(
+        `startDeviceAuthorization() is only applicable for DeviceCode flows. Current grantType: ${this.config.grantType}`,
+        'INVALID_GRANT_TYPE',
+      );
+    }
+
+    const discoveryConfig = await this.discoveryClient.fetchDiscoveryConfig();
+
+    // Typically, the device authorization endpoint is derived from the discovery config
+    // Some providers use `device_authorization_endpoint`
+    const deviceEndpoint = (discoveryConfig as any)
+      .device_authorization_endpoint;
+    if (!deviceEndpoint) {
+      throw new ClientError(
+        'No device_authorization_endpoint found in discovery configuration.',
+        'ENDPOINT_MISSING',
+      );
+    }
+
+    const params = {
+      client_id: this.config.clientId,
+      scope: this.config.scopes.join(' '),
+      // Add any additional parameters needed by your provider
+    };
+
+    const headers = {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    };
+
+    const body = buildUrlEncodedBody(params);
+
+    try {
+      const response = await this.httpClient.post(
+        deviceEndpoint,
+        body,
+        headers,
+      );
+      const json = JSON.parse(response);
+      this.logger.info('Device authorization initiated');
+      return {
+        device_code: json.device_code,
+        user_code: json.user_code,
+        verification_uri: json.verification_uri,
+        expires_in: json.expires_in,
+        interval: json.interval || 5,
+      };
+    } catch (error) {
+      this.logger.error('Failed to start device authorization', { error });
+      throw new ClientError(
+        'Device authorization failed',
+        'DEVICE_AUTH_ERROR',
+        {
+          originalError: error,
+        },
+      );
+    }
+  }
+
+  /**
+   * Polls the token endpoint until the device is authorized or expires.
+   */
+  public async pollDeviceToken(
+    device_code: string,
+    interval: number = 5,
+    timeout?: number,
+  ): Promise<void> {
+    if (this.config.grantType !== GrantType.DeviceCode) {
+      throw new ClientError(
+        `pollDeviceToken() is only applicable for DeviceCode flows. Current grantType: ${this.config.grantType}`,
+        'INVALID_GRANT_TYPE',
+      );
+    }
+
+    const discoveryConfig = await this.discoveryClient.fetchDiscoveryConfig();
+    const tokenEndpoint = discoveryConfig.token_endpoint;
+
+    const startTime = Date.now();
+
+    while (true) {
+      if (timeout && Date.now() - startTime > timeout) {
+        throw new ClientError('Device code polling timed out', 'TIMEOUT_ERROR');
+      }
+
+      const params = {
+        grant_type: GrantType.DeviceCode,
+        device_code,
+        client_id: this.config.clientId,
+      };
+      const headers = {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      };
+      const body = buildUrlEncodedBody(params);
+
+      try {
+        const response = await this.httpClient.post(
+          tokenEndpoint,
+          body,
+          headers,
+        );
+        const tokenResponse = JSON.parse(response);
+        this.tokenManager.setTokens(tokenResponse);
+        this.logger.info('Device authorized and tokens obtained');
+        return;
+      } catch (error: any) {
+        // If error is authorization_pending or slow_down, continue polling
+        const errorBody = error.context?.body
+          ? JSON.parse(error.context.body)
+          : {};
+        if (errorBody.error === 'authorization_pending') {
+          // Just wait the interval and try again
+          await this.sleep(interval * 1000);
+          continue;
+        } else if (errorBody.error === 'slow_down') {
+          interval += 5; // or use a different backoff strategy
+          await this.sleep(interval * 1000);
+          continue;
+        } else if (errorBody.error === 'expired_token') {
+          // Device code expired
+          throw new ClientError('Device code expired', 'DEVICE_CODE_EXPIRED');
+        } else {
+          // Some other error
+          throw new ClientError(
+            'Device token polling failed',
+            'TOKEN_POLLING_ERROR',
+            {
+              originalError: error,
+            },
+          );
+        }
+      }
+    }
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
