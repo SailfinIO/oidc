@@ -1,3 +1,9 @@
+## [0.0.2-beta.6](https://github.com/SailfinIO/oidc/compare/v0.0.2-beta.5...v0.0.2-beta.6) (2024-12-20)
+
+### Bug Fixes
+
+* additional comments and coverage ([d57c237](https://github.com/SailfinIO/oidc/commit/d57c237bcced5141b262e4cd1adcad05a6a7f188))
+
 ## [0.0.2-beta.5](https://github.com/SailfinIO/oidc/compare/v0.0.2-beta.4...v0.0.2-beta.5) (2024-12-20)
 
 ### Bug Fixes
