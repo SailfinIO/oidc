@@ -1,28 +1,33 @@
 // src/clients/OIDCClient.ts
 
-import { IClientConfig } from '../interfaces/IClientConfig';
 import { AuthClient } from './AuthClient';
-import { TokenClient } from './TokenClient';
 import { UserInfoClient } from './UserInfoClient';
 import { Logger, JwtValidator, generateRandomString } from '../utils';
-import { GrantType, LogLevel } from '../enums';
+import { GrantType, LogLevel, TokenTypeHint } from '../enums';
 import { DiscoveryClient } from './DiscoveryClient';
 import {
+  IClientConfig,
   IDiscoveryConfig,
   ILogger,
   ITokenIntrospectionResponse,
   ITokenResponse,
   IUserInfo,
+  IDiscoveryClient,
+  ITokenClient,
+  IHttpClient,
 } from '../interfaces';
 import { ClientError } from '../errors';
+import { HTTPClient } from './HTTPClient';
 
 export class OIDCClient {
   private readonly config: IClientConfig;
   private readonly authClient: AuthClient;
-  private readonly tokenClient: TokenClient;
+  private readonly tokenClient: ITokenClient;
   private readonly logger: ILogger;
+  private readonly httpClient: IHttpClient;
   private userInfoClient: UserInfoClient;
   private discoveryConfig: IDiscoveryConfig;
+  private discoveryClient: IDiscoveryClient;
 
   private initialized: boolean = false;
 
@@ -38,8 +43,18 @@ export class OIDCClient {
         config.logLevel || envLogLevel || LogLevel.INFO,
         true,
       );
+    this.httpClient = new HTTPClient(this.logger);
     this.validateConfig(config);
-    this.authClient = new AuthClient(config, this.logger as Logger);
+    this.discoveryClient = new DiscoveryClient(
+      this.config.discoveryUrl,
+      this.logger as Logger,
+    );
+    this.authClient = new AuthClient(
+      config,
+      this.logger as Logger,
+      this.discoveryClient,
+      this.httpClient,
+    );
     this.tokenClient = this.authClient.getTokenManager();
   }
 
@@ -64,11 +79,7 @@ export class OIDCClient {
 
   public async initialize(): Promise<void> {
     this.logger.debug('Initializing OIDC Client');
-    const discoveryClient = new DiscoveryClient(
-      this.config.discoveryUrl,
-      this.logger as Logger,
-    );
-    this.discoveryConfig = await discoveryClient.fetchDiscoveryConfig();
+    this.discoveryConfig = await this.discoveryClient.getDiscoveryConfig();
     this.userInfoClient = new UserInfoClient(
       this.tokenClient,
       this.discoveryConfig,
@@ -219,7 +230,7 @@ export class OIDCClient {
    */
   public async revokeToken(
     token: string,
-    tokenTypeHint?: 'refresh_token' | 'access_token',
+    tokenTypeHint?: TokenTypeHint,
   ): Promise<void> {
     this.ensureInitialized();
     return this.tokenClient.revokeToken(token, tokenTypeHint);

@@ -8,3 +8,5 @@ export * from './rsaKeyConverter';
 export * from './pem';
 export * from './urlUtils';
 export * from './JwtValidator';
+export * from './ClaimsValidator';
+export * from './SignatureVerifier';

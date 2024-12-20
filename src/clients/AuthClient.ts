@@ -1,47 +1,58 @@
 // src/clients/AuthClient.ts
 
-import { IClientConfig } from '../interfaces/IClientConfig';
-import { DiscoveryClient } from './DiscoveryClient';
 import { TokenClient } from './TokenClient';
 import { ClientError } from '../errors/ClientError';
 import {
-  Logger,
   buildAuthorizationUrl,
   buildLogoutUrl,
   buildUrlEncodedBody,
 } from '../utils';
-import { HTTPClient } from './HTTPClient';
-import { ILogoutUrlParams, ITokenResponse } from '../interfaces';
+import {
+  ILogoutUrlParams,
+  ITokenResponse,
+  IHttpClient,
+  IDiscoveryClient,
+  ILogger,
+  ITokenClient,
+  IClientConfig,
+} from '../interfaces';
 import { GrantType } from '../enums/GrantType';
 import { createHash, randomBytes } from 'crypto';
 import { Algorithm } from '../enums/Algorithm';
 import { BinaryToTextEncoding } from '../enums/BinaryToTextEncoding';
 
 export class AuthClient {
-  private config: IClientConfig;
-  private discoveryClient: DiscoveryClient;
-  private tokenClient: TokenClient;
-  private logger: Logger;
-  private httpClient: HTTPClient;
+  private readonly config: IClientConfig;
+  private readonly discoveryClient: IDiscoveryClient;
+  private readonly tokenClient: ITokenClient;
+  private readonly logger: ILogger;
+  private readonly httpClient: IHttpClient;
 
   private codeVerifier: string | null = null;
 
-  constructor(config: IClientConfig, logger: Logger) {
+  constructor(
+    config: IClientConfig,
+    logger: ILogger,
+    discoveryClient: IDiscoveryClient,
+    httpClient: IHttpClient,
+  ) {
     this.config = config;
     this.logger = logger;
-    this.httpClient = new HTTPClient(this.logger);
-    this.discoveryClient = new DiscoveryClient(
-      config.discoveryUrl,
+    this.httpClient = httpClient;
+    this.discoveryClient = discoveryClient;
+    this.tokenClient = new TokenClient(
       this.logger,
+      this.config,
+      this.discoveryClient,
+      this.httpClient,
     );
-    this.tokenClient = new TokenClient(this.logger, this.config);
   }
 
   public async getAuthorizationUrl(
     state: string,
     nonce?: string,
   ): Promise<{ url: string; codeVerifier?: string }> {
-    const discoveryConfig = await this.discoveryClient.fetchDiscoveryConfig();
+    const discoveryConfig = await this.discoveryClient.getDiscoveryConfig();
 
     if (
       this.config.grantType !== GrantType.AuthorizationCode &&
@@ -102,7 +113,7 @@ export class AuthClient {
     username?: string,
     password?: string,
   ): Promise<void> {
-    const discoveryConfig = await this.discoveryClient.fetchDiscoveryConfig();
+    const discoveryConfig = await this.discoveryClient.getDiscoveryConfig();
     const tokenEndpoint = discoveryConfig.token_endpoint;
 
     // Determine the grant type and set parameters accordingly
@@ -203,7 +214,7 @@ export class AuthClient {
     }
   }
 
-  public getTokenManager(): TokenClient {
+  public getTokenManager(): ITokenClient {
     return this.tokenClient;
   }
 
@@ -240,7 +251,7 @@ export class AuthClient {
       );
     }
 
-    const discoveryConfig = await this.discoveryClient.fetchDiscoveryConfig();
+    const discoveryConfig = await this.discoveryClient.getDiscoveryConfig();
 
     // Typically, the device authorization endpoint is derived from the discovery config
     // Some providers use `device_authorization_endpoint`
@@ -307,7 +318,7 @@ export class AuthClient {
       );
     }
 
-    const discoveryConfig = await this.discoveryClient.fetchDiscoveryConfig();
+    const discoveryConfig = await this.discoveryClient.getDiscoveryConfig();
     const tokenEndpoint = discoveryConfig.token_endpoint;
     const startTime = Date.now();
 
@@ -386,7 +397,7 @@ export class AuthClient {
     idTokenHint?: string,
     state?: string,
   ): Promise<string> {
-    const discoveryConfig = await this.discoveryClient.fetchDiscoveryConfig();
+    const discoveryConfig = await this.discoveryClient.getDiscoveryConfig();
 
     if (!discoveryConfig.end_session_endpoint) {
       throw new ClientError(

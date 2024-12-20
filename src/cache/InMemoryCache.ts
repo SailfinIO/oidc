@@ -1,10 +1,19 @@
+/**
+ * @fileoverview
+ * Provides an in-memory caching implementation with basic CRUD operations and TTL support.
+ * This module implements the `ICache` interface and includes robust validation, logging,
+ * and error handling for cache operations.
+ *
+ * @module src/cache/InMemoryCache
+ */
+
 import { ICache, ILogger } from '../interfaces';
 import { ClientError } from '../errors/ClientError';
 
 /**
- * Represents an in-memory cache with basic CRUD operations.
+ * Represents an in-memory cache with basic CRUD operations and TTL (time-to-live) support.
  *
- * @class InMemoryCache
+ * @template T The type of values to be stored in the cache.
  * @implements {ICache<T>}
  */
 export class InMemoryCache<T> implements ICache<T> {
@@ -13,6 +22,7 @@ export class InMemoryCache<T> implements ICache<T> {
    *
    * @private
    * @readonly
+   * @type {Map<string, { value: T; expiresAt: number }>}
    */
   private readonly store: Map<string, { value: T; expiresAt: number }> =
     new Map();
@@ -22,6 +32,7 @@ export class InMemoryCache<T> implements ICache<T> {
    *
    * @private
    * @readonly
+   * @type {ILogger}
    */
   private readonly logger: ILogger;
 
@@ -30,6 +41,7 @@ export class InMemoryCache<T> implements ICache<T> {
    *
    * @private
    * @readonly
+   * @type {number}
    */
   private readonly defaultTTL: number;
 
@@ -48,8 +60,14 @@ export class InMemoryCache<T> implements ICache<T> {
    * Retrieves a value from the cache by key.
    *
    * @param {string} key - The key associated with the value.
-   * @returns {T | undefined} The cached value or undefined if not found or expired.
+   * @returns {T | undefined} The cached value or `undefined` if not found or expired.
    * @throws {ClientError} If the key is invalid.
+   * @example
+   * ```typescript
+   * const cache = new InMemoryCache<string>(logger);
+   * cache.set('key1', 'value1');
+   * const value = cache.get('key1'); // "value1"
+   * ```
    */
   public get(key: string): T | undefined {
     this.validateKey(key);
@@ -76,7 +94,12 @@ export class InMemoryCache<T> implements ICache<T> {
    * @param {string} key - The key to associate with the value.
    * @param {T} value - The value to cache.
    * @param {number} [ttl] - Time-to-live in milliseconds. Defaults to the cache's default TTL.
-   * @throws {ClientError} If the key or value is invalid.
+   * @throws {ClientError} If the key or value is invalid, or if the TTL is not a positive number.
+   * @example
+   * ```typescript
+   * const cache = new InMemoryCache<number>(logger, 5000);
+   * cache.set('key1', 42);
+   * ```
    */
   public set(key: string, value: T, ttl?: number): void {
     this.validateKey(key);
@@ -94,6 +117,10 @@ export class InMemoryCache<T> implements ICache<T> {
    *
    * @param {string} key - The key of the value to delete.
    * @throws {ClientError} If the key is invalid.
+   * @example
+   * ```typescript
+   * cache.delete('key1');
+   * ```
    */
   public delete(key: string): void {
     this.validateKey(key);
@@ -109,6 +136,10 @@ export class InMemoryCache<T> implements ICache<T> {
    * Clears all entries from the cache.
    *
    * @throws {ClientError} If an unexpected error occurs during clearing.
+   * @example
+   * ```typescript
+   * cache.clear();
+   * ```
    */
   public clear(): void {
     try {
@@ -126,6 +157,10 @@ export class InMemoryCache<T> implements ICache<T> {
    * Returns the number of entries in the cache.
    *
    * @returns {number} The size of the cache.
+   * @example
+   * ```typescript
+   * const size = cache.size(); // 3
+   * ```
    */
   public size(): number {
     return this.store.size;
@@ -152,7 +187,7 @@ export class InMemoryCache<T> implements ICache<T> {
    *
    * @private
    * @param {T} value - The value to validate.
-   * @throws {ClientError} If the value is undefined or null.
+   * @throws {ClientError} If the value is `undefined` or `null`.
    */
   private validateValue(value: T): void {
     if (value === undefined || value === null) {
@@ -186,17 +221,22 @@ export class InMemoryCache<T> implements ICache<T> {
    *
    * @private
    * @param {number} expiresAt - The expiration timestamp.
-   * @returns {boolean} True if expired, else false.
+   * @returns {boolean} True if expired, otherwise false.
    */
   private isExpired(expiresAt: number): boolean {
     return Date.now() > expiresAt;
   }
 
   /**
-   * Optional: Expose defaultTTL via a getter for better encapsulation.
+   * Gets the default TTL for cache entries.
    *
    * @readonly
    * @public
+   * @returns {number} The default TTL in milliseconds.
+   * @example
+   * ```typescript
+   * const ttl = cache.DefaultTTL; // 3600000
+   * ```
    */
   public get DefaultTTL(): number {
     return this.defaultTTL;

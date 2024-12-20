@@ -1,3 +1,12 @@
+/**
+ * @fileoverview
+ * Defines the `SignatureVerifier` class, responsible for verifying the signature
+ * of a JWT using public keys retrieved from a JWKS endpoint. The class supports
+ * multiple key types and algorithms.
+ *
+ * @module src/utils/SignatureVerifier
+ */
+
 import { constants, verify } from 'crypto';
 import { ClientError } from '../errors/ClientError';
 import { JwksClient } from '../clients';
@@ -8,8 +17,24 @@ import { ecDsaSignatureFromRaw } from './derEncoding';
 import { rsaJwkToPem } from './rsaKeyConverter';
 import { ecJwkToPem } from './ecKeyConverter';
 
+/**
+ * Represents the hash algorithm and optional parameters for a given algorithm.
+ *
+ * @interface HashAlgorithm
+ */
 interface HashAlgorithm {
+  /**
+   * The name of the hash algorithm (e.g., 'sha256').
+   *
+   * @type {string}
+   */
   name: string;
+
+  /**
+   * Optional parameters for the hash algorithm (e.g., salt length for RSA-PSS).
+   *
+   * @type {{ saltLength?: number }}
+   */
   options?: { saltLength?: number };
 }
 
@@ -33,9 +58,29 @@ const ALGORITHM_HASH_MAP: Record<Algorithm, HashAlgorithm> = {
   SHA512: { name: 'sha512' },
 };
 
+/**
+ * Verifies the signature of a JWT using a public key fetched from a JWKS endpoint.
+ *
+ * The `SignatureVerifier` class supports RSA, EC, and other key types, and
+ * validates algorithms, key compatibility, and signature correctness.
+ *
+ * @class SignatureVerifier
+ */
 export class SignatureVerifier {
+  /**
+   * Creates an instance of `SignatureVerifier`.
+   *
+   * @param {JwksClient} jwksClient - The client used to fetch JWKS keys.
+   */
   constructor(private jwksClient: JwksClient) {}
 
+  /**
+   * Verifies the signature of a JWT.
+   *
+   * @param {JwtHeader} header - The JWT header containing algorithm and key ID.
+   * @param {string} idToken - The JWT to verify.
+   * @throws {ClientError} If the signature is invalid or verification fails.
+   */
   public async verify(header: JwtHeader, idToken: string): Promise<void> {
     const { kid, alg } = header;
     if (!kid || !alg) {
@@ -63,6 +108,14 @@ export class SignatureVerifier {
     );
   }
 
+  /**
+   * Extracts the signing input and signature buffer from a JWT.
+   *
+   * @private
+   * @param {string} idToken - The JWT to extract parts from.
+   * @returns {Object} An object containing `signingInput` and `sigBuffer`.
+   * @throws {ClientError} If the JWT format is invalid.
+   */
   private extractSignatureParts(idToken: string): {
     signingInput: string;
     sigBuffer: Buffer;
@@ -78,6 +131,19 @@ export class SignatureVerifier {
     return { signingInput, sigBuffer };
   }
 
+  /**
+   * Verifies the signature of the JWT based on the algorithm and key type.
+   *
+   * @private
+   * @param {Algorithm} alg - The algorithm used for signing.
+   * @param {string} hashName - The hash algorithm name (e.g., 'sha256').
+   * @param {string} signingInput - The input used to generate the signature.
+   * @param {string} pubKey - The public key used for verification.
+   * @param {Buffer} sigBuffer - The signature buffer.
+   * @param {Jwk} jwk - The JSON Web Key used in verification.
+   * @param {{ saltLength?: number }} [options] - Optional parameters for verification.
+   * @throws {ClientError} If the signature verification fails.
+   */
   private verifySignature(
     alg: Algorithm,
     hashName: string,
@@ -87,12 +153,10 @@ export class SignatureVerifier {
     jwk: Jwk,
     options?: { saltLength?: number },
   ): void {
-    // A dictionary that maps kty to the verification strategy
     const verificationStrategies: Record<string, () => void> = {
       RSA: () =>
         this.verifyRsa(hashName, signingInput, pubKey, sigBuffer, alg, options),
       EC: () => this.verifyEc(hashName, signingInput, pubKey, sigBuffer, alg),
-      // Add other kty strategies here if needed
     };
 
     const strategy = verificationStrategies[jwk.kty!];
@@ -106,6 +170,11 @@ export class SignatureVerifier {
     strategy();
   }
 
+  /**
+   * Verifies an RSA signature.
+   *
+   * @private
+   */
   private verifyRsa(
     hashName: string,
     signingInput: string,
@@ -137,6 +206,11 @@ export class SignatureVerifier {
     }
   }
 
+  /**
+   * Verifies an ECDSA signature.
+   *
+   * @private
+   */
   private verifyEc(
     hashName: string,
     signingInput: string,
@@ -160,6 +234,27 @@ export class SignatureVerifier {
     }
   }
 
+  /**
+   * Maps an algorithm to its corresponding hash function and options.
+   *
+   * @private
+   */
+  private getHashAlgorithm(alg: Algorithm): HashAlgorithm {
+    const entry = ALGORITHM_HASH_MAP[alg];
+    if (!entry) {
+      throw new ClientError(
+        `Unsupported or unimplemented algorithm: ${alg}`,
+        'ID_TOKEN_VALIDATION_ERROR',
+      );
+    }
+    return entry;
+  }
+
+  /**
+   * Creates a public key from a JWK for the specified algorithm.
+   *
+   * @private
+   */
   private createPublicKeyFromJwk(jwk: Jwk, alg: Algorithm): string {
     switch (jwk.kty) {
       case 'RSA':
@@ -174,17 +269,11 @@ export class SignatureVerifier {
     }
   }
 
-  private getHashAlgorithm(alg: Algorithm): HashAlgorithm {
-    const entry = ALGORITHM_HASH_MAP[alg];
-    if (!entry) {
-      throw new ClientError(
-        `Unsupported or unimplemented algorithm: ${alg}`,
-        'ID_TOKEN_VALIDATION_ERROR',
-      );
-    }
-    return entry;
-  }
-
+  /**
+   * Validates that a JWK is compatible with the specified algorithm.
+   *
+   * @private
+   */
   private validateKeyForAlgorithm(jwk: Jwk, alg: Algorithm): void {
     // Key type requirements for specific algorithm prefixes
     const requiredKtyByAlgPrefix: Record<string, string> = {

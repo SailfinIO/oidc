@@ -1,34 +1,40 @@
-// src/token/TokenManager.ts
+// src/clients/TokenClient.ts
 
 import {
   IClientConfig,
   ITokenResponse,
   ITokenIntrospectionResponse,
+  IDiscoveryClient,
+  ILogger,
+  IHttpClient,
+  ITokenClient,
 } from '../interfaces';
 import { ClientError } from '../errors/ClientError';
-import { Logger, buildUrlEncodedBody } from '../utils';
-import { HTTPClient } from './HTTPClient';
-import { DiscoveryClient } from './DiscoveryClient';
+import { buildUrlEncodedBody } from '../utils';
 import { GrantType } from '../enums/GrantType';
+import { TokenTypeHint } from '../enums/TokenTypeHint';
 
-export class TokenClient {
+export class TokenClient implements ITokenClient {
+  private readonly logger: ILogger;
+  private readonly httpClient: IHttpClient;
+  private readonly config: IClientConfig;
+  private readonly discoveryClient: IDiscoveryClient;
+
   private accessToken: string | null = null;
   private refreshToken: string | null = null;
   private idToken: string | null = null;
   private expiresAt: number | null = null;
-  private logger: Logger;
-  private httpClient: HTTPClient;
-  private config: IClientConfig;
-  private discoveryClient: DiscoveryClient;
 
-  constructor(logger: Logger, config: IClientConfig) {
+  constructor(
+    logger: ILogger,
+    config: IClientConfig,
+    discoveryClient: IDiscoveryClient,
+    httpClient: IHttpClient,
+  ) {
     this.logger = logger;
     this.config = config;
-    this.httpClient = new HTTPClient(this.logger);
-    this.discoveryClient = new DiscoveryClient(
-      this.config.discoveryUrl,
-      this.logger,
-    );
+    this.httpClient = httpClient;
+    this.discoveryClient = discoveryClient;
   }
 
   public setTokens(tokenResponse: ITokenResponse): void {
@@ -43,6 +49,7 @@ export class TokenClient {
     }
     this.logger.debug('Tokens set successfully', { tokenResponse });
   }
+
   public async getAccessToken(): Promise<string | null> {
     if (this.accessToken && this.isTokenValid()) {
       return this.accessToken;
@@ -63,28 +70,32 @@ export class TokenClient {
 
   public async refreshAccessToken(): Promise<void> {
     if (!this.refreshToken) {
-      throw new ClientError('No refresh token available', 'NO_REFRESH_TOKEN');
+      const error = new ClientError(
+        'No refresh token available',
+        'NO_REFRESH_TOKEN',
+      );
+      this.logger.error('Failed to refresh access token', error);
+      throw error;
     }
 
-    const discoveryConfig = await this.discoveryClient.fetchDiscoveryConfig();
+    const discoveryConfig = await this.discoveryClient.getDiscoveryConfig();
     const tokenEndpoint = discoveryConfig.token_endpoint;
 
     const params: Record<string, string> = {
       grant_type: GrantType.RefreshToken,
       refresh_token: this.refreshToken,
       client_id: this.config.clientId,
-      client_secret: this.config.clientSecret || '',
     };
 
-    const headers = {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    };
-
-    const body = buildUrlEncodedBody(params);
+    if (this.config.clientSecret) {
+      params.client_secret = this.config.clientSecret;
+    }
 
     try {
-      const response = await this.httpClient.post(tokenEndpoint, body, headers);
-      const tokenResponse: ITokenResponse = JSON.parse(response);
+      const tokenResponse = await this.performTokenRequest(
+        tokenEndpoint,
+        params,
+      );
       this.setTokens(tokenResponse);
       this.logger.info('Access token refreshed successfully');
     } catch (error) {
@@ -103,7 +114,7 @@ export class TokenClient {
       access_token: this.accessToken,
       refresh_token: this.refreshToken || undefined,
       expires_in: this.expiresAt
-        ? (this.expiresAt - Date.now()) / 1000
+        ? Math.floor((this.expiresAt - Date.now()) / 1000)
         : undefined,
       token_type: 'Bearer',
       id_token: this.idToken,
@@ -126,7 +137,7 @@ export class TokenClient {
   public async introspectToken(
     token: string,
   ): Promise<ITokenIntrospectionResponse> {
-    const discoveryConfig = await this.discoveryClient.fetchDiscoveryConfig();
+    const discoveryConfig = await this.discoveryClient.getDiscoveryConfig();
     if (!discoveryConfig.introspection_endpoint) {
       throw new ClientError(
         'No introspection endpoint available',
@@ -143,20 +154,11 @@ export class TokenClient {
       params.client_secret = this.config.clientSecret;
     }
 
-    const headers = {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    };
-
-    const body = buildUrlEncodedBody(params);
-
     try {
-      const response = await this.httpClient.post(
+      const introspectionResult = await this.performTokenRequest(
         discoveryConfig.introspection_endpoint,
-        body,
-        headers,
+        params,
       );
-      const introspectionResult: ITokenIntrospectionResponse =
-        JSON.parse(response);
       this.logger.debug('Token introspected successfully', {
         introspectionResult,
       });
@@ -178,9 +180,9 @@ export class TokenClient {
    */
   public async revokeToken(
     token: string,
-    tokenTypeHint?: 'refresh_token' | 'access_token',
+    tokenTypeHint?: TokenTypeHint,
   ): Promise<void> {
-    const discoveryConfig = await this.discoveryClient.fetchDiscoveryConfig();
+    const discoveryConfig = await this.discoveryClient.getDiscoveryConfig();
     if (!discoveryConfig.revocation_endpoint) {
       throw new ClientError(
         'No revocation endpoint available',
@@ -201,17 +203,10 @@ export class TokenClient {
       params.token_type_hint = tokenTypeHint;
     }
 
-    const headers = {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    };
-
-    const body = buildUrlEncodedBody(params);
-
     try {
-      await this.httpClient.post(
+      await this.performTokenRequest(
         discoveryConfig.revocation_endpoint,
-        body,
-        headers,
+        params,
       );
       this.logger.info('Token revoked successfully');
       // If this is the currently stored token, consider clearing them
@@ -223,6 +218,31 @@ export class TokenClient {
       throw new ClientError('Token revocation failed', 'REVOCATION_ERROR', {
         originalError: error,
       });
+    }
+  }
+
+  /**
+   * Performs a token-related HTTP POST request.
+   * @param endpoint The endpoint URL.
+   * @param params The parameters to include in the request body.
+   * @returns The parsed JSON response.
+   */
+  private async performTokenRequest(
+    endpoint: string,
+    params: Record<string, string>,
+  ): Promise<any> {
+    const headers = {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    };
+
+    const body = buildUrlEncodedBody(params);
+
+    try {
+      const response = await this.httpClient.post(endpoint, body, headers);
+      return JSON.parse(response);
+    } catch (error) {
+      // The calling method handles logging and throwing ClientError
+      throw error;
     }
   }
 }

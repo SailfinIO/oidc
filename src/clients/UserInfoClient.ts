@@ -1,19 +1,24 @@
 // src/clients/UserInfoClient.ts
 
 import { TokenClient } from './TokenClient';
-import { IDiscoveryConfig, IUserInfo } from '../interfaces';
+import {
+  IDiscoveryConfig,
+  IUserInfo,
+  IHttpClient,
+  ITokenClient,
+} from '../interfaces';
 import { ClientError } from '../errors/ClientError';
 import { HTTPClient } from './HTTPClient';
 import { Logger } from '../utils/Logger';
 
 export class UserInfoClient {
-  private tokenClient: TokenClient;
+  private tokenClient: ITokenClient;
   private discoveryConfig: IDiscoveryConfig;
   private logger: Logger;
-  private httpClient: HTTPClient;
+  private httpClient: IHttpClient;
 
   constructor(
-    tokenClient: TokenClient,
+    tokenClient: ITokenClient,
     discoveryConfig: IDiscoveryConfig,
     logger: Logger,
   ) {

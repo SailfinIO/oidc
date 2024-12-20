@@ -17,3 +17,5 @@ export * from './Jwt';
 export * from './ICache';
 export * from './IHttpClient';
 export * from './MakeRequestOptions';
+export * from './IDiscoveryClient';
+export * from './ITokenClient';

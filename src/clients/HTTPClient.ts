@@ -1,4 +1,13 @@
-// src/clients/HTTPClient.ts
+/**
+ * @fileoverview
+ * Implements the `IHttpClient` interface for making HTTP requests.
+ * This class supports all standard HTTP methods, allowing custom headers and body payloads.
+ * It uses the built-in Node.js `http` and `https` libraries by default, but can be configured
+ * with a custom HTTP library.
+ *
+ * @module src/clients/HTTPClient
+ */
+
 import { URL } from 'url';
 import {
   request as httpRequest,
@@ -17,19 +26,62 @@ import {
 import { HTTPMethod } from '../types/HTTPMethod';
 import { ClientError } from '../errors/ClientError';
 
+/**
+ * Represents an HTTP client for making HTTP requests.
+ *
+ * The `HTTPClient` class implements the `IHttpClient` interface and provides methods
+ * for performing HTTP requests using standard or custom HTTP libraries.
+ *
+ * @class HTTPClient
+ */
 export class HTTPClient implements IHttpClient {
+  /**
+   * Logger instance for logging HTTP request details and errors.
+   *
+   * @private
+   * @type {ILogger}
+   */
   private logger: ILogger;
+
+  /**
+   * Optional custom HTTP library for making requests.
+   *
+   * @private
+   * @type {IHttpLibrary | undefined}
+   */
   private httpLib?: IHttpLibrary;
 
+  /**
+   * Creates an instance of HTTPClient.
+   *
+   * @param {ILogger} logger - Logger instance for logging operations and errors.
+   * @param {IHttpLibrary} [httpLib] - Optional custom HTTP library for making requests.
+   */
   constructor(logger: ILogger, httpLib?: IHttpLibrary) {
     this.logger = logger;
     this.httpLib = httpLib;
   }
 
+  /**
+   * Selects the appropriate HTTP library based on the URL protocol.
+   *
+   * @private
+   * @param {string} protocol - The URL protocol (e.g., "http:" or "https:").
+   * @returns {IHttpLibrary} The appropriate HTTP library.
+   */
   private getHttpLibrary(protocol: string): IHttpLibrary {
     return this.httpLib ?? (protocol === 'https:' ? httpsRequest : httpRequest);
   }
 
+  /**
+   * Builds request options for the HTTP/HTTPS library.
+   *
+   * @private
+   * @param {URL} urlObj - Parsed URL object.
+   * @param {HTTPMethod} method - HTTP method (e.g., "GET", "POST").
+   * @param {Record<string, string>} headers - Headers to include in the request.
+   * @returns {HttpRequestOptions | HttpsRequestOptions} The built request options.
+   */
   private buildRequestOptions(
     urlObj: URL,
     method: HTTPMethod,
@@ -45,6 +97,14 @@ export class HTTPClient implements IHttpClient {
     };
   }
 
+  /**
+   * Makes an HTTP request with the specified options.
+   *
+   * @private
+   * @param {MakeRequestOptions} options - Options for making the request, including method, URL, body, and headers.
+   * @returns {Promise<string>} A promise that resolves to the response body as a string.
+   * @throws {ClientError} If the request fails or the response status indicates an error.
+   */
   private makeRequest({
     method,
     url,
@@ -125,11 +185,24 @@ export class HTTPClient implements IHttpClient {
     });
   }
 
-  // Define methods without 'body' parameter
+  /**
+   * Sends a GET request to the specified URL.
+   *
+   * @param {string} url - The URL to send the request to.
+   * @param {Record<string, string>} [headers] - Optional headers to include in the request.
+   * @returns {Promise<string>} A promise that resolves to the response body as a string.
+   */
   public get(url: string, headers?: Record<string, string>): Promise<string> {
     return this.makeRequest({ method: 'GET', url, headers });
   }
 
+  /**
+   * Sends a DELETE request to the specified URL.
+   *
+   * @param {string} url - The URL to send the request to.
+   * @param {Record<string, string>} [headers] - Optional headers to include in the request.
+   * @returns {Promise<string>} A promise that resolves to the response body as a string.
+   */
   public delete(
     url: string,
     headers?: Record<string, string>,
@@ -137,10 +210,24 @@ export class HTTPClient implements IHttpClient {
     return this.makeRequest({ method: 'DELETE', url, headers });
   }
 
+  /**
+   * Sends a HEAD request to the specified URL.
+   *
+   * @param {string} url - The URL to send the request to.
+   * @param {Record<string, string>} [headers] - Optional headers to include in the request.
+   * @returns {Promise<string>} A promise that resolves to the response headers as a string.
+   */
   public head(url: string, headers?: Record<string, string>): Promise<string> {
     return this.makeRequest({ method: 'HEAD', url, headers });
   }
 
+  /**
+   * Sends an OPTIONS request to the specified URL.
+   *
+   * @param {string} url - The URL to send the request to.
+   * @param {Record<string, string>} [headers] - Optional headers to include in the request.
+   * @returns {Promise<string>} A promise that resolves to the response body as a string.
+   */
   public options(
     url: string,
     headers?: Record<string, string>,
@@ -148,10 +235,24 @@ export class HTTPClient implements IHttpClient {
     return this.makeRequest({ method: 'OPTIONS', url, headers });
   }
 
+  /**
+   * Sends a TRACE request to the specified URL.
+   *
+   * @param {string} url - The URL to send the request to.
+   * @param {Record<string, string>} [headers] - Optional headers to include in the request.
+   * @returns {Promise<string>} A promise that resolves to the response body as a string.
+   */
   public trace(url: string, headers?: Record<string, string>): Promise<string> {
     return this.makeRequest({ method: 'TRACE', url, headers });
   }
 
+  /**
+   * Sends a CONNECT request to the specified URL.
+   *
+   * @param {string} url - The URL to send the request to.
+   * @param {Record<string, string>} [headers] - Optional headers to include in the request.
+   * @returns {Promise<string>} A promise that resolves to the response body as a string.
+   */
   public connect(
     url: string,
     headers?: Record<string, string>,
@@ -159,7 +260,14 @@ export class HTTPClient implements IHttpClient {
     return this.makeRequest({ method: 'CONNECT', url, headers });
   }
 
-  // Define methods with 'body' parameter
+  /**
+   * Sends a POST request to the specified URL with a request body.
+   *
+   * @param {string} url - The URL to send the request to.
+   * @param {string} body - The request body to include in the POST request.
+   * @param {Record<string, string>} [headers] - Optional headers to include in the request.
+   * @returns {Promise<string>} A promise that resolves to the response body as a string.
+   */
   public post(
     url: string,
     body: string,
@@ -168,6 +276,14 @@ export class HTTPClient implements IHttpClient {
     return this.makeRequest({ method: 'POST', url, body, headers });
   }
 
+  /**
+   * Sends a PUT request to the specified URL with a request body.
+   *
+   * @param {string} url - The URL to send the request to.
+   * @param {string} body - The request body to include in the PUT request.
+   * @param {Record<string, string>} [headers] - Optional headers to include in the request.
+   * @returns {Promise<string>} A promise that resolves to the response body as a string.
+   */
   public put(
     url: string,
     body: string,
@@ -176,6 +292,14 @@ export class HTTPClient implements IHttpClient {
     return this.makeRequest({ method: 'PUT', url, body, headers });
   }
 
+  /**
+   * Sends a PATCH request to the specified URL with a request body.
+   *
+   * @param {string} url - The URL to send the request to.
+   * @param {string} body - The request body to include in the PATCH request.
+   * @param {Record<string, string>} [headers] - Optional headers to include in the request.
+   * @returns {Promise<string>} A promise that resolves to the response body as a string.
+   */
   public patch(
     url: string,
     body: string,
