@@ -71,7 +71,7 @@ export class DiscoveryClient implements IDiscoveryClient {
    * @returns The discovery configuration.
    */
   private async fetchAndCacheConfig(): Promise<IDiscoveryConfig> {
-    if (this.fetchingConfig) {
+    if (this.fetchingConfig !== null) {
       this.logger.debug(
         'Fetch in progress. Awaiting existing fetch operation.',
       );

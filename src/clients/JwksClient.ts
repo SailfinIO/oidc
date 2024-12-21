@@ -115,7 +115,7 @@ export class JwksClient {
    * @returns {Promise<void>} Resolves when the JWKS has been fetched and cached.
    */
   private async ensureJWKS(): Promise<void> {
-    if (!this.fetchingJWKS) {
+    if (!this.fetchingJWKS !== null) {
       this.fetchingJWKS = this.refreshCache().finally(() => {
         this.fetchingJWKS = null;
       });
