@@ -243,11 +243,7 @@ describe('HTTPClient', () => {
       'Custom-Header': 'CustomValue',
     };
 
-    const response = await httpClient.get(
-      'http://example.com/data',
-      undefined,
-      headers,
-    );
+    const response = await httpClient.get('http://example.com/data', headers);
 
     expect(mockHttpLib).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -346,43 +342,6 @@ describe('HTTPClient', () => {
       }),
     );
     expect(mockHttpLib).not.toHaveBeenCalled();
-  });
-
-  it('should not send a body for GET requests even if provided', async () => {
-    const mockResponse = createMockIncomingMessage(200, 'No Body');
-    const mockReq = createMockClientRequest();
-
-    mockHttpLib.mockImplementation((options, callback) => {
-      process.nextTick(() => {
-        callback(mockResponse);
-        mockResponse.emit('data', Buffer.from('No Body'));
-        mockResponse.emit('end');
-      });
-      return mockReq;
-    });
-
-    const response = await httpClient.get(
-      'http://example.com',
-      'This should be ignored',
-    );
-
-    expect(mockHttpLib).toHaveBeenCalledWith(
-      expect.objectContaining({
-        method: 'GET',
-        hostname: 'example.com',
-        port: 80,
-        path: '/',
-        headers: {},
-      }),
-      expect.any(Function),
-    );
-    expect(mockReq.write).not.toHaveBeenCalled();
-    expect(response).toBe('No Body');
-    expect(mockLogger.info).toHaveBeenCalledWith(
-      'HTTP GET request to http://example.com succeeded',
-      { statusCode: 200 },
-    );
-    expect(mockReq.end).toHaveBeenCalled();
   });
 
   it('should make a PUT request successfully with a body', async () => {

@@ -1,58 +1,200 @@
 # @sailfin/oidc
 
-## Description
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![npm version](https://img.shields.io/npm/v/@sailfin/oidc.svg)
+[![CodeQL Advanced](https://github.com/SailfinIO/oidc/actions/workflows/codeql.yml/badge.svg)](https://github.com/SailfinIO/oidc/actions/workflows/codeql.yml)
+[![Build](https://github.com/SailfinIO/oidc/actions/workflows/build.yaml/badge.svg)](https://github.com/SailfinIO/oidc/actions/workflows/build.yaml)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=SailfinIO_oidc&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=SailfinIO_oidc)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=SailfinIO_oidc&metric=coverage)](https://sonarcloud.io/summary/new_code?id=SailfinIO_oidc)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=SailfinIO_oidc&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=SailfinIO_oidc)
+[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=SailfinIO_oidc&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=SailfinIO_oidc)
+[![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=SailfinIO_oidc&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=SailfinIO_oidc)
 
-This is a simple OpenID Connect (OIDC) client library for Sailfin. It is designed to be used with Sailfin's OIDC provider. It can be used to authenticate users and obtain tokens for Sailfin's APIs. It can also be used to validate tokens obtained from Sailfin's OIDC provider. The library is designed to be used in a Node.js environment. It can also be used with any other OIDC provider that supports the OIDC standard.
+## Overview
+
+`@sailfin/oidc` is a fully-featured OpenID Connect (OIDC) client library designed for seamless integration with OIDC providers, including Sailfin's OIDC provider. It enables user authentication, token management, and secure interaction with APIs that support the OIDC standard.
+
+This library is built for enterprise-grade TypeScript and Node.js applications, adhering to modern TypeScript practices. It supports multiple grant types, token validation, user information retrieval, and more.
+
+**This package it under active development and is not yet ready for production use. Please use with caution and report any issues or bugs you encounter.**
+
+## Features
+
+- **Authorization URL Generation**: Supports PKCE and state validation.
+- **Token Management**: Access, refresh, and ID tokens handling.
+- **User Info Retrieval**: Fetch user details securely using the userinfo endpoint.
+- **Device Authorization Flow**: Simplified device code handling and polling.
+- **Token Introspection and Revocation**: Validate and manage tokens efficiently.
+- **Discovery Endpoint Support**: Dynamically fetches and caches OIDC configuration.
+- **Flexible Configuration**: Works with any OIDC-compliant provider.
 
 ## Installation
 
+Install the package using npm:
+
 ```bash
-$ npm install @sailfin/oidc
+npm install @sailfin/oidc
+```
+
+or with Yarn:
+
+```bash
+yarn add @sailfin/oidc
 ```
 
 ## Usage
 
-```typescript
-import { OidcClient } from '@sailfin/oidc';
+### Basic Setup
 
-const oidcClient = new OidcClient({
+Here's an example of initializing and using the `OIDCClient`:
+
+```typescript
+import { OIDCClient } from '@sailfin/oidc';
+
+const oidcClient = new OIDCClient({
   clientId: 'your-client-id',
   clientSecret: 'your-client-secret',
-  issuer: 'https://your-oidc-provider.com',
+  discoveryUrl:
+    'https://your-oidc-provider.com/.well-known/openid-configuration',
   redirectUri: 'https://your-redirect-uri.com',
   scopes: ['openid', 'profile', 'email'],
-  responseType: 'code',
-  responseMode: 'query',
-  prompt: 'consent',
-  nonce: 'your-nonce',
-  state: 'your-state',
-  codeVerifier: 'your-code-verifier',
-  codeChallenge: 'your-code-challenge',
-  codeChallengeMethod: 'S256',
-  tokenEndpointAuthMethod: 'client_secret_basic',
   grantType: 'authorization_code',
-  tokenEndpointAuthSigningAlg: 'RS256',
-  idTokenSigningAlg: 'RS256',
-  idTokenEncryptionAlg: 'RSA-OAEP',
 });
 
-const authorizationUrl = oidcClient.getAuthorizationUrl();
-console.log(authorizationUrl);
+(async () => {
+  // Initialize the OIDC client
+  await oidcClient.initialize();
 
-const token = await oidcClient.getToken('your-authorization-code');
-console.log(token);
+  // Generate an authorization URL
+  const { url } = await oidcClient.getAuthorizationUrl();
+  console.log(`Visit this URL to authenticate: ${url}`);
 
-const userInfo = await oidcClient.getUserInfo(token.accessToken);
-console.log(userInfo);
+  // Handle redirect after authentication (use your framework's routing to get the code and state)
+  await oidcClient.handleRedirect(
+    'your-authorization-code',
+    'your-returned-state',
+  );
 
-const isValid = oidcClient.validateToken(token.idToken);
-console.log(isValid);
+  // Retrieve user information
+  const userInfo = await oidcClient.getUserInfo();
+  console.log(userInfo);
+})();
 ```
+
+### Token Management
+
+Refresh and retrieve tokens with ease:
+
+```typescript
+const accessToken = await oidcClient.getAccessToken();
+console.log(`Access Token: ${accessToken}`);
+
+const tokens = oidcClient.getTokens();
+console.log('Tokens:', tokens);
+
+// Clear stored tokens
+oidcClient.clearTokens();
+```
+
+### Device Authorization Flow
+
+Supports device code authentication:
+
+```typescript
+const deviceAuthorization = await oidcClient.startDeviceAuthorization();
+console.log(
+  'Enter the code on this page:',
+  deviceAuthorization.verification_uri,
+);
+console.log('Your user code:', deviceAuthorization.user_code);
+
+// Poll for tokens
+await oidcClient.pollDeviceToken(deviceAuthorization.device_code);
+
+console.log('Device successfully authorized!');
+```
+
+### Token Introspection and Revocation
+
+```typescript
+// Introspect a token
+const introspection = await oidcClient.introspectToken('your-token');
+console.log('Token introspection:', introspection);
+
+// Revoke a token
+await oidcClient.revokeToken('your-refresh-token', 'refresh_token');
+console.log('Token revoked.');
+```
+
+### Logging
+
+Customize the logging level:
+
+```typescript
+oidcClient.setLogLevel('debug');
+```
+
+## Configuration Options
+
+Below are the required and optional parameters for initializing the `OIDCClient`:
+
+| Parameter      | Type       | Required | Description                                        |
+| -------------- | ---------- | -------- | -------------------------------------------------- |
+| `clientId`     | `string`   | Yes      | Client ID registered with the OIDC provider.       |
+| `clientSecret` | `string`   | No       | Client secret (not needed for public clients).     |
+| `discoveryUrl` | `string`   | Yes      | URL to the OIDC provider's discovery endpoint.     |
+| `redirectUri`  | `string`   | Yes      | Redirect URI registered with the OIDC provider.    |
+| `scopes`       | `string[]` | Yes      | List of scopes for the OIDC flow (e.g., `openid`). |
+| `grantType`    | `string`   | No       | Grant type (default: `authorization_code`).        |
+| `logLevel`     | `string`   | No       | Logging level (`info`, `debug`, `warn`, `error`).  |
+
+## API Reference
+
+### Methods
+
+- `initialize()` - Fetches discovery configuration and initializes the client.
+- `getAuthorizationUrl()` - Generates an authorization URL for user login.
+- `handleRedirect(code, state)` - Handles redirect after login for authorization code flow.
+- `getUserInfo()` - Fetches user info from the userinfo endpoint.
+- `getAccessToken()` - Retrieves the current access token, refreshing it if necessary.
+- `clearTokens()` - Clears all stored tokens.
+- `startDeviceAuthorization()` - Initiates device authorization flow.
+- `pollDeviceToken(device_code, interval, timeout)` - Polls for tokens in device authorization flow.
+- `introspectToken(token)` - Introspects a token.
+- `revokeToken(token, tokenTypeHint)` - Revokes a token.
+- `setLogLevel(level)` - Sets the log level.
+
+## Error Handling
+
+The library throws `ClientError` for all error scenarios, ensuring consistent error handling. Each error includes a `message`, `code`, and optional `details` field.
+
+Example:
+
+```typescript
+try {
+  await oidcClient.getUserInfo();
+} catch (error) {
+  if (error instanceof ClientError) {
+    console.error(`Error Code: ${error.code}`);
+    console.error(`Error Message: ${error.message}`);
+  } else {
+    console.error('An unexpected error occurred:', error);
+  }
+}
+```
+
+## Contributing
+
+Contributions are welcome! Please see the [CONTRIBUTING.md](CONTRIBUTING.md) file for guidelines.
 
 ## Support
 
-Please [open an issue](https://github.con/sailfinIO/oidc/issues) for support.
+For issues and feature requests, please [open an issue](https://github.com/sailfinIO/oidc/issues).
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+---
+
+Happy coding! 🎉

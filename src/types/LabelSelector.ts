@@ -1,14 +1,27 @@
 /**
- * Represents a key-value mapping for labels, where both keys and values are strings.
- * Commonly used to define selectors or mappings for resources.
+ * @fileoverview
+ * Defines the `LabelSelector` type, a key-value mapping where both keys and values are strings.
+ * This type is commonly used for resource selection or categorization in systems like Kubernetes.
  *
- * @typedef {Object} LabelSelector
- * @property {string} [key] - The key represents a label or identifier, and the value is its associated string value.
+ * @module src/types/LabelSelector
+ */
+
+/**
+ * Represents a key-value mapping for labels, where both keys and values are strings.
+ *
+ * The `LabelSelector` type is commonly used to define selectors or mappings for resources,
+ * such as filtering or categorizing entities based on labels.
+ *
+ * @typedef {LabelSelector}
+ * @type {Record<string, string>}
  *
  * @example
+ * ```typescript
  * const mySelector: LabelSelector = {
- *  key: 'value',
+ *   environment: 'production',
+ *   app: 'my-service',
+ *   version: '1.0.0',
  * };
- * };
+ * ```
  */
 export type LabelSelector = { [key: string]: string };
