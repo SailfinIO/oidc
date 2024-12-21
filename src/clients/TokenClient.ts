@@ -117,7 +117,7 @@ export class TokenClient implements ITokenClient {
         ? Math.floor((this.expiresAt - Date.now()) / 1000)
         : undefined,
       token_type: 'Bearer',
-      id_token: this.idToken,
+      id_token: this.idToken || undefined,
     };
   }
 

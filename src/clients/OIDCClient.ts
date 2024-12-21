@@ -47,11 +47,11 @@ export class OIDCClient {
     this.validateConfig(config);
     this.discoveryClient = new DiscoveryClient(
       this.config.discoveryUrl,
-      this.logger as Logger,
+      this.logger,
     );
     this.authClient = new AuthClient(
       config,
-      this.logger as Logger,
+      this.logger,
       this.discoveryClient,
       this.httpClient,
     );
@@ -83,7 +83,8 @@ export class OIDCClient {
     this.userInfoClient = new UserInfoClient(
       this.tokenClient,
       this.discoveryConfig,
-      this.logger as Logger,
+      this.httpClient,
+      this.logger,
     );
     this.initialized = true;
     this.logger.info('OIDC Client initialized successfully');
