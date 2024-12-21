@@ -48,35 +48,23 @@ export class AuthClient {
     );
   }
 
+  /**
+   * Generates the authorization URL to initiate the OAuth2/OIDC flow.
+   * @param state A unique state string for CSRF protection.
+   * @param nonce Optional nonce for ID token validation.
+   * @returns The authorization URL and the code verifier if PKCE is used.
+   */
   public async getAuthorizationUrl(
     state: string,
     nonce?: string,
   ): Promise<{ url: string; codeVerifier?: string }> {
     const discoveryConfig = await this.discoveryClient.getDiscoveryConfig();
+    this.ensureGrantTypeSupportsAuthUrl();
 
-    if (
-      this.config.grantType !== GrantType.AuthorizationCode &&
-      this.config.grantType !== GrantType.Implicit &&
-      this.config.grantType !== GrantType.DeviceCode
-    ) {
-      throw new ClientError(
-        `Grant type ${this.config.grantType} does not support authorization URLs.`,
-        'INVALID_GRANT_TYPE',
-      );
-    }
-
-    let codeVerifier: string | undefined;
-    let codeChallenge: string | undefined;
-
-    // Only generate PKCE if grantType is authorization_code and PKCE is enabled
-    if (
-      this.config.pkce &&
-      this.config.grantType === GrantType.AuthorizationCode
-    ) {
-      codeVerifier = this.generateCodeVerifier();
-      this.codeVerifier = codeVerifier;
-      codeChallenge = this.generateCodeChallenge(codeVerifier);
-    }
+    const { codeVerifier, codeChallenge } =
+      this.config.pkce && this.config.grantType === GrantType.AuthorizationCode
+        ? this.generatePkce()
+        : { codeVerifier: undefined, codeChallenge: undefined };
 
     const url = buildAuthorizationUrl(
       {
@@ -100,13 +88,73 @@ export class AuthClient {
   }
 
   /**
-   * Retrieve the previously generated code verifier.
+   * Ensures the current grant type supports generating an authorization URL.
+   * @throws {ClientError} If the grant type is unsupported.
+   */
+  private ensureGrantTypeSupportsAuthUrl(): void {
+    const supportedGrantTypes = [
+      GrantType.AuthorizationCode,
+      GrantType.Implicit,
+      GrantType.DeviceCode,
+    ];
+    if (!supportedGrantTypes.includes(this.config.grantType)) {
+      throw new ClientError(
+        `Grant type ${this.config.grantType} does not support authorization URLs.`,
+        'INVALID_GRANT_TYPE',
+      );
+    }
+  }
+
+  /**
+   * Generates PKCE code verifier and code challenge.
+   * @returns An object containing the code verifier and code challenge.
+   */
+  private generatePkce(): { codeVerifier: string; codeChallenge: string } {
+    const codeVerifier = this.generateCodeVerifier();
+    this.codeVerifier = codeVerifier;
+    const codeChallenge = this.generateCodeChallenge(codeVerifier);
+    return { codeVerifier, codeChallenge };
+  }
+
+  /**
+   * Generates a random code verifier for PKCE.
+   * @returns The generated code verifier string.
+   */
+  private generateCodeVerifier(): string {
+    return randomBytes(32).toString(BinaryToTextEncoding.BASE_64_URL);
+  }
+
+  /**
+   * Generates a code challenge based on the code verifier and PKCE method.
+   * @param verifier The code verifier string.
+   * @returns The generated code challenge string.
+   */
+  private generateCodeChallenge(verifier: string): string {
+    if (this.config.pkceMethod === 'plain') {
+      return verifier;
+    }
+
+    return createHash(Algorithm.SHA256.toLowerCase())
+      .update(verifier)
+      .digest(BinaryToTextEncoding.BASE_64_URL);
+  }
+
+  /**
+   * Retrieves the previously generated code verifier.
    * @returns The code verifier if available.
    */
   public getCodeVerifier(): string | null {
     return this.codeVerifier;
   }
 
+  /**
+   * Exchanges an authorization code for tokens.
+   * @param code The authorization code received from the authorization server.
+   * @param codeVerifier Optional code verifier if PKCE is used.
+   * @param username Optional username for Resource Owner Password Credentials grant.
+   * @param password Optional password for Resource Owner Password Credentials grant.
+   * @throws {ClientError} If the exchange fails.
+   */
   public async exchangeCodeForToken(
     code: string,
     codeVerifier?: string,
@@ -116,80 +164,12 @@ export class AuthClient {
     const discoveryConfig = await this.discoveryClient.getDiscoveryConfig();
     const tokenEndpoint = discoveryConfig.token_endpoint;
 
-    // Determine the grant type and set parameters accordingly
-    let params: Record<string, string> = {
-      grant_type: this.config.grantType,
-      client_id: this.config.clientId,
-      redirect_uri: this.config.redirectUri,
-      client_secret: this.config.clientSecret || '',
-    };
-
-    switch (this.config.grantType) {
-      case GrantType.AuthorizationCode:
-        params = {
-          ...params,
-          code,
-          code_verifier: codeVerifier || '',
-        };
-        break;
-
-      case GrantType.RefreshToken:
-        params = {
-          ...params,
-          refresh_token: code, // Here, 'code' represents the refresh token
-        };
-        break;
-
-      case GrantType.ClientCredentials:
-        // Typically, no additional parameters are needed
-        break;
-
-      case GrantType.Password:
-        if (!username || !password) {
-          throw new ClientError(
-            'Username and password are required for Password grant type',
-            'INVALID_REQUEST',
-          );
-        }
-        params = {
-          ...params,
-          username,
-          password,
-        };
-        break;
-
-      case GrantType.DeviceCode:
-        params = {
-          ...params,
-          device_code: code,
-        };
-        break;
-
-      case GrantType.JWTBearer:
-        params = {
-          ...params,
-          assertion: code, // 'code' represents the JWT assertion
-          scope: this.config.scopes.join(' '),
-        };
-        break;
-
-      case GrantType.SAML2Bearer:
-        params = {
-          ...params,
-          assertion: code, // 'code' represents the SAML assertion
-        };
-        break;
-
-      case GrantType.Custom:
-        // Handle custom grant types as needed
-        break;
-
-      default:
-        throw new ClientError(
-          `Unsupported grant type: ${this.config.grantType}`,
-          'UNSUPPORTED_GRANT_TYPE',
-        );
-    }
+    const params = this.buildTokenRequestParams(
+      code,
+      codeVerifier,
+      username,
+      password,
+    );
 
     const headers = {
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -214,28 +194,90 @@ export class AuthClient {
     }
   }
 
+  /**
+   * Builds the parameters for the token request based on the grant type.
+   * @param code The code or token being exchanged.
+   * @param codeVerifier Optional code verifier.
+   * @param username Optional username for password grant.
+   * @param password Optional password for password grant.
+   * @returns The parameters as a record of strings.
+   */
+  private buildTokenRequestParams(
+    code: string,
+    codeVerifier?: string,
+    username?: string,
+    password?: string,
+  ): Record<string, string> {
+    let params: Record<string, string> = {
+      grant_type: this.config.grantType,
+      client_id: this.config.clientId,
+      redirect_uri: this.config.redirectUri,
+      ...(this.config.clientSecret && {
+        client_secret: this.config.clientSecret,
+      }),
+    };
+
+    switch (this.config.grantType) {
+      case GrantType.AuthorizationCode:
+        params = {
+          ...params,
+          code,
+          ...(codeVerifier && { code_verifier: codeVerifier }),
+        };
+        break;
+      case GrantType.RefreshToken:
+        params = { ...params, refresh_token: code };
+        break;
+      case GrantType.Password:
+        if (!username || !password) {
+          throw new ClientError(
+            'Username and password are required for Password grant type',
+            'INVALID_REQUEST',
+          );
+        }
+        params = { ...params, username, password };
+        break;
+      case GrantType.DeviceCode:
+        params = { ...params, device_code: code };
+        break;
+      case GrantType.JWTBearer:
+        params = {
+          ...params,
+          assertion: code,
+          scope: this.config.scopes.join(' '),
+        };
+        break;
+      case GrantType.SAML2Bearer:
+        params = { ...params, assertion: code };
+        break;
+      case GrantType.ClientCredentials:
+        // No additional params
+        break;
+      case GrantType.Custom:
+        // Handle custom grant types
+        break;
+      default:
+        throw new ClientError(
+          `Unsupported grant type: ${this.config.grantType}`,
+          'UNSUPPORTED_GRANT_TYPE',
+        );
+    }
+
+    return params;
+  }
+
+  /**
+   * Retrieves the token manager instance.
+   * @returns The token client.
+   */
   public getTokenManager(): ITokenClient {
     return this.tokenClient;
   }
 
-  private generateCodeVerifier(): string {
-    return randomBytes(32).toString(BinaryToTextEncoding.BASE_64_URL);
-  }
-
-  private generateCodeChallenge(verifier: string): string {
-    // If pkceMethod is "plain", just return the verifier
-    if (this.config.pkceMethod === 'plain') {
-      return verifier;
-    }
-
-    // Otherwise, default to S256
-    return createHash(Algorithm.SHA256.toLowerCase())
-      .update(verifier)
-      .digest(BinaryToTextEncoding.BASE_64_URL);
-  }
-
   /**
-   * Initiates the device authorization request to obtain a device_code and user_code.
+   * Initiates the device authorization request to obtain device and user codes.
+   * @returns Device authorization details.
+   * @throws {ClientError} If device authorization initiation fails.
    */
   public async startDeviceAuthorization(): Promise<{
     device_code: string;
@@ -252,11 +294,9 @@ export class AuthClient {
     }
 
     const discoveryConfig = await this.discoveryClient.getDiscoveryConfig();
-
-    // Typically, the device authorization endpoint is derived from the discovery config
-    // Some providers use `device_authorization_endpoint`
     const deviceEndpoint = (discoveryConfig as any)
       .device_authorization_endpoint;
+
     if (!deviceEndpoint) {
       throw new ClientError(
         'No device_authorization_endpoint found in discovery configuration.',
@@ -304,7 +344,11 @@ export class AuthClient {
   }
 
   /**
-   * Polls the token endpoint until the device is authorized or expires.
+   * Polls the token endpoint until the device is authorized or the process times out.
+   * @param device_code The device code obtained from device authorization.
+   * @param interval Polling interval in seconds.
+   * @param timeout Maximum time to wait in milliseconds.
+   * @throws {ClientError} If polling fails or times out.
    */
   public async pollDeviceToken(
     device_code: string,
@@ -343,7 +387,7 @@ export class AuthClient {
           body,
           headers,
         );
-        const tokenResponse = JSON.parse(response);
+        const tokenResponse: ITokenResponse = JSON.parse(response);
         this.tokenClient.setTokens(tokenResponse);
         this.logger.info('Device authorized and tokens obtained');
         return;
@@ -356,33 +400,30 @@ export class AuthClient {
             this.logger.warn('Failed to parse error response as JSON', {
               originalError: parseError,
             });
-            // If parsing fails, just continue with empty object or default handling
-
-            // If the error response is not JSON, log the raw response
             this.logger.warn('Error response from token endpoint', {
               response: error.context.body,
             });
           }
         }
 
-        if (errorBody.error === 'authorization_pending') {
-          await this.sleep(interval * 1000);
-          continue;
-        } else if (errorBody.error === 'slow_down') {
-          interval += 5;
-          await this.sleep(interval * 1000);
-          continue;
-        } else if (errorBody.error === 'expired_token') {
-          throw new ClientError('Device code expired', 'DEVICE_CODE_EXPIRED');
-        } else {
-          // Some other error
-          throw new ClientError(
-            'Device token polling failed',
-            'TOKEN_POLLING_ERROR',
-            {
-              originalError: error,
-            },
-          );
+        switch (errorBody.error) {
+          case 'authorization_pending':
+            await this.sleep(interval * 1000);
+            break;
+          case 'slow_down':
+            interval += 5;
+            await this.sleep(interval * 1000);
+            break;
+          case 'expired_token':
+            throw new ClientError('Device code expired', 'DEVICE_CODE_EXPIRED');
+          default:
+            throw new ClientError(
+              'Device token polling failed',
+              'TOKEN_POLLING_ERROR',
+              {
+                originalError: error,
+              },
+            );
         }
       }
     }
@@ -391,15 +432,18 @@ export class AuthClient {
   /**
    * Generates the logout URL to initiate the logout flow.
    * @param idTokenHint Optional ID token to hint the logout request.
+   * @param state Optional state for logout.
    * @returns The logout URL.
+   * @throws {ClientError} If logout endpoint is missing.
    */
   public async getLogoutUrl(
     idTokenHint?: string,
     state?: string,
   ): Promise<string> {
     const discoveryConfig = await this.discoveryClient.getDiscoveryConfig();
+    const endSessionEndpoint = discoveryConfig.end_session_endpoint;
 
-    if (!discoveryConfig.end_session_endpoint) {
+    if (!endSessionEndpoint) {
       throw new ClientError(
         'No end_session_endpoint found in discovery configuration.',
         'END_SESSION_ENDPOINT_MISSING',
@@ -407,7 +451,7 @@ export class AuthClient {
     }
 
     const logoutParams: ILogoutUrlParams = {
-      endSessionEndpoint: discoveryConfig.end_session_endpoint,
+      endSessionEndpoint,
       clientId: this.config.clientId,
       postLogoutRedirectUri: this.config.postLogoutRedirectUri,
       idTokenHint,
@@ -420,6 +464,10 @@ export class AuthClient {
     return logoutUrl;
   }
 
+  /**
+   * Sleeps for the specified number of milliseconds.
+   * @param ms Milliseconds to sleep.
+   */
   private async sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
