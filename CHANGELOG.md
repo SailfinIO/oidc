@@ -1,3 +1,9 @@
+## [0.0.4-beta.1](https://github.com/SailfinIO/oidc/compare/v0.0.3...v0.0.4-beta.1) (2024-12-22)
+
+### Bug Fixes
+
+* export client ([1638482](https://github.com/SailfinIO/oidc/commit/1638482f7dc4d22059ddfbf20cd657b6ee97eb59))
+
 ## [0.0.3-beta.3](https://github.com/SailfinIO/oidc/compare/v0.0.3-beta.2...v0.0.3-beta.3) (2024-12-22)
 
 ### Bug Fixes
