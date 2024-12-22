@@ -1,13 +1,14 @@
-## [0.0.3](https://github.com/SailfinIO/oidc/compare/v0.0.2...v0.0.3) (2024-12-21)
+## [0.0.4-beta.1](https://github.com/SailfinIO/oidc/compare/v0.0.3...v0.0.4-beta.1) (2024-12-22)
 
 ### Bug Fixes
 
-* add coverage and fix jwks client ([fdff5e8](https://github.com/SailfinIO/oidc/commit/fdff5e80940d3e64fce8fc97e06862daf03dfa0e))
-* add tests for coverage ([15d1451](https://github.com/SailfinIO/oidc/commit/15d14512a0b00eccd83200bda4bedf2f4fa4fcc2))
-* additional comments and coverage ([d57c237](https://github.com/SailfinIO/oidc/commit/d57c237bcced5141b262e4cd1adcad05a6a7f188))
-* code smells ([8c1e76f](https://github.com/SailfinIO/oidc/commit/8c1e76fe8c61620450040d7bbc4af04a10816d3c))
-* expanded config options ([904fe67](https://github.com/SailfinIO/oidc/commit/904fe67ccc0395bbf0d7f94306f0feca8262c9d8))
-* increase test coverage ([3722f8a](https://github.com/SailfinIO/oidc/commit/3722f8adb425831f25e5b27ca7868e0543ee2a06))
+* export client ([1638482](https://github.com/SailfinIO/oidc/commit/1638482f7dc4d22059ddfbf20cd657b6ee97eb59))
+
+## [0.0.3-beta.3](https://github.com/SailfinIO/oidc/compare/v0.0.3-beta.2...v0.0.3-beta.3) (2024-12-22)
+
+### Bug Fixes
+
+* export client ([1638482](https://github.com/SailfinIO/oidc/commit/1638482f7dc4d22059ddfbf20cd657b6ee97eb59))
 
 ## [0.0.3-beta.2](https://github.com/SailfinIO/oidc/compare/v0.0.3-beta.1...v0.0.3-beta.2) (2024-12-21)
 
