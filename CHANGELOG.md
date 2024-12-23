@@ -4,6 +4,10 @@
 
 * code coverage in auth client ([697ee37](https://github.com/SailfinIO/oidc/commit/697ee37ecb73df830a2b878b582b96c528dc8254))
 
+### Bug Fixes
+
+* export client ([1638482](https://github.com/SailfinIO/oidc/commit/1638482f7dc4d22059ddfbf20cd657b6ee97eb59))
+
 ## [0.0.4-beta.1](https://github.com/SailfinIO/oidc/compare/v0.0.3...v0.0.4-beta.1) (2024-12-22)
 
 ### Bug Fixes
