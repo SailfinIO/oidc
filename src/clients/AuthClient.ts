@@ -6,6 +6,7 @@ import {
   buildAuthorizationUrl,
   buildLogoutUrl,
   buildUrlEncodedBody,
+  sleep,
 } from '../utils';
 import {
   ILogoutUrlParams,
@@ -35,17 +36,20 @@ export class AuthClient {
     logger: ILogger,
     discoveryClient: IDiscoveryClient,
     httpClient: IHttpClient,
+    tokenClient?: ITokenClient,
   ) {
     this.config = config;
     this.logger = logger;
     this.httpClient = httpClient;
     this.discoveryClient = discoveryClient;
-    this.tokenClient = new TokenClient(
-      this.logger,
-      this.config,
-      this.discoveryClient,
-      this.httpClient,
-    );
+    this.tokenClient =
+      tokenClient ||
+      new TokenClient(
+        this.logger,
+        this.config,
+        this.discoveryClient,
+        this.httpClient,
+      );
   }
 
   /**
@@ -267,14 +271,6 @@ export class AuthClient {
   }
 
   /**
-   * Retrieves the token manager instance.
-   * @returns The token client.
-   */
-  public getTokenManager(): ITokenClient {
-    return this.tokenClient;
-  }
-
-  /**
    * Initiates the device authorization request to obtain device and user codes.
    * @returns Device authorization details.
    * @throws {ClientError} If device authorization initiation fails.
@@ -298,9 +294,19 @@ export class AuthClient {
       .device_authorization_endpoint;
 
     if (!deviceEndpoint) {
-      throw new ClientError(
+      const error = new ClientError(
         'No device_authorization_endpoint found in discovery configuration.',
         'ENDPOINT_MISSING',
+      );
+      this.logger.error('Failed to start device authorization', {
+        error: error,
+      });
+      throw new ClientError(
+        'Device authorization failed',
+        'DEVICE_AUTH_ERROR',
+        {
+          originalError: error,
+        },
       );
     }
 
@@ -368,7 +374,14 @@ export class AuthClient {
 
     while (true) {
       if (timeout && Date.now() - startTime > timeout) {
-        throw new ClientError('Device code polling timed out', 'TIMEOUT_ERROR');
+        const timeoutError = new ClientError(
+          'Device code polling timed out',
+          'TIMEOUT_ERROR',
+        );
+        this.logger.error('Device token polling timed out', {
+          error: timeoutError,
+        });
+        throw timeoutError;
       }
 
       const params = {
@@ -408,22 +421,33 @@ export class AuthClient {
 
         switch (errorBody.error) {
           case 'authorization_pending':
-            await this.sleep(interval * 1000);
+            await sleep(interval * 1000);
             break;
           case 'slow_down':
             interval += 5;
-            await this.sleep(interval * 1000);
+            await sleep(interval * 1000);
             break;
           case 'expired_token':
-            throw new ClientError('Device code expired', 'DEVICE_CODE_EXPIRED');
+            const expiredTokenError = new ClientError(
+              'Device code expired',
+              'DEVICE_CODE_EXPIRED',
+            );
+            this.logger.error('Device code expired', {
+              error: expiredTokenError,
+            });
+            throw expiredTokenError;
           default:
-            throw new ClientError(
+            const pollingError = new ClientError(
               'Device token polling failed',
               'TOKEN_POLLING_ERROR',
               {
                 originalError: error,
               },
             );
+            this.logger.error('Device token polling failed', {
+              originalError: error,
+            });
+            throw pollingError;
         }
       }
     }
@@ -444,10 +468,12 @@ export class AuthClient {
     const endSessionEndpoint = discoveryConfig.end_session_endpoint;
 
     if (!endSessionEndpoint) {
-      throw new ClientError(
+      const error = new ClientError(
         'No end_session_endpoint found in discovery configuration.',
         'END_SESSION_ENDPOINT_MISSING',
       );
+      this.logger.error('Failed to generate logout URL', { error });
+      throw error;
     }
 
     const logoutParams: ILogoutUrlParams = {
@@ -462,13 +488,5 @@ export class AuthClient {
 
     this.logger.debug('Logout URL generated', { logoutUrl });
     return logoutUrl;
-  }
-
-  /**
-   * Sleeps for the specified number of milliseconds.
-   * @param ms Milliseconds to sleep.
-   */
-  private async sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

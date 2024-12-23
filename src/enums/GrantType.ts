@@ -42,6 +42,12 @@ export enum GrantType {
   DeviceCode = 'urn:ietf:params:oauth:grant-type:device_code',
 
   /**
+   * Hybrid Flow
+   * Combines authorization code and implicit flows.
+   */
+  Hybrid = 'hybrid',
+
+  /**
    * JWT Bearer Token Grant Type
    * Used for exchanging a JWT for an access token.
    */

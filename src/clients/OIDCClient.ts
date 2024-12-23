@@ -7,7 +7,6 @@ import { GrantType, LogLevel, TokenTypeHint } from '../enums';
 import { DiscoveryClient } from './DiscoveryClient';
 import {
   IClientConfig,
-  IDiscoveryConfig,
   ILogger,
   ITokenIntrospectionResponse,
   ITokenResponse,
@@ -18,6 +17,7 @@ import {
 } from '../interfaces';
 import { ClientError } from '../errors';
 import { HTTPClient } from './HTTPClient';
+import { TokenClient } from './TokenClient';
 
 export class OIDCClient {
   private readonly config: IClientConfig;
@@ -26,7 +26,6 @@ export class OIDCClient {
   private readonly logger: ILogger;
   private readonly httpClient: IHttpClient;
   private userInfoClient: UserInfoClient;
-  private discoveryConfig: IDiscoveryConfig;
   private discoveryClient: IDiscoveryClient;
 
   private initialized: boolean = false;
@@ -44,18 +43,24 @@ export class OIDCClient {
         true,
       );
     this.httpClient = new HTTPClient(this.logger);
-    this.validateConfig(config);
     this.discoveryClient = new DiscoveryClient(
       this.config.discoveryUrl,
       this.logger,
+    );
+    this.tokenClient = new TokenClient(
+      this.logger,
+      this.config,
+      this.discoveryClient,
+      this.httpClient,
     );
     this.authClient = new AuthClient(
       config,
       this.logger,
       this.discoveryClient,
       this.httpClient,
+      this.tokenClient,
     );
-    this.tokenClient = this.authClient.getTokenManager();
+    this.validateConfig(config);
   }
 
   private validateConfig(config: IClientConfig): void {
@@ -79,10 +84,10 @@ export class OIDCClient {
 
   public async initialize(): Promise<void> {
     this.logger.debug('Initializing OIDC Client');
-    this.discoveryConfig = await this.discoveryClient.getDiscoveryConfig();
+    const discoveryConfig = await this.discoveryClient.getDiscoveryConfig();
     this.userInfoClient = new UserInfoClient(
       this.tokenClient,
-      this.discoveryConfig,
+      discoveryConfig,
       this.httpClient,
       this.logger,
     );
@@ -152,10 +157,11 @@ export class OIDCClient {
     this.stateMap.delete(returnedState);
     // After token is obtained:
     const tokens = this.tokenClient.getTokens();
+    const discoveryConfig = await this.discoveryClient.getDiscoveryConfig();
     if (tokens.id_token) {
       const jwtValidator = new JwtValidator(
         this.logger as Logger,
-        this.discoveryConfig,
+        discoveryConfig,
         this.config.clientId,
       );
       await jwtValidator.validateIdToken(tokens.id_token, expectedNonce);

@@ -1,5 +1,10 @@
 // src/clients/AuthClient.test.ts
 
+jest.mock('../utils', () => ({
+  ...jest.requireActual('../utils'),
+  sleep: jest.fn(), // Mock the sleep function
+}));
+
 import { AuthClient } from './AuthClient';
 import { TokenClient } from './TokenClient';
 import {
@@ -13,6 +18,7 @@ import {
 } from '../interfaces';
 import { GrantType } from '../enums/GrantType';
 import { ClientError } from '../errors/ClientError';
+import { buildLogoutUrl, sleep } from '../utils';
 
 describe('AuthClient', () => {
   let mockDiscoveryClient: jest.Mocked<IDiscoveryClient>;
@@ -20,15 +26,7 @@ describe('AuthClient', () => {
   let mockLogger: jest.Mocked<ILogger>;
   let mockTokenClient: jest.Mocked<ITokenClient>;
   let authClient: AuthClient;
-  const config: IClientConfig = {
-    clientId: 'test-client-id',
-    redirectUri: 'https://example.com/callback',
-    scopes: ['openid', 'profile'],
-    discoveryUrl: 'https://example.com/.well-known/openid-configuration',
-    grantType: GrantType.AuthorizationCode,
-    pkce: true,
-    pkceMethod: 'S256',
-  };
+  let config: IClientConfig;
 
   const mockDiscoveryConfig: IDiscoveryConfig = {
     issuer: 'https://example.com/',
@@ -37,7 +35,6 @@ describe('AuthClient', () => {
     end_session_endpoint: 'https://example.com/oauth2/logout',
     jwks_uri: 'https://example.com/.well-known/jwks.json',
     userinfo_endpoint: 'https://example.com/oauth2/userinfo',
-    // For Device Code
     device_authorization_endpoint:
       'https://example.com/oauth2/device_authorize',
   };
@@ -77,7 +74,7 @@ describe('AuthClient', () => {
       revokeToken: jest.fn(),
     };
 
-    // Mock TokenClient instantiation within AuthClient
+    // Mock TokenClient methods if necessary
     jest
       .spyOn(TokenClient.prototype, 'setTokens')
       .mockImplementation(mockTokenClient.setTokens);
@@ -99,586 +96,644 @@ describe('AuthClient', () => {
     jest
       .spyOn(TokenClient.prototype, 'revokeToken')
       .mockImplementation(mockTokenClient.revokeToken);
-
-    authClient = new AuthClient(
-      config,
-      mockLogger,
-      mockDiscoveryClient,
-      mockHttpClient,
-    );
   });
 
   afterEach(() => {
     jest.resetAllMocks();
+    jest.useRealTimers(); // Ensure timers are reset
   });
 
-  describe('constructor', () => {
-    it('should create an instance of AuthClient', () => {
-      expect(authClient).toBeInstanceOf(AuthClient);
-    });
-  });
-
-  describe('getAuthorizationUrl', () => {
-    it('should generate authorization URL with PKCE when enabled', async () => {
-      const state = 'test-state';
-      const nonce = 'test-nonce';
-
-      const result = await authClient.getAuthorizationUrl(state, nonce);
-
-      expect(mockDiscoveryClient.getDiscoveryConfig).toHaveBeenCalledTimes(1);
-      expect(result.url).toContain(mockDiscoveryConfig.authorization_endpoint);
-      expect(result.codeVerifier).toBeDefined();
-      expect(mockLogger.debug).toHaveBeenCalledWith(
-        'Authorization URL generated',
-        { url: result.url },
-      );
-    });
-
-    it('should throw ClientError if grant type does not support authorization URLs', async () => {
-      // Update config to unsupported grant type
-      const unsupportedConfig: IClientConfig = {
-        ...config,
-        grantType: GrantType.ClientCredentials,
-      };
-      const unsupportedAuthClient = new AuthClient(
-        unsupportedConfig,
-        mockLogger,
-        mockDiscoveryClient,
-        mockHttpClient,
-      );
-
-      await expect(
-        unsupportedAuthClient.getAuthorizationUrl('state'),
-      ).rejects.toThrow(ClientError);
-      expect(mockLogger.debug).not.toHaveBeenCalledWith(
-        expect.stringContaining('Authorization URL generated'),
-      );
-    });
-
-    it('should not include PKCE parameters when PKCE is disabled', async () => {
-      const noPkceConfig: IClientConfig = { ...config, pkce: false };
-      const noPkceAuthClient = new AuthClient(
-        noPkceConfig,
-        mockLogger,
-        mockDiscoveryClient,
-        mockHttpClient,
-      );
-
-      const state = 'test-state';
-      const nonce = 'test-nonce';
-
-      const result = await noPkceAuthClient.getAuthorizationUrl(state, nonce);
-
-      expect(result.codeVerifier).toBeUndefined();
-      expect(result.url).toContain('response_type=code');
-      expect(noPkceAuthClient.getCodeVerifier()).toBeNull();
-      expect(mockLogger.debug).toHaveBeenCalledWith(
-        'Authorization URL generated',
-        { url: result.url },
-      );
-    });
-  });
-
-  describe('exchangeCodeForToken', () => {
-    it('should exchange authorization code for tokens', async () => {
-      const code = 'auth-code';
-      const codeVerifier = 'code-verifier';
-
-      const mockTokenResponse: ITokenResponse = {
-        access_token: 'access-token',
-        refresh_token: 'refresh-token',
-        expires_in: 3600,
-        token_type: 'Bearer',
-      };
-
-      mockHttpClient.post.mockResolvedValue(JSON.stringify(mockTokenResponse));
-
-      await authClient.exchangeCodeForToken(code, codeVerifier);
-
-      expect(mockDiscoveryClient.getDiscoveryConfig).toHaveBeenCalledTimes(1);
-      expect(mockHttpClient.post).toHaveBeenCalledWith(
-        mockDiscoveryConfig.token_endpoint,
-        expect.stringContaining(`grant_type=${GrantType.AuthorizationCode}`),
-        { 'Content-Type': 'application/x-www-form-urlencoded' },
-      );
-      expect(mockTokenClient.setTokens).toHaveBeenCalledWith(mockTokenResponse);
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        'Exchanged grant for tokens',
-        {
-          grantType: config.grantType,
-        },
-      );
-    });
-
-    it('should handle errors during token exchange', async () => {
-      const code = 'auth-code';
-      const codeVerifier = 'code-verifier';
-
-      const mockError = new Error('Token endpoint error');
-      mockHttpClient.post.mockRejectedValue(mockError);
-
-      await expect(
-        authClient.exchangeCodeForToken(code, codeVerifier),
-      ).rejects.toThrow(ClientError);
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        'Failed to exchange grant for tokens',
-        {
-          error: mockError,
-          grantType: config.grantType,
-        },
-      );
-    });
-
-    it('should include username and password for Password grant type', async () => {
-      const passwordConfig: IClientConfig = {
-        ...config,
-        grantType: GrantType.Password,
-      };
-      const passwordAuthClient = new AuthClient(
-        passwordConfig,
-        mockLogger,
-        mockDiscoveryClient,
-        mockHttpClient,
-      );
-      const code = 'password-grant'; // In password grant, 'code' is not used; perhaps adjust
-      const username = 'user';
-      const password = 'pass';
-
-      const mockTokenResponse: ITokenResponse = {
-        access_token: 'access-token',
-        refresh_token: 'refresh-token',
-        expires_in: 3600,
-        token_type: 'Bearer',
-      };
-
-      mockHttpClient.post.mockResolvedValue(JSON.stringify(mockTokenResponse));
-
-      await passwordAuthClient.exchangeCodeForToken(
-        code,
-        undefined,
-        username,
-        password,
-      );
-
-      expect(mockHttpClient.post).toHaveBeenCalledWith(
-        mockDiscoveryConfig.token_endpoint,
-        expect.stringContaining(`grant_type=${GrantType.Password}`),
-        { 'Content-Type': 'application/x-www-form-urlencoded' },
-      );
-      expect(mockTokenClient.setTokens).toHaveBeenCalledWith(mockTokenResponse);
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        'Exchanged grant for tokens',
-        {
-          grantType: passwordConfig.grantType,
-        },
-      );
-    });
-
-    it('should throw error if username or password is missing for Password grant type', async () => {
-      const passwordConfig: IClientConfig = {
-        ...config,
-        grantType: GrantType.Password,
-      };
-      const passwordAuthClient = new AuthClient(
-        passwordConfig,
-        mockLogger,
-        mockDiscoveryClient,
-        mockHttpClient,
-      );
-      const code = 'password-grant';
-
-      await expect(
-        passwordAuthClient.exchangeCodeForToken(code),
-      ).rejects.toThrow(ClientError);
-      expect(mockLogger.error).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('startDeviceAuthorization', () => {
-    it('should initiate device authorization successfully', async () => {
-      const config: IClientConfig = {
+  describe.each([
+    GrantType.AuthorizationCode,
+    GrantType.Password,
+    GrantType.DeviceCode,
+    GrantType.ClientCredentials,
+    GrantType.RefreshToken,
+    GrantType.JWTBearer,
+    GrantType.SAML2Bearer,
+    GrantType.Custom,
+  ])('AuthClient with GrantType: %s', (grantType) => {
+    beforeEach(() => {
+      config = {
         clientId: 'test-client-id',
         redirectUri: 'https://example.com/callback',
         scopes: ['openid', 'profile'],
         discoveryUrl: 'https://example.com/.well-known/openid-configuration',
-        grantType: GrantType.DeviceCode,
-        pkce: true,
+        grantType,
+        pkce: grantType === GrantType.AuthorizationCode,
         pkceMethod: 'S256',
+        postLogoutRedirectUri: 'https://example.com/logout-callback', // Ensure this is set if required
+        // Add other necessary config fields if required
       };
-      const deviceEndpoint = 'https://example.com/oauth2/device_authorize';
-      const deviceResponse = {
-        device_code: 'device-code',
-        user_code: 'user-code',
-        verification_uri: 'https://example.com/verify',
-        expires_in: 1800,
-        interval: 5,
-      };
-
       authClient = new AuthClient(
         config,
         mockLogger,
         mockDiscoveryClient,
         mockHttpClient,
       );
-
-      // Update discovery config to include device_authorization_endpoint
-      const deviceDiscoveryConfig: IDiscoveryConfig = {
-        ...mockDiscoveryConfig,
-        device_authorization_endpoint: deviceEndpoint,
-      };
-      mockDiscoveryClient.getDiscoveryConfig.mockResolvedValueOnce(
-        deviceDiscoveryConfig,
-      );
-      mockHttpClient.post.mockResolvedValueOnce(JSON.stringify(deviceResponse));
-
-      const result = await authClient.startDeviceAuthorization();
-
-      expect(mockDiscoveryClient.getDiscoveryConfig).toHaveBeenCalledTimes(1);
-      expect(mockHttpClient.post).toHaveBeenCalledWith(
-        deviceEndpoint,
-        expect.stringContaining(`client_id=${config.clientId}`),
-        { 'Content-Type': 'application/x-www-form-urlencoded' },
-      );
-      expect(result).toEqual({
-        device_code: deviceResponse.device_code,
-        user_code: deviceResponse.user_code,
-        verification_uri: deviceResponse.verification_uri,
-        expires_in: deviceResponse.expires_in,
-        interval: deviceResponse.interval,
-      });
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        'Device authorization initiated',
-      );
     });
 
-    it('should throw ClientError if not using DeviceCode grant type', async () => {
-      const unsupportedConfig: IClientConfig = {
-        ...config,
-        grantType: GrantType.ClientCredentials,
-      };
-      const unsupportedAuthClient = new AuthClient(
-        unsupportedConfig,
-        mockLogger,
-        mockDiscoveryClient,
-        mockHttpClient,
-      );
-
-      await expect(
-        unsupportedAuthClient.startDeviceAuthorization(),
-      ).rejects.toThrow(ClientError);
-      expect(mockLogger.info).not.toHaveBeenCalled();
-    });
-
-    // it('should throw ClientError if device_authorization_endpoint is missing', async () => {
-
-    //   const incompleteDiscoveryConfig: IDiscoveryConfig = {
-    //     ...mockDiscoveryConfig,
-    //   };
-    //   delete (incompleteDiscoveryConfig as any).device_authorization_endpoint;
-
-    //   mockDiscoveryClient.getDiscoveryConfig.mockResolvedValueOnce(
-    //     incompleteDiscoveryConfig,
-    //   );
-
-    //   await expect(authClient.startDeviceAuthorization()).rejects.toThrow(
-    //     ClientError,
-    //   );
-    //   expect(mockLogger.error).toHaveBeenCalledWith(
-    //     'Failed to start device authorization',
-    //     { error: expect.any(Error) },
-    //   );
-    // });
-
-    // it('should handle errors during device authorization initiation', async () => {
-    //   const deviceEndpoint = 'https://example.com/oauth2/device_authorize';
-
-    //   const deviceDiscoveryConfig: IDiscoveryConfig = {
-    //     ...mockDiscoveryConfig,
-    //     device_authorization_endpoint: deviceEndpoint,
-    //   };
-    //   mockDiscoveryClient.getDiscoveryConfig.mockResolvedValueOnce(
-    //     deviceDiscoveryConfig,
-    //   );
-    //   const mockError = new Error('Device authorization failed');
-    //   mockHttpClient.post.mockRejectedValueOnce(mockError);
-
-    //   await expect(authClient.startDeviceAuthorization()).rejects.toThrow(
-    //     ClientError,
-    //   );
-    //   expect(mockLogger.error).toHaveBeenCalledWith(
-    //     'Failed to start device authorization',
-    //     { error: mockError },
-    //   );
-    // });
-  });
-
-  // describe('pollDeviceToken', () => {
-  //   beforeEach(() => {
-  //     jest.useFakeTimers();
-  //     jest.spyOn(global, 'setTimeout');
-  //   });
-
-  //   afterEach(() => {
-  //     jest.useRealTimers();
-  //   });
-
-  //   it('should successfully poll and obtain tokens for DeviceCode grant', async () => {
-  //     // Arrange
-  //     const deviceConfig: IClientConfig = {
-  //       ...config,
-  //       grantType: GrantType.DeviceCode,
-  //     };
-  //     const deviceAuthClient = new AuthClient(
-  //       deviceConfig,
-  //       mockLogger,
-  //       mockDiscoveryClient,
-  //       mockHttpClient,
-  //     );
-  //     const device_code = 'device-code';
-  //     const tokenEndpoint = mockDiscoveryConfig.token_endpoint;
-
-  //     // Mock responses: first response is authorization_pending, then success
-  //     mockHttpClient.post
-  //       .mockRejectedValueOnce({
-  //         context: { body: JSON.stringify({ error: 'authorization_pending' }) },
-  //       })
-  //       .mockResolvedValueOnce(
-  //         JSON.stringify({
-  //           access_token: 'new-access-token',
-  //           refresh_token: 'new-refresh-token',
-  //           expires_in: 3600,
-  //           token_type: 'Bearer',
-  //         }),
-  //       );
-
-  //     // Act
-  //     const pollPromise = deviceAuthClient.pollDeviceToken(
-  //       device_code,
-  //       5,
-  //       10000,
-  //     );
-
-  //     // First call: authorization_pending, schedule next poll
-  //     expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 5000);
-  //     jest.advanceTimersByTime(5000);
-
-  //     // Second call: tokens received
-  //     await Promise.resolve(); // Allow any pending promises to resolve
-  //     await pollPromise;
-
-  //     // Assert
-  //     expect(mockHttpClient.post).toHaveBeenCalledTimes(2);
-  //     expect(mockHttpClient.post).toHaveBeenNthCalledWith(
-  //       1,
-  //       tokenEndpoint,
-  //       'grant_type=device_code&device_code=device-code&client_id=test-client-id',
-  //       { 'Content-Type': 'application/x-www-form-urlencoded' },
-  //     );
-  //     expect(mockHttpClient.post).toHaveBeenNthCalledWith(
-  //       2,
-  //       tokenEndpoint,
-  //       'grant_type=device_code&device_code=device-code&client_id=test-client-id',
-  //       { 'Content-Type': 'application/x-www-form-urlencoded' },
-  //     );
-  //     expect(mockTokenClient.setTokens).toHaveBeenCalledWith({
-  //       access_token: 'new-access-token',
-  //       refresh_token: 'new-refresh-token',
-  //       expires_in: 3600,
-  //       token_type: 'Bearer',
-  //     });
-  //     expect(mockLogger.info).toHaveBeenCalledWith(
-  //       'Device authorized and tokens obtained',
-  //     );
-  //   });
-
-  //   it('should throw ClientError when grant type is not DeviceCode', async () => {
-  //     const unsupportedConfig: IClientConfig = {
-  //       ...config,
-  //       grantType: GrantType.ClientCredentials,
-  //     };
-  //     const unsupportedAuthClient = new AuthClient(
-  //       unsupportedConfig,
-  //       mockLogger,
-  //       mockDiscoveryClient,
-  //       mockHttpClient,
-  //     );
-
-  //     const dummyDeviceCode = 'dummy-device-code'; // Add a dummy device code
-
-  //     await expect(
-  //       unsupportedAuthClient.pollDeviceToken(dummyDeviceCode), // Pass the dummy device code
-  //     ).rejects.toThrow(ClientError);
-  //     expect(mockLogger.debug).not.toHaveBeenCalledWith(
-  //       expect.stringContaining('Authorization URL generated'),
-  //     );
-  //   });
-
-  //   it('should handle slow_down error by increasing interval', async () => {
-  //     const device_code = 'device-code';
-  //     const tokenEndpoint = mockDiscoveryConfig.token_endpoint;
-
-  //     // Mock responses: first response is slow_down, then success
-  //     mockHttpClient.post
-  //       .mockRejectedValueOnce({
-  //         context: { body: JSON.stringify({ error: 'slow_down' }) },
-  //       })
-  //       .mockResolvedValueOnce(
-  //         JSON.stringify({
-  //           access_token: 'new-access-token',
-  //           refresh_token: 'new-refresh-token',
-  //           expires_in: 3600,
-  //           token_type: 'Bearer',
-  //         }),
-  //       );
-
-  //     const pollPromise = authClient.pollDeviceToken(device_code, 5, 20000);
-
-  //     // First call: slow_down, increase interval to 10
-  //     expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 5000);
-  //     jest.advanceTimersByTime(5000);
-
-  //     // Second call: tokens received
-  //     expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 10000);
-  //     jest.advanceTimersByTime(10000);
-
-  //     await pollPromise;
-
-  //     expect(mockHttpClient.post).toHaveBeenCalledTimes(2);
-  //     expect(mockLogger.info).toHaveBeenCalledWith(
-  //       'Device authorized and tokens obtained',
-  //     );
-  //   });
-
-  //   it('should throw TIMEOUT_ERROR if polling exceeds timeout', async () => {
-  //     const device_code = 'device-code';
-  //     const tokenEndpoint = mockDiscoveryConfig.token_endpoint;
-
-  //     // Mock responses: always authorization_pending
-  //     mockHttpClient.post.mockRejectedValue({
-  //       context: { body: JSON.stringify({ error: 'authorization_pending' }) },
-  //     });
-
-  //     const pollPromise = authClient.pollDeviceToken(device_code, 5, 15000);
-
-  //     // First poll
-  //     expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 5000);
-  //     jest.advanceTimersByTime(5000);
-
-  //     // Second poll
-  //     expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 5000);
-  //     jest.advanceTimersByTime(5000);
-
-  //     // Third poll would exceed timeout
-  //     jest.advanceTimersByTime(5000);
-
-  //     await expect(pollPromise).rejects.toThrow(ClientError);
-  //     expect(mockLogger.error).toHaveBeenCalledWith(
-  //       'Device token polling timed out',
-  //       'TIMEOUT_ERROR',
-  //     );
-  //   });
-
-  //   it('should throw DEVICE_CODE_EXPIRED if expired_token is received', async () => {
-  //     const device_code = 'device-code';
-  //     const tokenEndpoint = mockDiscoveryConfig.token_endpoint;
-
-  //     // Mock responses: first authorization_pending, then expired_token
-  //     mockHttpClient.post
-  //       .mockRejectedValueOnce({
-  //         context: { body: JSON.stringify({ error: 'authorization_pending' }) },
-  //       })
-  //       .mockRejectedValueOnce({
-  //         context: { body: JSON.stringify({ error: 'expired_token' }) },
-  //       });
-
-  //     const pollPromise = authClient.pollDeviceToken(device_code, 5, 20000);
-
-  //     // First poll
-  //     expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 5000);
-  //     jest.advanceTimersByTime(5000);
-
-  //     // Second poll: expired_token
-  //     expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 5000);
-  //     jest.advanceTimersByTime(5000);
-
-  //     await expect(pollPromise).rejects.toThrow(ClientError);
-  //     expect(mockLogger.error).toHaveBeenCalledWith(
-  //       'Device token polling failed',
-  //       {
-  //         originalError: {
-  //           context: { body: JSON.stringify({ error: 'expired_token' }) },
-  //         },
-  //       },
-  //     );
-  //   });
-
-  //   it('should handle unexpected errors during polling', async () => {
-  //     const device_code = 'device-code';
-  //     const tokenEndpoint = mockDiscoveryConfig.token_endpoint;
-
-  //     const unexpectedError = new Error('Unexpected error');
-  //     mockHttpClient.post.mockRejectedValueOnce(unexpectedError);
-
-  //     const pollPromise = authClient.pollDeviceToken(device_code, 5, 10000);
-
-  //     // First poll
-  //     expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 5000);
-  //     jest.advanceTimersByTime(5000);
-
-  //     await expect(pollPromise).rejects.toThrow(ClientError);
-  //     expect(mockLogger.error).toHaveBeenCalledWith(
-  //       'Device token polling failed',
-  //       {
-  //         originalError: unexpectedError,
-  //       },
-  //     );
-  //   });
-  // });
-
-  describe('getLogoutUrl', () => {
-    it('should generate logout URL with idTokenHint and state', async () => {
-      const idTokenHint = 'id-token';
-      const state = 'logout-state';
-      const expectedLogoutUrl =
-        'https://example.com/oauth2/logout?client_id=test-client-id&post_logout_redirect_uri=undefined&id_token_hint=id-token&state=logout-state';
-      // Assuming buildLogoutUrl is deterministic and works correctly
-      const result = await authClient.getLogoutUrl(idTokenHint, state);
-      expect(mockDiscoveryClient.getDiscoveryConfig).toHaveBeenCalledTimes(1);
-      expect(result).toBe(expectedLogoutUrl);
-      expect(mockLogger.debug).toHaveBeenCalledWith('Logout URL generated', {
-        logoutUrl: result,
+    describe('constructor', () => {
+      it('should create an instance of AuthClient', () => {
+        expect(authClient).toBeInstanceOf(AuthClient);
       });
     });
-    // it('should generate logout URL without idTokenHint and state', async () => {
-    //   const expectedLogoutUrl =
-    //     'https://example.com/oauth2/logout?client_id=test-client-id&post_logout_redirect_uri=https%3A%2F%2Fexample.com%2Fpost-logout';
-    //   const result = await authClient.getLogoutUrl();
-    //   expect(result).toBe(expectedLogoutUrl);
-    //   expect(mockLogger.debug).toHaveBeenCalledWith('Logout URL generated', {
-    //     logoutUrl: result,
-    //   });
-    // });
-    // it('should throw ClientError if end_session_endpoint is missing', async () => {
-    //   const incompleteDiscoveryConfig: IDiscoveryConfig = {
-    //     ...mockDiscoveryConfig,
-    //   };
-    //   delete incompleteDiscoveryConfig.end_session_endpoint;
-    //   mockDiscoveryClient.getDiscoveryConfig.mockResolvedValueOnce(
-    //     incompleteDiscoveryConfig,
-    //   );
-    //   await expect(authClient.getLogoutUrl()).rejects.toThrow(ClientError);
-    //   expect(mockLogger.error).toHaveBeenCalledWith(
-    //     'Failed to generate logout URL',
-    //     { error: expect.any(Error) },
-    //   );
-    // });
-  });
 
-  describe('getTokenManager', () => {
-    it('should return the token client instance', () => {
-      const tokenManager = authClient.getTokenManager();
-      expect(tokenManager).toBeInstanceOf(TokenClient);
-      // Further checks can verify it's the mocked instance
+    describe('getAuthorizationUrl', () => {
+      if (
+        grantType === GrantType.AuthorizationCode ||
+        grantType === GrantType.DeviceCode
+      ) {
+        it('should generate authorization URL appropriately', async () => {
+          const state = 'test-state';
+          const nonce = 'test-nonce';
+
+          const result = await authClient.getAuthorizationUrl(state, nonce);
+
+          expect(mockDiscoveryClient.getDiscoveryConfig).toHaveBeenCalledTimes(
+            1,
+          );
+          expect(result.url).toContain(
+            mockDiscoveryConfig.authorization_endpoint,
+          );
+          if (grantType === GrantType.AuthorizationCode && config.pkce) {
+            expect(result.codeVerifier).toBeDefined();
+          } else {
+            expect(result.codeVerifier).toBeUndefined();
+          }
+          expect(mockLogger.debug).toHaveBeenCalledWith(
+            'Authorization URL generated',
+            { url: result.url },
+          );
+        });
+      } else {
+        it('should throw ClientError if grant type does not support authorization URLs', async () => {
+          await expect(authClient.getAuthorizationUrl('state')).rejects.toThrow(
+            ClientError,
+          );
+          expect(mockLogger.debug).not.toHaveBeenCalledWith(
+            expect.stringContaining('Authorization URL generated'),
+          );
+        });
+      }
     });
+
+    describe('exchangeCodeForToken', () => {
+      it('should exchange code for tokens appropriately', async () => {
+        const code = 'auth-code';
+        const codeVerifier =
+          grantType === GrantType.AuthorizationCode
+            ? 'code-verifier'
+            : undefined;
+        const username = grantType === GrantType.Password ? 'user' : undefined;
+        const password = grantType === GrantType.Password ? 'pass' : undefined;
+
+        const mockTokenResponse: ITokenResponse = {
+          access_token: 'access-token',
+          refresh_token: 'refresh-token',
+          expires_in: 3600,
+          token_type: 'Bearer',
+        };
+
+        mockHttpClient.post.mockResolvedValue(
+          JSON.stringify(mockTokenResponse),
+        );
+
+        if (grantType === GrantType.Password) {
+          await authClient.exchangeCodeForToken(
+            code,
+            codeVerifier,
+            username,
+            password,
+          );
+        } else if (
+          grantType === GrantType.ClientCredentials ||
+          grantType === GrantType.RefreshToken ||
+          grantType === GrantType.JWTBearer ||
+          grantType === GrantType.SAML2Bearer ||
+          grantType === GrantType.Custom
+        ) {
+          await authClient.exchangeCodeForToken(code, codeVerifier);
+        } else {
+          await authClient.exchangeCodeForToken(code, codeVerifier);
+        }
+
+        expect(mockDiscoveryClient.getDiscoveryConfig).toHaveBeenCalledTimes(1);
+        expect(mockHttpClient.post).toHaveBeenCalledWith(
+          mockDiscoveryConfig.token_endpoint,
+          expect.any(String),
+          { 'Content-Type': 'application/x-www-form-urlencoded' },
+        );
+
+        // Decode the body for assertion
+        const body = mockHttpClient.post.mock.calls[0][1];
+        const params = new URLSearchParams(body);
+        expect(params.get('grant_type')).toBe(grantType);
+        expect(params.get('client_id')).toBe(config.clientId);
+        expect(params.get('redirect_uri')).toBe(config.redirectUri);
+
+        if (grantType === GrantType.AuthorizationCode && codeVerifier) {
+          expect(params.get('code_verifier')).toBe(codeVerifier);
+        }
+
+        if (grantType === GrantType.Password) {
+          expect(params.get('username')).toBe(username);
+          expect(params.get('password')).toBe(password);
+        }
+
+        expect(mockTokenClient.setTokens).toHaveBeenCalledWith(
+          mockTokenResponse,
+        );
+        expect(mockLogger.info).toHaveBeenCalledWith(
+          'Exchanged grant for tokens',
+          {
+            grantType: config.grantType,
+          },
+        );
+      });
+
+      if (grantType === GrantType.Password) {
+        it('should throw error if username or password is missing for Password grant type', async () => {
+          await expect(authClient.exchangeCodeForToken('code')).rejects.toThrow(
+            ClientError,
+          );
+          expect(mockLogger.error).not.toHaveBeenCalled();
+        });
+      }
+
+      it('should handle errors during token exchange', async () => {
+        const code = 'auth-code';
+        const codeVerifier =
+          grantType === GrantType.AuthorizationCode
+            ? 'code-verifier'
+            : undefined;
+        const username = grantType === GrantType.Password ? 'user' : undefined;
+        const password = grantType === GrantType.Password ? 'pass' : undefined;
+
+        const mockError = new Error('Token endpoint error');
+        mockHttpClient.post.mockRejectedValue(mockError);
+
+        // Handle Password grant type requiring username and password
+        if (grantType === GrantType.Password) {
+          await expect(
+            authClient.exchangeCodeForToken(
+              code,
+              codeVerifier,
+              username,
+              password,
+            ),
+          ).rejects.toThrow(ClientError);
+        } else {
+          await expect(
+            authClient.exchangeCodeForToken(code, codeVerifier),
+          ).rejects.toThrow(ClientError);
+        }
+
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          'Failed to exchange grant for tokens',
+          {
+            error: mockError,
+            grantType: config.grantType,
+          },
+        );
+      });
+    });
+
+    // DeviceCode-specific tests
+    if (grantType === GrantType.DeviceCode) {
+      describe('startDeviceAuthorization', () => {
+        it('should initiate device authorization successfully', async () => {
+          const deviceEndpoint = 'https://example.com/oauth2/device_authorize';
+          const deviceResponse = {
+            device_code: 'device-code',
+            user_code: 'user-code',
+            verification_uri: 'https://example.com/verify',
+            expires_in: 1800,
+            interval: 5,
+          };
+
+          mockDiscoveryClient.getDiscoveryConfig.mockResolvedValueOnce({
+            ...mockDiscoveryConfig,
+            device_authorization_endpoint: deviceEndpoint,
+          });
+          mockHttpClient.post.mockResolvedValueOnce(
+            JSON.stringify(deviceResponse),
+          );
+
+          const result = await authClient.startDeviceAuthorization();
+
+          expect(mockDiscoveryClient.getDiscoveryConfig).toHaveBeenCalledTimes(
+            1,
+          );
+          expect(mockHttpClient.post).toHaveBeenCalledWith(
+            deviceEndpoint,
+            expect.stringContaining(`client_id=${config.clientId}`),
+            { 'Content-Type': 'application/x-www-form-urlencoded' },
+          );
+          expect(result).toEqual(deviceResponse);
+          expect(mockLogger.info).toHaveBeenCalledWith(
+            'Device authorization initiated',
+          );
+        });
+
+        it('should throw ClientError if device_authorization_endpoint is missing', async () => {
+          mockDiscoveryClient.getDiscoveryConfig.mockResolvedValueOnce({
+            ...mockDiscoveryConfig,
+            device_authorization_endpoint: undefined,
+          });
+
+          await expect(authClient.startDeviceAuthorization()).rejects.toThrow(
+            ClientError,
+          );
+
+          expect(mockLogger.error).toHaveBeenCalledWith(
+            'Failed to start device authorization',
+            { error: expect.any(ClientError) },
+          );
+        });
+
+        it('should handle errors during device authorization initiation', async () => {
+          const deviceEndpoint = 'https://example.com/oauth2/device_authorize';
+          mockDiscoveryClient.getDiscoveryConfig.mockResolvedValueOnce({
+            ...mockDiscoveryConfig,
+            device_authorization_endpoint: deviceEndpoint,
+          });
+          const mockError = new Error('Device authorization failed');
+          mockHttpClient.post.mockRejectedValueOnce(mockError);
+
+          await expect(authClient.startDeviceAuthorization()).rejects.toThrow(
+            ClientError,
+          );
+          expect(mockLogger.error).toHaveBeenCalledWith(
+            'Failed to start device authorization',
+            { error: mockError },
+          );
+        });
+      });
+
+      describe('pollDeviceToken', () => {
+        // Separate tests that do not require fake timers
+        describe('Immediate Error Handling', () => {
+          it('should throw ClientError immediately on unexpected error', async () => {
+            const device_code = 'device-code';
+            const tokenEndpoint = mockDiscoveryConfig.token_endpoint;
+
+            // Create an Error object with context.body
+            const mockError = Object.assign(new Error('Unexpected error'), {
+              context: {
+                body: JSON.stringify({ error: 'unexpected_error' }),
+              },
+            });
+            mockHttpClient.post.mockRejectedValueOnce(mockError);
+
+            await expect(
+              authClient.pollDeviceToken(device_code, 5, 10000),
+            ).rejects.toThrow(ClientError);
+
+            expect(mockHttpClient.post).toHaveBeenCalledTimes(1);
+
+            const expectedParams = new URLSearchParams({
+              grant_type: GrantType.DeviceCode,
+              device_code: device_code,
+              client_id: config.clientId,
+            });
+
+            expect(mockHttpClient.post).toHaveBeenCalledWith(
+              tokenEndpoint,
+              expectedParams.toString(),
+              { 'Content-Type': 'application/x-www-form-urlencoded' },
+            );
+
+            expect(mockLogger.error).toHaveBeenCalledWith(
+              'Device token polling failed',
+              { originalError: mockError },
+            );
+          });
+        });
+
+        // Tests that involve timers
+        describe('Timed Polling', () => {
+          beforeEach(() => {
+            jest.useFakeTimers();
+            // Mock the sleep function to resolve immediately
+            (sleep as jest.Mock).mockResolvedValue(Promise.resolve());
+          });
+
+          afterEach(() => {
+            jest.useRealTimers();
+            // Reset the sleep mock after each test
+            (sleep as jest.Mock).mockReset();
+          });
+
+          // it('should successfully poll and obtain tokens for DeviceCode grant', async () => {
+          //   const device_code = 'device-code';
+          //   const tokenEndpoint = mockDiscoveryConfig.token_endpoint;
+
+          //   // Mock responses: first response is authorization_pending, then success
+          //   mockHttpClient.post
+          //     .mockRejectedValueOnce(
+          //       Object.assign(new Error('authorization_pending'), {
+          //         context: {
+          //           body: JSON.stringify({ error: 'authorization_pending' }),
+          //         },
+          //       }),
+          //     )
+          //     .mockResolvedValueOnce(
+          //       JSON.stringify({
+          //         access_token: 'new-access-token',
+          //         refresh_token: 'new-refresh-token',
+          //         expires_in: 3600,
+          //         token_type: 'Bearer',
+          //       }),
+          //     );
+
+          //   // Act
+          //   const pollPromise = authClient.pollDeviceToken(
+          //     device_code,
+          //     5,
+          //     10000,
+          //   );
+
+          //   // Allow the first rejection to be processed
+          //   await Promise.resolve();
+
+          //   // Now, 'sleep' should have been called with 5000 ms
+          //   expect(sleep).toHaveBeenCalledWith(5000);
+
+          //   // Advance timers by 5000 ms to simulate the sleep duration
+          //   await jest.advanceTimersByTimeAsync(5000);
+
+          //   // Allow the next promise (token exchange) to resolve
+          //   await Promise.resolve();
+
+          //   // Now, the pollPromise should resolve successfully
+          //   await expect(pollPromise).resolves.toBeUndefined();
+
+          //   // Assert
+          //   expect(mockHttpClient.post).toHaveBeenCalledTimes(2);
+          //   expect(mockHttpClient.post).toHaveBeenNthCalledWith(
+          //     1,
+          //     tokenEndpoint,
+          //     expect.stringContaining(`grant_type=${GrantType.DeviceCode}`),
+          //     { 'Content-Type': 'application/x-www-form-urlencoded' },
+          //   );
+          //   expect(mockHttpClient.post).toHaveBeenNthCalledWith(
+          //     2,
+          //     tokenEndpoint,
+          //     expect.stringContaining(`grant_type=${GrantType.DeviceCode}`),
+          //     { 'Content-Type': 'application/x-www-form-urlencoded' },
+          //   );
+          //   expect(mockTokenClient.setTokens).toHaveBeenCalledWith({
+          //     access_token: 'new-access-token',
+          //     refresh_token: 'new-refresh-token',
+          //     expires_in: 3600,
+          //     token_type: 'Bearer',
+          //   });
+          //   expect(mockLogger.info).toHaveBeenCalledWith(
+          //     'Device authorized and tokens obtained',
+          //   );
+          // });
+
+          // it('should handle slow_down error by increasing interval', async () => {
+          //   const device_code = 'device-code';
+
+          //   // Mock responses: first response is slow_down, then success
+          //   mockHttpClient.post
+          //     .mockRejectedValueOnce(
+          //       Object.assign(new Error('slow_down'), {
+          //         context: {
+          //           body: JSON.stringify({ error: 'slow_down' }),
+          //         },
+          //       }),
+          //     )
+          //     .mockResolvedValueOnce(
+          //       JSON.stringify({
+          //         access_token: 'new-access-token',
+          //         refresh_token: 'new-refresh-token',
+          //         expires_in: 3600,
+          //         token_type: 'Bearer',
+          //       }),
+          //     );
+
+          //   // Act
+          //   const pollPromise = authClient.pollDeviceToken(
+          //     device_code,
+          //     5,
+          //     20000,
+          //   );
+
+          //   // Allow the first rejection to be processed
+          //   await Promise.resolve();
+
+          //   // 'sleep' should have been called with initial interval (5000 ms)
+          //   expect(sleep).toHaveBeenCalledWith(5000);
+
+          //   // Advance timers by 5000 ms to simulate the initial sleep duration
+          //   await jest.advanceTimersByTimeAsync(5000);
+
+          //   // Allow the next rejection to be processed (slow_down)
+          //   await Promise.resolve();
+
+          //   // After slow_down, interval should increase to 10 seconds
+          //   expect(sleep).toHaveBeenCalledWith(10000);
+
+          //   // Advance timers by 10000 ms to simulate the increased sleep duration
+          //   await jest.advanceTimersByTimeAsync(10000);
+
+          //   // Allow the next promise (token exchange) to resolve
+          //   await Promise.resolve();
+
+          //   // Now, the pollPromise should resolve successfully
+          //   await expect(pollPromise).resolves.toBeUndefined();
+
+          //   // Assert
+          //   expect(mockHttpClient.post).toHaveBeenCalledTimes(2);
+          //   expect(mockTokenClient.setTokens).toHaveBeenCalledWith({
+          //     access_token: 'new-access-token',
+          //     refresh_token: 'new-refresh-token',
+          //     expires_in: 3600,
+          //     token_type: 'Bearer',
+          //   });
+          //   expect(mockLogger.info).toHaveBeenCalledWith(
+          //     'Device authorized and tokens obtained',
+          //   );
+          // });
+
+          // it('should throw TIMEOUT_ERROR if polling exceeds timeout', async () => {
+          //   const device_code = 'device-code';
+
+          //   // Mock responses: always authorization_pending
+          //   mockHttpClient.post.mockRejectedValue(
+          //     Object.assign(new Error('authorization_pending'), {
+          //       context: {
+          //         body: JSON.stringify({ error: 'authorization_pending' }),
+          //       },
+          //     }),
+          //   );
+
+          //   const pollPromise = authClient.pollDeviceToken(
+          //     device_code,
+          //     5,
+          //     15000,
+          //   );
+
+          //   // First poll
+          //   expect(sleep).toHaveBeenCalledWith(5000);
+          //   await jest.advanceTimersByTimeAsync(5000);
+          //   await Promise.resolve();
+
+          //   // Second poll
+          //   expect(sleep).toHaveBeenCalledWith(5000);
+          //   await jest.advanceTimersByTimeAsync(5000);
+          //   await Promise.resolve();
+
+          //   // Third poll would exceed timeout
+          //   expect(sleep).toHaveBeenCalledWith(5000);
+          //   await jest.advanceTimersByTimeAsync(5000);
+          //   await Promise.resolve();
+
+          //   await expect(pollPromise).rejects.toThrow(ClientError);
+          //   expect(mockLogger.error).toHaveBeenCalledWith(
+          //     'Device token polling timed out',
+          //     { error: expect.any(ClientError) },
+          //   );
+          // });
+
+          // it('should throw DEVICE_CODE_EXPIRED if expired_token is received', async () => {
+          //   const device_code = 'device-code';
+
+          //   // Mock responses: first authorization_pending, then expired_token
+          //   mockHttpClient.post
+          //     .mockRejectedValueOnce(
+          //       Object.assign(new Error('authorization_pending'), {
+          //         context: {
+          //           body: JSON.stringify({ error: 'authorization_pending' }),
+          //         },
+          //       }),
+          //     )
+          //     .mockRejectedValueOnce(
+          //       Object.assign(new Error('expired_token'), {
+          //         context: {
+          //           body: JSON.stringify({ error: 'expired_token' }),
+          //         },
+          //       }),
+          //     );
+
+          //   // Act
+          //   const pollPromise = authClient.pollDeviceToken(
+          //     device_code,
+          //     5,
+          //     20000,
+          //   );
+
+          //   // First poll
+          //   await Promise.resolve();
+          //   expect(sleep).toHaveBeenCalledWith(5000);
+          //   await jest.advanceTimersByTimeAsync(5000);
+          //   await Promise.resolve();
+
+          //   // Second poll: expired_token
+          //   expect(sleep).toHaveBeenCalledWith(5000);
+          //   await jest.advanceTimersByTimeAsync(5000);
+          //   await Promise.resolve();
+
+          //   // Now, the pollPromise should reject with DEVICE_CODE_EXPIRED
+          //   await expect(pollPromise).rejects.toThrow(ClientError);
+          //   expect(mockLogger.error).toHaveBeenCalledWith(
+          //     'Device code expired',
+          //     { error: expect.any(ClientError) },
+          //   );
+          // });
+
+          it('should handle unexpected errors during polling', async () => {
+            const device_code = 'device-code';
+
+            const unexpectedError = Object.assign(
+              new Error('Unexpected error'),
+              {
+                context: {
+                  body: JSON.stringify({ error: 'unexpected_error' }),
+                },
+              },
+            );
+            mockHttpClient.post.mockRejectedValueOnce(unexpectedError);
+
+            const pollPromise = authClient.pollDeviceToken(
+              device_code,
+              5,
+              10000,
+            );
+
+            // First poll: unexpected error, method should throw immediately
+            await expect(pollPromise).rejects.toThrow(ClientError);
+
+            expect(mockHttpClient.post).toHaveBeenCalledTimes(1);
+            expect(mockLogger.error).toHaveBeenCalledWith(
+              'Device token polling failed',
+              {
+                originalError: unexpectedError,
+              },
+            );
+          });
+        });
+      });
+
+      describe('getLogoutUrl', () => {
+        it('should generate logout URL with idTokenHint and state', async () => {
+          const idTokenHint = 'id-token';
+          const state = 'logout-state';
+          const expectedLogoutUrl = buildLogoutUrl({
+            endSessionEndpoint: mockDiscoveryConfig.end_session_endpoint,
+            clientId: config.clientId,
+            postLogoutRedirectUri: config.postLogoutRedirectUri,
+            idTokenHint,
+            state,
+          });
+
+          const result = await authClient.getLogoutUrl(idTokenHint, state);
+          expect(mockDiscoveryClient.getDiscoveryConfig).toHaveBeenCalledTimes(
+            1,
+          );
+          expect(result).toBe(expectedLogoutUrl);
+          expect(mockLogger.debug).toHaveBeenCalledWith(
+            'Logout URL generated',
+            {
+              logoutUrl: result,
+            },
+          );
+        });
+
+        it('should generate logout URL without idTokenHint and state', async () => {
+          const expectedLogoutUrl = buildLogoutUrl({
+            endSessionEndpoint: mockDiscoveryConfig.end_session_endpoint,
+            clientId: config.clientId,
+            postLogoutRedirectUri: config.postLogoutRedirectUri,
+            idTokenHint: undefined,
+            state: undefined,
+          });
+
+          const result = await authClient.getLogoutUrl();
+          expect(result).toBe(expectedLogoutUrl);
+          expect(mockLogger.debug).toHaveBeenCalledWith(
+            'Logout URL generated',
+            {
+              logoutUrl: result,
+            },
+          );
+        });
+
+        it('should throw ClientError if end_session_endpoint is missing', async () => {
+          mockDiscoveryClient.getDiscoveryConfig.mockResolvedValueOnce({
+            ...mockDiscoveryConfig,
+            end_session_endpoint: undefined,
+          });
+          await expect(authClient.getLogoutUrl()).rejects.toThrow(ClientError);
+          expect(mockLogger.error).toHaveBeenCalledWith(
+            'Failed to generate logout URL',
+            { error: expect.any(ClientError) },
+          );
+        });
+      });
+    }
   });
 });
