@@ -78,7 +78,7 @@ export class Token implements IToken {
       throw error;
     }
 
-    const issuer = await this.issuer.discoverClient();
+    const issuer = await this.issuer.discover();
     const tokenEndpoint = issuer.token_endpoint;
 
     const params: Record<string, string> = {
@@ -137,7 +137,7 @@ export class Token implements IToken {
   public async introspectToken(
     token: string,
   ): Promise<ITokenIntrospectionResponse> {
-    const issuer = await this.issuer.discoverClient();
+    const issuer = await this.issuer.discover();
     if (!issuer.introspection_endpoint) {
       throw new ClientError(
         'No introspection endpoint available',
@@ -182,7 +182,7 @@ export class Token implements IToken {
     token: string,
     tokenTypeHint?: TokenTypeHint,
   ): Promise<void> {
-    const issuer = await this.issuer.discoverClient();
+    const issuer = await this.issuer.discover();
     if (!issuer.revocation_endpoint) {
       throw new ClientError(
         'No revocation endpoint available',
@@ -253,7 +253,7 @@ export class Token implements IToken {
     code: string,
     codeVerifier?: string,
   ): Promise<void> {
-    const client = await this.issuer.discoverClient();
+    const client = await this.issuer.discover();
     const tokenEndpoint = client.token_endpoint;
 
     const params = this.buildTokenRequestParams(code, codeVerifier);

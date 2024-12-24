@@ -84,7 +84,7 @@ describe('Issuer', () => {
 
       issuer = new Issuer(discoveryUrl, logger, httpClient, cache, 3600000);
 
-      const config = await issuer.discoverClient();
+      const config = await issuer.discover();
       expect(config).toStrictEqual(sampleConfig);
       expect(cache.get).toHaveBeenCalledWith('discoveryConfig');
       expect(logger.debug).toHaveBeenCalledWith(
@@ -115,7 +115,7 @@ describe('Issuer', () => {
 
       issuer = new Issuer(discoveryUrl, logger, httpClient, cache, 3600000);
 
-      const config = await issuer.discoverClient(true);
+      const config = await issuer.discover(true);
       expect(config).toStrictEqual(sampleConfig); // Changed from toBe to toStrictEqual
 
       // Change expectation: cache.get should NOT be called when forceRefresh is true
@@ -142,8 +142,8 @@ describe('Issuer', () => {
 
       // Initiate two simultaneous fetches
       const [config1, config2] = await Promise.all([
-        issuer.discoverClient(),
-        issuer.discoverClient(),
+        issuer.discover(),
+        issuer.discover(),
       ]);
 
       expect(config1).toStrictEqual(sampleConfig); // Changed from toBe to toStrictEqual
@@ -162,7 +162,7 @@ describe('Issuer', () => {
 
       issuer = new Issuer(discoveryUrl, logger, httpClient, cache, 3600000);
 
-      await expect(issuer.discoverClient()).rejects.toMatchObject({
+      await expect(issuer.discover()).rejects.toMatchObject({
         message: 'Unable to fetch discovery configuration',
         code: 'DISCOVERY_ERROR',
         context: { originalError: expect.any(Error) },
@@ -183,7 +183,7 @@ describe('Issuer', () => {
 
       issuer = new Issuer(discoveryUrl, logger, httpClient, cache, 3600000);
 
-      await expect(issuer.discoverClient()).rejects.toMatchObject({
+      await expect(issuer.discover()).rejects.toMatchObject({
         message: 'Unable to fetch discovery configuration',
         code: 'DISCOVERY_ERROR',
         context: { originalError: expect.any(SyntaxError) },
@@ -209,7 +209,7 @@ describe('Issuer', () => {
 
       issuer = new Issuer(discoveryUrl, logger, httpClient, cache, 3600000);
 
-      await expect(issuer.discoverClient()).rejects.toMatchObject({
+      await expect(issuer.discover()).rejects.toMatchObject({
         message: 'Invalid discovery configuration: Missing or invalid issuer.',
         code: 'INVALID_DISCOVERY_CONFIG',
       });
@@ -234,7 +234,7 @@ describe('Issuer', () => {
 
       issuer = new Issuer(discoveryUrl, logger, httpClient, cache, 3600000);
 
-      await expect(issuer.discoverClient()).rejects.toMatchObject({
+      await expect(issuer.discover()).rejects.toMatchObject({
         message:
           'Invalid discovery configuration: Missing or invalid jwks_uri.',
         code: 'INVALID_DISCOVERY_CONFIG',

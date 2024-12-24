@@ -104,7 +104,7 @@ export class Client {
 
   public async initialize(): Promise<void> {
     this.logger.debug('Initializing OIDC Client');
-    const client = await this.issuer.discoverClient();
+    const client = await this.issuer.discover();
     this.userInfoClient = new UserInfo(
       this.tokenClient,
       client,

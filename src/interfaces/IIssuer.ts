@@ -15,5 +15,5 @@ export interface IIssuer {
    * @returns A promise that resolves to the issuer's discovery configuration.
    * @throws ClientError if fetching or parsing the configuration fails.
    */
-  discoverClient(forceRefresh?: boolean): Promise<ClientMetadata>;
+  discover(forceRefresh?: boolean): Promise<ClientMetadata>;
 }

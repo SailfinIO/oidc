@@ -91,7 +91,7 @@ export class Auth implements IAuth {
     state: string,
     nonce?: string,
   ): Promise<{ url: string; codeVerifier?: string }> {
-    const client: ClientMetadata = await this.issuer.discoverClient();
+    const client: ClientMetadata = await this.issuer.discover();
     this.ensureGrantTypeSupportsAuthUrl();
 
     const { codeVerifier, codeChallenge } =
@@ -145,7 +145,7 @@ export class Auth implements IAuth {
 
     // Validate ID token if present
     const tokens = this.tokenClient.getTokens();
-    const client = await this.issuer.discoverClient();
+    const client = await this.issuer.discover();
     if (tokens?.id_token) {
       const jwtValidator = new JwtValidator(
         this.logger as Logger,
@@ -212,7 +212,7 @@ export class Auth implements IAuth {
 
     // Optionally handle ID token validation
     if (id_token) {
-      const client = await this.issuer.discoverClient();
+      const client = await this.issuer.discover();
       const jwtValidator = new JwtValidator(
         this.logger as Logger,
         client,
@@ -284,7 +284,7 @@ export class Auth implements IAuth {
       );
     }
 
-    const client: ClientMetadata = await this.issuer.discoverClient();
+    const client: ClientMetadata = await this.issuer.discover();
     const deviceEndpoint = client.device_authorization_endpoint;
 
     if (!deviceEndpoint) {
@@ -362,7 +362,7 @@ export class Auth implements IAuth {
       );
     }
 
-    const client: ClientMetadata = await this.issuer.discoverClient();
+    const client: ClientMetadata = await this.issuer.discover();
     const tokenEndpoint = client.token_endpoint;
     const startTime = Date.now();
 
@@ -458,7 +458,7 @@ export class Auth implements IAuth {
     idTokenHint?: string,
     state?: string,
   ): Promise<string> {
-    const client: ClientMetadata = await this.issuer.discoverClient();
+    const client: ClientMetadata = await this.issuer.discover();
     const endSessionEndpoint = client.end_session_endpoint;
 
     if (!endSessionEndpoint) {

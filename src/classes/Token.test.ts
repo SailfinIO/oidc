@@ -59,7 +59,7 @@ describe('TokenClient', () => {
     };
 
     mockIssuer = {
-      discoverClient: jest.fn().mockResolvedValue({
+      discover: jest.fn().mockResolvedValue({
         token_endpoint: 'https://example.com/oauth/token',
         introspection_endpoint: 'https://example.com/oauth/introspect',
         revocation_endpoint: 'https://example.com/oauth/revoke',
@@ -423,7 +423,7 @@ describe('TokenClient', () => {
 
     it('should throw an error if introspection endpoint is unavailable', async () => {
       // Mock discovery config without introspection endpoint
-      (mockIssuer.discoverClient as jest.Mock).mockResolvedValue({
+      (mockIssuer.discover as jest.Mock).mockResolvedValue({
         token_endpoint: 'https://example.com/oauth/token',
         // introspection_endpoint is missing
         revocation_endpoint: 'https://example.com/oauth/revoke',
@@ -490,7 +490,7 @@ describe('TokenClient', () => {
 
     it('should throw an error if revocation endpoint is unavailable', async () => {
       // Mock discovery config without revocation endpoint
-      (mockIssuer.discoverClient as jest.Mock).mockResolvedValue({
+      (mockIssuer.discover as jest.Mock).mockResolvedValue({
         token_endpoint: 'https://example.com/oauth/token',
         introspection_endpoint: 'https://example.com/oauth/introspect',
         // revocation_endpoint is missing

@@ -61,7 +61,7 @@ describe('Auth', () => {
     };
 
     mockIssuer = {
-      discoverClient: jest.fn().mockResolvedValue(mockClientMetadata),
+      discover: jest.fn().mockResolvedValue(mockClientMetadata),
     };
 
     mockTokenClient = {
@@ -173,7 +173,7 @@ describe('Auth', () => {
       //   } else {
       //     await auth.exchangeCodeForToken(code, codeVerifier);
       //   }
-      //   expect(mockIssuer.discoverClient).toHaveBeenCalledTimes(1);
+      //   expect(mockIssuer.discover).toHaveBeenCalledTimes(1);
       //   expect(mockHttpClient.post).toHaveBeenCalledWith(
       //     mockClientMetadata.token_endpoint,
       //     expect.any(String),
@@ -258,7 +258,7 @@ describe('Auth', () => {
             interval: 5,
           };
 
-          mockIssuer.discoverClient.mockResolvedValueOnce({
+          mockIssuer.discover.mockResolvedValueOnce({
             ...mockClientMetadata,
             device_authorization_endpoint: deviceEndpoint,
           } as ClientMetadata);
@@ -268,7 +268,7 @@ describe('Auth', () => {
 
           const result = await auth.startDeviceAuthorization();
 
-          expect(mockIssuer.discoverClient).toHaveBeenCalledTimes(1);
+          expect(mockIssuer.discover).toHaveBeenCalledTimes(1);
           expect(mockHttpClient.post).toHaveBeenCalledWith(
             deviceEndpoint,
             expect.stringContaining(`client_id=${config.clientId}`),
@@ -281,7 +281,7 @@ describe('Auth', () => {
         });
 
         it('should throw ClientError if device_authorization_endpoint is missing', async () => {
-          mockIssuer.discoverClient.mockResolvedValueOnce({
+          mockIssuer.discover.mockResolvedValueOnce({
             ...mockClientMetadata,
             device_authorization_endpoint: undefined,
           } as ClientMetadata);
@@ -298,7 +298,7 @@ describe('Auth', () => {
 
         it('should handle errors during device authorization initiation', async () => {
           const deviceEndpoint = 'https://example.com/oauth2/device_authorize';
-          mockIssuer.discoverClient.mockResolvedValueOnce({
+          mockIssuer.discover.mockResolvedValueOnce({
             ...mockClientMetadata,
             device_authorization_endpoint: deviceEndpoint,
           } as ClientMetadata);
@@ -631,7 +631,7 @@ describe('Auth', () => {
           });
 
           const result = await auth.getLogoutUrl(idTokenHint, state);
-          expect(mockIssuer.discoverClient).toHaveBeenCalledTimes(1);
+          expect(mockIssuer.discover).toHaveBeenCalledTimes(1);
           expect(result).toBe(expectedLogoutUrl);
           expect(mockLogger.debug).toHaveBeenCalledWith(
             'Logout URL generated',
@@ -661,7 +661,7 @@ describe('Auth', () => {
         });
 
         it('should throw ClientError if end_session_endpoint is missing', async () => {
-          mockIssuer.discoverClient.mockResolvedValueOnce({
+          mockIssuer.discover.mockResolvedValueOnce({
             ...mockClientMetadata,
             end_session_endpoint: undefined,
           } as ClientMetadata);

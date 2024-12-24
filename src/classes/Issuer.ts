@@ -42,7 +42,7 @@ export class Issuer implements IIssuer {
    * @returns The discovery configuration.
    * @throws ClientError if fetching fails.
    */
-  public async discoverClient(
+  public async discover(
     forceRefresh: boolean = false,
   ): Promise<ClientMetadata> {
     if (forceRefresh) {
