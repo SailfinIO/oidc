@@ -94,7 +94,7 @@ export class SignatureVerifier implements ISignatureVerifier {
 
     const jwk = await this.jwks.getKey(kid);
     this.validateKeyForAlgorithm(jwk, alg);
-    const pubKey = this.createPublicKeyFromJwk(jwk, alg);
+    const pubKey = this.createPublicKeyFromJwk(jwk);
 
     const { signingInput, sigBuffer } = this.extractSignatureParts(idToken);
     const { name: hashName, options } = this.getHashAlgorithm(alg);
@@ -161,7 +161,7 @@ export class SignatureVerifier implements ISignatureVerifier {
       EC: () => this.verifyEc(hashName, signingInput, pubKey, sigBuffer, alg),
     };
 
-    const strategy = verificationStrategies[jwk.kty!];
+    const strategy = verificationStrategies[jwk.kty];
     if (!strategy) {
       throw new ClientError(
         `Unsupported key type: ${jwk.kty}`,
@@ -257,12 +257,12 @@ export class SignatureVerifier implements ISignatureVerifier {
    *
    * @private
    */
-  private createPublicKeyFromJwk(jwk: Jwk, alg: Algorithm): string {
+  private createPublicKeyFromJwk(jwk: Jwk): string {
     switch (jwk.kty) {
       case 'RSA':
-        return rsaJwkToPem(jwk.n!, jwk.e!);
+        return rsaJwkToPem(jwk.n, jwk.e);
       case 'EC':
-        return ecJwkToPem(jwk.crv!, jwk.x!, jwk.y!);
+        return ecJwkToPem(jwk.crv, jwk.x, jwk.y);
       default:
         throw new ClientError(
           `Unsupported key type: ${jwk.kty}`,

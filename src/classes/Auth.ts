@@ -219,7 +219,7 @@ export class Auth implements IAuth {
       });
       throw new ClientError(
         params.error_description || 'Implicit flow error',
-        params.error.toUpperCase() as string,
+        params.error.toUpperCase(),
       );
     }
 

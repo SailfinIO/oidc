@@ -163,16 +163,28 @@ describe('TokenClient', () => {
         token_type: 'Bearer',
       });
 
-      const mockError = new ClientError('HTTP Error', 'HTTP_ERROR');
+      const mockError = new ClientError(
+        'Token request failed',
+        'TOKEN_REQUEST_ERROR',
+      );
       (mockHttpClient.post as jest.Mock).mockRejectedValue(mockError);
 
       // Act & Assert
       await expect(tokenClient.refreshAccessToken()).rejects.toThrow(
-        ClientError,
+        'Token refresh failed',
       );
+      expect(mockLogger.error).toHaveBeenCalledWith('Token request failed', {
+        endpoint: 'https://example.com/oauth/token',
+        params: {
+          grant_type: 'refresh_token',
+          refresh_token: 'invalid-refresh-token',
+          client_id: 'test-client-id',
+        },
+        error: mockError,
+      });
       expect(mockLogger.error).toHaveBeenCalledWith(
         'Failed to refresh access token',
-        mockError,
+        expect.any(ClientError),
       );
     });
   });
@@ -439,15 +451,28 @@ describe('TokenClient', () => {
 
     it('should handle HTTP errors during introspection gracefully', async () => {
       const token = 'error-token';
-      const mockError = new Error('Network error');
+      const mockError = new ClientError(
+        'Token request failed',
+        'TOKEN_REQUEST_ERROR',
+      );
       (mockHttpClient.post as jest.Mock).mockRejectedValue(mockError);
 
       await expect(tokenClient.introspectToken(token)).rejects.toThrow(
-        ClientError,
+        'Token introspection failed',
       );
+      expect(mockLogger.error).toHaveBeenCalledWith('Token request failed', {
+        endpoint: 'https://example.com/oauth/introspect',
+        params: {
+          token: 'error-token',
+          client_id: 'test-client-id',
+        },
+        error: mockError,
+      });
       expect(mockLogger.error).toHaveBeenCalledWith(
         'Token introspection failed',
-        { error: mockError },
+        {
+          error: mockError,
+        },
       );
     });
   });
@@ -506,10 +531,21 @@ describe('TokenClient', () => {
 
     it('should handle HTTP errors during revocation gracefully', async () => {
       const token = 'error-token';
-      const mockError = new Error('Network error');
+      const mockError = new ClientError(
+        'Token request failed',
+        'TOKEN_REQUEST_ERROR',
+      );
       (mockHttpClient.post as jest.Mock).mockRejectedValue(mockError);
 
       await expect(tokenClient.revokeToken(token)).rejects.toThrow(ClientError);
+      expect(mockLogger.error).toHaveBeenCalledWith('Token request failed', {
+        endpoint: 'https://example.com/oauth/revoke',
+        params: {
+          token: 'error-token',
+          client_id: 'test-client-id',
+        },
+        error: mockError,
+      });
       expect(mockLogger.error).toHaveBeenCalledWith('Token revocation failed', {
         error: mockError,
       });
@@ -596,7 +632,7 @@ describe('TokenClient', () => {
       await expect(
         // @ts-ignore
         tokenClient.performTokenRequest(endpoint, params),
-      ).rejects.toThrow(mockError);
+      ).rejects.toThrow('Token request failed');
     });
   });
 

@@ -6,8 +6,6 @@
  * @module src/interfaces/IPkce
  */
 
-import { PkceMethod, BinaryToTextEncoding } from '../enums';
-
 /**
  * Represents the response from generating PKCE parameters.
  *

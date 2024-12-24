@@ -238,8 +238,10 @@ export class Token implements IToken {
       const response = await this.httpClient.post(endpoint, body, headers);
       return JSON.parse(response);
     } catch (error) {
-      // The calling method handles logging and throwing ClientError
-      throw error;
+      this.logger.error('Token request failed', { endpoint, params, error });
+      throw new ClientError('Token request failed', 'TOKEN_REQUEST_ERROR', {
+        originalError: error,
+      });
     }
   }
 

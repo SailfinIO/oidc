@@ -88,8 +88,9 @@ export class Client {
       throw new ClientError('clientId is required', 'CONFIG_ERROR');
     if (!config.redirectUri)
       throw new ClientError('redirectUri is required', 'CONFIG_ERROR');
-    if (!config.scopes || !config.scopes.length)
+    if (!config.scopes?.length) {
       throw new ClientError('At least one scope is required', 'CONFIG_ERROR');
+    }
     if (!config.discoveryUrl)
       throw new ClientError('discoveryUrl is required', 'CONFIG_ERROR');
 
