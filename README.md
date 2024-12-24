@@ -147,7 +147,7 @@ oidcClient.setLogLevel('debug');
 
 ## Configuration Options
 
-Below are the required and optional parameters for initializing the `OIDCClient`:
+Below are the required and optional parameters for initializing the `Client`:
 
 | Parameter      | Type        | Required | Description                                        |
 | -------------- | ----------- | -------- | -------------------------------------------------- |
@@ -181,6 +181,8 @@ enum LogLevel {
   Error = 'error',
 }
 ```
+
+**note** - The client accepts additonal options for customizing the OIDC flow, such as `responseType`, `responseMode`, `prompt`, `nonce`, and `state` etc. These options can be configured by adhereing to the `ICl
 
 ## API Reference
 
