@@ -40,6 +40,7 @@ export class Auth implements IAuth {
   private readonly state: IState;
 
   private codeVerifier: string | null = null;
+  private clientMetadata: ClientMetadata | null = null;
 
   constructor(
     config: IClientConfig,
@@ -91,33 +92,70 @@ export class Auth implements IAuth {
     state: string,
     nonce?: string,
   ): Promise<{ url: string; codeVerifier?: string }> {
-    const client: ClientMetadata = await this.issuer.discover();
-    this.ensureGrantTypeSupportsAuthUrl();
+    try {
+      const client: ClientMetadata = await this.issuer.discover();
 
-    const { codeVerifier, codeChallenge } =
-      this.config.pkce && this.config.grantType === GrantType.AuthorizationCode
-        ? this.pkceService.generatePkce()
-        : { codeVerifier: undefined, codeChallenge: undefined };
+      if (!client.authorization_endpoint) {
+        const error = new ClientError(
+          'Authorization endpoint is missing',
+          'AUTH_ENDPOINT_MISSING',
+        );
+        this.logger.error('Failed to generate authorization URL', { error });
+        throw error;
+      }
 
-    const url = buildAuthorizationUrl(
-      {
-        authorizationEndpoint: client.authorization_endpoint,
-        clientId: this.config.clientId,
-        redirectUri: this.config.redirectUri,
-        responseType: this.config.responseType || 'code',
-        scope: this.config.scopes.join(' '),
-        state,
-        codeChallenge,
-        codeChallengeMethod:
-          codeChallenge && this.config.pkceMethod !== PkceMethod.Plain
-            ? this.config.pkceMethod || PkceMethod.S256
-            : undefined,
-      },
-      nonce ? { nonce } : undefined,
-    );
+      this.ensureGrantTypeSupportsAuthUrl();
 
-    this.logger.debug('Authorization URL generated', { url });
-    return { url, codeVerifier };
+      let codeVerifier: string | undefined;
+      let codeChallenge: string | undefined;
+      let codeChallengeMethod: PkceMethod | undefined;
+
+      if (
+        this.config.pkce &&
+        this.config.grantType === GrantType.AuthorizationCode
+      ) {
+        try {
+          const pkce = this.pkceService.generatePkce();
+          codeVerifier = pkce.codeVerifier;
+          codeChallenge = pkce.codeChallenge;
+          if (
+            this.config.pkceMethod &&
+            Object.values(PkceMethod).includes(this.config.pkceMethod)
+          ) {
+            codeChallengeMethod = this.config.pkceMethod;
+          } else {
+            this.logger.warn(
+              'Invalid pkceMethod provided. Omitting code_challenge_method.',
+            );
+          }
+        } catch (error) {
+          this.logger.error('Failed to generate PKCE', { error });
+          throw new ClientError('PKCE generation failed', 'PKCE_ERROR', {
+            originalError: error,
+          });
+        }
+      }
+
+      const url = buildAuthorizationUrl(
+        {
+          authorizationEndpoint: client.authorization_endpoint,
+          clientId: this.config.clientId,
+          redirectUri: this.config.redirectUri,
+          responseType: this.config.responseType || 'code',
+          scope: this.config.scopes.join(' '),
+          state,
+          codeChallenge,
+          codeChallengeMethod,
+        },
+        nonce ? { nonce } : undefined,
+      );
+
+      this.logger.debug('Authorization URL generated', { url });
+      return { url, codeVerifier };
+    } catch (error) {
+      this.logger.error('Failed to generate authorization URL', { error });
+      throw error;
+    }
   }
 
   /**
