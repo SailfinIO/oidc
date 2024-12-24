@@ -2,7 +2,7 @@
 
 import { Auth } from './Auth';
 import { UserInfo } from './UserInfo';
-import { Logger, generateRandomString } from '../utils';
+import { Logger } from '../utils';
 import { GrantType, LogLevel, TokenTypeHint } from '../enums';
 import { Issuer } from './Issuer';
 import {
@@ -13,7 +13,6 @@ import {
   IUserInfo,
   IUser,
   IIssuer,
-  IJwtValidator,
   IToken,
   IHttp,
   IAuth,
@@ -21,7 +20,7 @@ import {
 import { ClientError } from '../errors';
 import { Http } from './Http';
 import { Token } from './Token';
-import { JwtValidator } from './JwtValidator';
+import { defaultClientConfig } from '../config/defaultClientConfig';
 
 export class Client {
   private readonly config: IClientConfig;
@@ -30,23 +29,27 @@ export class Client {
   private readonly logger: ILogger;
   private readonly httpClient: IHttp;
   private readonly issuer: IIssuer;
-  private readonly jwtValidator: IJwtValidator;
   private userInfoClient: IUserInfo;
 
   private initialized: boolean = false;
 
-  private stateMap: Map<string, string> = new Map(); // state -> nonce
+  constructor(userConfig: Partial<IClientConfig>) {
+    // Merge userConfig with defaultClientConfig
+    this.config = { ...defaultClientConfig, ...userConfig } as IClientConfig;
 
-  constructor(config: IClientConfig) {
-    this.config = config;
-    const envLogLevel = process.env.OIDC_LOG_LEVEL as LogLevel; // Allow overriding log level via env var. This must be one of:  'debug', 'info', 'warn', 'error',
+    // Validate that required fields are provided
+    this.validateRequiredConfig(this.config);
+
+    const envLogLevel = process.env.OIDC_LOG_LEVEL as LogLevel; // Allow overriding log level via env var. e.g., OIDC_LOG_LEVEL=debug
+
     this.logger =
-      config.logging?.logger ||
+      this.config.logging?.logger ||
       new Logger(
         Client.name,
-        config.logging?.logLevel || envLogLevel || LogLevel.INFO,
+        this.config.logging?.logLevel || envLogLevel || LogLevel.INFO,
         true,
       );
+
     this.httpClient = new Http(this.logger);
     this.issuer = new Issuer(this.config.discoveryUrl, this.logger);
     this.tokenClient = new Token(
@@ -56,14 +59,28 @@ export class Client {
       this.httpClient,
     );
     this.auth = new Auth(
-      config,
+      this.config,
       this.logger,
       this.issuer,
       this.httpClient,
       this.tokenClient,
     );
 
-    this.validateConfig(config);
+    this.validateConfig(this.config);
+  }
+
+  private validateRequiredConfig(config: IClientConfig): void {
+    const requiredFields: Array<keyof IClientConfig> = [
+      'clientId',
+      'redirectUri',
+      'scopes',
+      'discoveryUrl',
+    ];
+    requiredFields.forEach((field) => {
+      if (!config[field]) {
+        throw new ClientError(`${field} is required`, 'CONFIG_ERROR');
+      }
+    });
   }
 
   private validateConfig(config: IClientConfig): void {
@@ -113,29 +130,17 @@ export class Client {
 
   /**
    * Generates the authorization URL to initiate the OAuth2/OIDC flow.
-   * @returns The authorization URL.
+   * Returns both the URL and the state for CSRF protection.
+   * @returns The authorization URL and the generated state.
    */
-  public async getAuthorizationUrl(): Promise<{ url: string }> {
-    if (this.stateMap.size > 0) {
-      throw new ClientError(
-        'An authorization flow is already in progress',
-        'FLOW_IN_PROGRESS',
-      );
-    }
-
-    const state = generateRandomString();
-    const nonce = generateRandomString();
-
-    // Store state -> nonce mapping
-    this.stateMap.set(state, nonce);
-
-    const { url } = await this.auth.getAuthorizationUrl(state, nonce);
-    return { url };
+  public async getAuthorizationUrl(): Promise<{ url: string; state: string }> {
+    this.ensureInitialized();
+    return this.auth.getAuthorizationUrl();
   }
 
   /**
    * Handles the redirect callback for authorization code flow.
-   * Exchanges the authorization code for tokens.
+   * Exchanges the authorization code for tokens and validates the state and nonce.
    * @param code The authorization code received from the provider.
    * @param returnedState The state returned in the redirect to validate against CSRF.
    */
@@ -143,32 +148,8 @@ export class Client {
     code: string,
     returnedState: string,
   ): Promise<void> {
-    const expectedNonce = this.stateMap.get(returnedState);
-    if (!expectedNonce) {
-      throw new ClientError(
-        'State does not match or not found',
-        'STATE_MISMATCH',
-      );
-    }
-
-    await this.auth.exchangeCodeForToken(code, this.auth.getCodeVerifier());
-
-    // After token is obtained and validated, remove the state entry
-    this.stateMap.delete(returnedState);
-    // After token is obtained:
-    const tokens = this.tokenClient.getTokens();
-    const client = await this.issuer.discoverClient();
-    if (tokens.id_token) {
-      const jwtValidator = new JwtValidator(
-        this.logger as Logger,
-        client,
-        this.config.clientId,
-      );
-      await jwtValidator.validateIdToken(tokens.id_token, expectedNonce);
-      this.logger.info('ID token validated successfully');
-    } else {
-      this.logger.warn('No ID token returned to validate');
-    }
+    this.ensureInitialized();
+    await this.auth.handleRedirect(code, returnedState);
   }
 
   /**
@@ -176,37 +157,9 @@ export class Client {
    * Extracts tokens from the URL fragment.
    * @param fragment The URL fragment containing tokens.
    */
-  public handleRedirectForImplicitFlow(fragment: string): void {
-    if (this.config.grantType !== GrantType.Implicit) {
-      throw new ClientError(
-        `handleRedirectForImplicitFlow() is only applicable for implicit flows. Current grantType: ${this.config.grantType}`,
-        'INVALID_GRANT_TYPE',
-      );
-    }
-
-    // The fragment might look like: #access_token=xyz&id_token=abc&expires_in=3600&...
-    const params = new URLSearchParams(fragment.replace(/^#/, ''));
-    const accessToken = params.get('access_token');
-    const idToken = params.get('id_token');
-    const expiresIn = params.get('expires_in');
-    const tokenType = params.get('token_type') || 'Bearer';
-
-    if (!accessToken) {
-      throw new ClientError(
-        'No access_token found in redirect fragment for implicit flow',
-        'TOKEN_MISSING',
-      );
-    }
-
-    const tokenResponse = {
-      access_token: accessToken,
-      token_type: tokenType,
-      expires_in: expiresIn ? parseInt(expiresIn, 10) : undefined,
-      id_token: idToken || undefined,
-    };
-
-    this.tokenClient.setTokens(tokenResponse);
-    this.logger.info('Tokens set from implicit flow fragment');
+  public async handleRedirectForImplicitFlow(fragment: string): Promise<void> {
+    this.ensureInitialized();
+    await this.auth.handleRedirectForImplicitFlow(fragment);
   }
 
   /**

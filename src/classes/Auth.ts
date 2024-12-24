@@ -6,7 +6,10 @@ import {
   buildAuthorizationUrl,
   buildLogoutUrl,
   buildUrlEncodedBody,
+  parseFragment,
   sleep,
+  generateRandomString,
+  Logger,
 } from '../utils';
 import {
   ILogoutUrlParams,
@@ -18,12 +21,14 @@ import {
   IClientConfig,
   ClientMetadata,
   IAuth,
+  IPkce,
+  IState,
 } from '../interfaces';
 import { GrantType } from '../enums/GrantType';
-import { createHash, randomBytes } from 'crypto';
-import { Algorithm } from '../enums/Algorithm';
-import { BinaryToTextEncoding } from '../enums/BinaryToTextEncoding';
 import { PkceMethod } from '../enums';
+import { JwtValidator } from './JwtValidator';
+import { Pkce } from './Pkce';
+import { State } from './State';
 
 export class Auth implements IAuth {
   private readonly config: IClientConfig;
@@ -31,6 +36,8 @@ export class Auth implements IAuth {
   private readonly tokenClient: IToken;
   private readonly logger: ILogger;
   private readonly httpClient: IHttp;
+  private readonly pkceService: IPkce;
+  private readonly state: IState;
 
   private codeVerifier: string | null = null;
 
@@ -40,6 +47,7 @@ export class Auth implements IAuth {
     issuer: IIssuer,
     httpClient: IHttp,
     tokenClient?: IToken,
+    pkceService?: IPkce,
   ) {
     this.config = config;
     this.logger = logger;
@@ -48,15 +56,38 @@ export class Auth implements IAuth {
     this.tokenClient =
       tokenClient ||
       new Token(this.logger, this.config, this.issuer, this.httpClient);
+    this.pkceService = pkceService || new Pkce(this.config);
+    this.state = new State();
   }
 
   /**
    * Generates the authorization URL to initiate the OAuth2/OIDC flow.
+   * Generates and stores state and nonce internally.
+   * @returns The authorization URL and the generated state.
+   */
+  public async getAuthorizationUrl(): Promise<{ url: string; state: string }> {
+    const state = generateRandomString();
+    const nonce = generateRandomString();
+
+    // Store state -> nonce mapping
+    this.state.addState(state, nonce);
+
+    const { url, codeVerifier } = await this.generateAuthUrl(state, nonce);
+
+    if (codeVerifier) {
+      this.codeVerifier = codeVerifier;
+    }
+
+    return { url, state };
+  }
+
+  /**
+   * Generates the authorization URL with the provided state and nonce.
    * @param state A unique state string for CSRF protection.
    * @param nonce Optional nonce for ID token validation.
    * @returns The authorization URL and the code verifier if PKCE is used.
    */
-  public async getAuthorizationUrl(
+  private async generateAuthUrl(
     state: string,
     nonce?: string,
   ): Promise<{ url: string; codeVerifier?: string }> {
@@ -65,7 +96,7 @@ export class Auth implements IAuth {
 
     const { codeVerifier, codeChallenge } =
       this.config.pkce && this.config.grantType === GrantType.AuthorizationCode
-        ? this.generatePkce()
+        ? this.pkceService.generatePkce()
         : { codeVerifier: undefined, codeChallenge: undefined };
 
     const url = buildAuthorizationUrl(
@@ -78,7 +109,7 @@ export class Auth implements IAuth {
         state,
         codeChallenge,
         codeChallengeMethod:
-          codeChallenge && this.config.pkceMethod !== 'plain'
+          codeChallenge && this.config.pkceMethod !== PkceMethod.Plain
             ? this.config.pkceMethod || PkceMethod.S256
             : undefined,
       },
@@ -87,6 +118,125 @@ export class Auth implements IAuth {
 
     this.logger.debug('Authorization URL generated', { url });
     return { url, codeVerifier };
+  }
+
+  /**
+   * Handles the redirect callback for authorization code flow.
+   * Exchanges the authorization code for tokens and validates the ID token.
+   * @param code The authorization code received from the provider.
+   * @param returnedState The state returned in the redirect to validate against CSRF.
+   */
+  public async handleRedirect(
+    code: string,
+    returnedState: string,
+  ): Promise<void> {
+    const expectedNonce = await this.state.getNonce(returnedState);
+    if (!expectedNonce) {
+      throw new ClientError(
+        'State does not match or not found',
+        'STATE_MISMATCH',
+      );
+    }
+
+    // Exchange code for tokens
+    await this.tokenClient.exchangeCodeForToken(code, this.codeVerifier);
+
+    this.codeVerifier = null;
+
+    // Validate ID token if present
+    const tokens = this.tokenClient.getTokens();
+    const client = await this.issuer.discoverClient();
+    if (tokens?.id_token) {
+      const jwtValidator = new JwtValidator(
+        this.logger as Logger,
+        client,
+        this.config.clientId,
+      );
+      await jwtValidator.validateIdToken(tokens.id_token, expectedNonce);
+      this.logger.info('ID token validated successfully');
+    } else {
+      this.logger.warn('No ID token returned to validate');
+    }
+  }
+
+  /**
+   * Handles the redirect callback for implicit flow.
+   *
+   * This method processes the authorization response by extracting tokens directly
+   * from the URL fragment, validates the returned state, and stores the tokens securely.
+   *
+   * @param {string} fragment - The URL fragment containing tokens (e.g., access_token, id_token).
+   * @returns {Promise<void>} Resolves when tokens are successfully extracted and stored.
+   *
+   * @throws {ClientError} If token extraction fails or state validation fails.
+   */
+  public async handleRedirectForImplicitFlow(fragment: string): Promise<void> {
+    // Parse the fragment into an object
+    const params = parseFragment(fragment);
+
+    // Handle potential OAuth2 errors
+    if (params.error) {
+      this.logger.error('Error in implicit flow redirect', {
+        error: params.error,
+        error_description: params.error_description,
+      });
+      throw new ClientError(
+        params.error_description || 'Implicit flow error',
+        params.error.toUpperCase() as string,
+      );
+    }
+
+    const { access_token, id_token, state, token_type, expires_in } = params;
+
+    if (!access_token) {
+      throw new ClientError(
+        'Access token not found in fragment',
+        'TOKEN_NOT_FOUND',
+      );
+    }
+
+    if (!state) {
+      throw new ClientError(
+        'State parameter missing in fragment',
+        'STATE_MISSING',
+      );
+    }
+
+    const expectedNonce = await this.state.getNonce(state);
+    if (!expectedNonce) {
+      throw new ClientError(
+        'State does not match or not found',
+        'STATE_MISMATCH',
+      );
+    }
+
+    // Optionally handle ID token validation
+    if (id_token) {
+      const client = await this.issuer.discoverClient();
+      const jwtValidator = new JwtValidator(
+        this.logger as Logger,
+        client,
+        this.config.clientId,
+      );
+      await jwtValidator.validateIdToken(id_token, expectedNonce);
+      this.logger.info('ID token validated successfully');
+    } else {
+      this.logger.warn('No ID token returned to validate');
+    }
+    // Convert expires_in from string to number
+    const expiresInNumber = expires_in ? parseInt(expires_in, 10) : undefined;
+
+    // Store the tokens
+    this.tokenClient.setTokens({
+      access_token,
+      id_token,
+      token_type,
+      expires_in: expiresInNumber,
+    });
+
+    this.logger.info('Tokens obtained and stored successfully');
+
+    this.codeVerifier = null;
   }
 
   /**
@@ -108,164 +258,11 @@ export class Auth implements IAuth {
   }
 
   /**
-   * Generates PKCE code verifier and code challenge.
-   * @returns An object containing the code verifier and code challenge.
-   */
-  private generatePkce(): { codeVerifier: string; codeChallenge: string } {
-    const codeVerifier = this.generateCodeVerifier();
-    this.codeVerifier = codeVerifier;
-    const codeChallenge = this.generateCodeChallenge(codeVerifier);
-    return { codeVerifier, codeChallenge };
-  }
-
-  /**
-   * Generates a random code verifier for PKCE.
-   * @returns The generated code verifier string.
-   */
-  private generateCodeVerifier(): string {
-    return randomBytes(32).toString(BinaryToTextEncoding.BASE_64_URL);
-  }
-
-  /**
-   * Generates a code challenge based on the code verifier and PKCE method.
-   * @param verifier The code verifier string.
-   * @returns The generated code challenge string.
-   */
-  private generateCodeChallenge(verifier: string): string {
-    if (this.config.pkceMethod === PkceMethod.Plain) {
-      return verifier;
-    }
-
-    return createHash(Algorithm.SHA256.toLowerCase())
-      .update(verifier)
-      .digest(BinaryToTextEncoding.BASE_64_URL);
-  }
-
-  /**
    * Retrieves the previously generated code verifier.
    * @returns The code verifier if available.
    */
   public getCodeVerifier(): string | null {
     return this.codeVerifier;
-  }
-
-  /**
-   * Exchanges an authorization code for tokens.
-   * @param code The authorization code received from the authorization server.
-   * @param codeVerifier Optional code verifier if PKCE is used.
-   * @param username Optional username for Resource Owner Password Credentials grant.
-   * @param password Optional password for Resource Owner Password Credentials grant.
-   * @throws {ClientError} If the exchange fails.
-   */
-  public async exchangeCodeForToken(
-    code: string,
-    codeVerifier?: string,
-    username?: string,
-    password?: string,
-  ): Promise<void> {
-    const client: ClientMetadata = await this.issuer.discoverClient();
-    const tokenEndpoint = client.token_endpoint;
-
-    const params = this.buildTokenRequestParams(
-      code,
-      codeVerifier,
-      username,
-      password,
-    );
-
-    const headers = {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    };
-    const body = buildUrlEncodedBody(params);
-
-    try {
-      const response = await this.httpClient.post(tokenEndpoint, body, headers);
-      const tokenResponse: ITokenResponse = JSON.parse(response);
-      this.tokenClient.setTokens(tokenResponse);
-      this.logger.info('Exchanged grant for tokens', {
-        grantType: this.config.grantType,
-      });
-    } catch (error) {
-      this.logger.error('Failed to exchange grant for tokens', {
-        error,
-        grantType: this.config.grantType,
-      });
-      throw new ClientError('Token exchange failed', 'TOKEN_EXCHANGE_ERROR', {
-        originalError: error,
-      });
-    }
-  }
-
-  /**
-   * Builds the parameters for the token request based on the grant type.
-   * @param code The code or token being exchanged.
-   * @param codeVerifier Optional code verifier.
-   * @param username Optional username for password grant.
-   * @param password Optional password for password grant.
-   * @returns The parameters as a record of strings.
-   */
-  private buildTokenRequestParams(
-    code: string,
-    codeVerifier?: string,
-    username?: string,
-    password?: string,
-  ): Record<string, string> {
-    let params: Record<string, string> = {
-      grant_type: this.config.grantType,
-      client_id: this.config.clientId,
-      redirect_uri: this.config.redirectUri,
-      ...(this.config.clientSecret && {
-        client_secret: this.config.clientSecret,
-      }),
-    };
-
-    switch (this.config.grantType) {
-      case GrantType.AuthorizationCode:
-        params = {
-          ...params,
-          code,
-          ...(codeVerifier && { code_verifier: codeVerifier }),
-        };
-        break;
-      case GrantType.RefreshToken:
-        params = { ...params, refresh_token: code };
-        break;
-      case GrantType.Password:
-        if (!username || !password) {
-          throw new ClientError(
-            'Username and password are required for Password grant type',
-            'INVALID_REQUEST',
-          );
-        }
-        params = { ...params, username, password };
-        break;
-      case GrantType.DeviceCode:
-        params = { ...params, device_code: code };
-        break;
-      case GrantType.JWTBearer:
-        params = {
-          ...params,
-          assertion: code,
-          scope: this.config.scopes.join(' '),
-        };
-        break;
-      case GrantType.SAML2Bearer:
-        params = { ...params, assertion: code };
-        break;
-      case GrantType.ClientCredentials:
-        // No additional params
-        break;
-      case GrantType.Custom:
-        // Handle custom grant types
-        break;
-      default:
-        throw new ClientError(
-          `Unsupported grant type: ${this.config.grantType}`,
-          'UNSUPPORTED_GRANT_TYPE',
-        );
-    }
-
-    return params;
   }
 
   /**

@@ -242,4 +242,89 @@ export class Token implements IToken {
       throw error;
     }
   }
+
+  /**
+   * Exchanges an authorization code for tokens.
+   * @param code The authorization code received from the authorization server.
+   * @param codeVerifier Optional code verifier if PKCE is used.
+   * @throws {ClientError} If the exchange fails.
+   */
+  async exchangeCodeForToken(
+    code: string,
+    codeVerifier?: string,
+  ): Promise<void> {
+    const client = await this.issuer.discoverClient();
+    const tokenEndpoint = client.token_endpoint;
+
+    const params = this.buildTokenRequestParams(code, codeVerifier);
+    const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+    const body = buildUrlEncodedBody(params);
+
+    try {
+      const response = await this.httpClient.post(tokenEndpoint, body, headers);
+      const tokenResponse: ITokenResponse = JSON.parse(response);
+      this.setTokens(tokenResponse);
+      this.logger.info('Exchanged grant for tokens', {
+        grantType: this.config.grantType,
+      });
+    } catch (error) {
+      this.logger.error('Failed to exchange grant for tokens', {
+        error,
+        grantType: this.config.grantType,
+      });
+      throw new ClientError('Token exchange failed', 'TOKEN_EXCHANGE_ERROR', {
+        originalError: error,
+      });
+    }
+  }
+
+  /**
+   * Builds the parameters for the token request based on the grant type.
+   * @param code The code being exchanged.
+   * @param codeVerifier Optional code verifier.
+   * @returns The parameters as a record of strings.
+   */
+  private buildTokenRequestParams(
+    code: string,
+    codeVerifier?: string,
+  ): Record<string, string> {
+    const baseParams: Record<string, string> = {
+      grant_type: this.config.grantType,
+      client_id: this.config.clientId,
+      redirect_uri: this.config.redirectUri,
+    };
+
+    if (this.config.clientSecret) {
+      baseParams.client_secret = this.config.clientSecret;
+    }
+
+    switch (this.config.grantType) {
+      case GrantType.AuthorizationCode:
+        baseParams.code = code;
+        if (codeVerifier) baseParams.code_verifier = codeVerifier;
+        break;
+      case GrantType.RefreshToken:
+        baseParams.refresh_token = code;
+        break;
+      case GrantType.DeviceCode:
+        baseParams.device_code = code;
+        break;
+      case GrantType.JWTBearer:
+      case GrantType.SAML2Bearer:
+        baseParams.assertion = code;
+        baseParams.scope = this.config.scopes.join(' ');
+        break;
+      case GrantType.ClientCredentials:
+      case GrantType.Custom:
+        // Handle as needed
+        break;
+      default:
+        throw new ClientError(
+          `Unsupported grant type: ${this.config.grantType}`,
+          'UNSUPPORTED_GRANT_TYPE',
+        );
+    }
+
+    return baseParams;
+  }
 }

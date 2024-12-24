@@ -10,6 +10,7 @@ import {
   StorageMechanism,
   Scopes,
   Display,
+  UILocales,
 } from '../enums';
 import { ILogger } from './ILogger';
 
@@ -19,7 +20,7 @@ export interface IClientConfig {
   issuer?: string; // Issuer
   redirectUri: string; // Redirect URI
   postLogoutRedirectUri?: string; // Post-logout Redirect URI
-  scopes: Scopes[]; // Scopes
+  scopes: Scopes[] | string[]; // Scopes
   discoveryUrl: string; // Discovery URL
   responseType?: ResponseType; // e.g., 'code'
   grantType?: GrantType; // e.g., 'authorization_code'
@@ -29,7 +30,7 @@ export interface IClientConfig {
   display?: Display; // e.g., 'page', 'popup'
   maxAge?: number; // Max authentication age
   acrValues?: string; // Authentication Context Class Reference values
-  uiLocales?: string[]; // Preferred UI languages
+  uiLocales?: UILocales[]; // Preferred UI languages
   additionalParams?: Record<string, any>; // Extra authorization request parameters
   responseMode?: ResponseMode; // Response mode
   state?: string; // State parameter

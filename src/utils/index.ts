@@ -8,3 +8,5 @@ export * from './rsaKeyConverter';
 export * from './pem';
 export * from './urlUtils';
 export * from './sleep';
+export * from './Mutex';
+export * from './parseFragment';

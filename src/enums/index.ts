@@ -12,3 +12,4 @@ export * from './ResponseMode';
 export * from './StorageMechanism';
 export * from './Scopes';
 export * from './Display';
+export * from './UILocales';

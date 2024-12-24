@@ -1,5 +1,5 @@
 import { ILogger, IMutex, Resolver, ITimer } from '../interfaces';
-import { MutexError } from '../errors/MutexError';
+import { MutexError, ClientError } from '../errors';
 
 /**
  * A mutex (mutual exclusion) utility for controlling access to asynchronous resources.
@@ -10,12 +10,19 @@ export class Mutex implements IMutex {
   private timer: ITimer;
 
   constructor(
-    private logger: ILogger,
+    private logger?: ILogger,
     timer?: ITimer,
   ) {
     this.timer = timer ?? {
       setTimeout: setTimeout.bind(globalThis),
       clearTimeout: clearTimeout.bind(globalThis),
+    };
+    this.logger = logger ?? {
+      debug: console.debug.bind(console),
+      info: console.info.bind(console),
+      warn: console.warn.bind(console),
+      error: console.error.bind(console),
+      setLogLevel: () => {},
     };
     this.logger.debug('Mutex instance created', {
       initialLocked: this._locked,
@@ -143,6 +150,9 @@ export class Mutex implements IMutex {
       return result;
     } catch (error) {
       this.logger.error('Error during exclusive execution', { error });
+      if (error instanceof ClientError) {
+        throw error;
+      }
       throw new MutexError(
         'Error during exclusive execution',
         'EXECUTION_FAILED',

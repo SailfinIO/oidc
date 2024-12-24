@@ -46,4 +46,31 @@ export interface IToken {
    * @param tokenTypeHint Optional hint about the type of token.
    */
   revokeToken(token: string, tokenTypeHint?: TokenTypeHint): Promise<void>;
+
+  /**
+   * Exchanges an authorization code for tokens.
+   *
+   * This method sends a request to the token endpoint to exchange the provided
+   * authorization code for access and ID tokens. It supports PKCE and various
+   * grant types, including Resource Owner Password Credentials.
+   *
+   * @param {string} code - The authorization code received from the authorization server.
+   * @param {string} [codeVerifier] - Optional code verifier if PKCE is used.
+   * @param {string} [username] - Optional username for Resource Owner Password Credentials grant.
+   * @param {string} [password] - Optional password for Resource Owner Password Credentials grant.
+   * @returns {Promise<void>} Resolves when tokens are successfully obtained and stored.
+   *
+   * @throws {ClientError} If the token exchange fails or required parameters are missing.
+   *
+   * @example
+   * ```typescript
+   * await authClient.exchangeCodeForToken(authCode, codeVerifier);
+   * ```
+   */
+  exchangeCodeForToken(
+    code: string,
+    codeVerifier?: string,
+    username?: string,
+    password?: string,
+  ): Promise<void>;
 }

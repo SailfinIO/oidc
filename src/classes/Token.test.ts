@@ -645,4 +645,132 @@ describe('TokenClient', () => {
       );
     });
   });
+
+  describe('exchangeCodeForToken', () => {
+    it('should exchange the authorization code for tokens successfully', async () => {
+      // Arrange
+      const code = 'auth-code';
+      const codeVerifier = 'code-verifier';
+      const mockTokenResponse = {
+        access_token: 'new-access-token',
+        refresh_token: 'new-refresh-token',
+        expires_in: 3600,
+        token_type: 'Bearer',
+      };
+      mockConfig.grantType = GrantType.AuthorizationCode;
+
+      (mockHttpClient.post as jest.Mock).mockResolvedValue(
+        JSON.stringify(mockTokenResponse),
+      );
+
+      // Act
+      await tokenClient.exchangeCodeForToken(code, codeVerifier);
+
+      // Build expected body using URLSearchParams
+      const expectedBody = new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: 'test-client-id',
+        redirect_uri: 'https://example.com/callback',
+        code: code,
+        code_verifier: codeVerifier,
+      }).toString();
+
+      // Assert
+      expect(mockHttpClient.post).toHaveBeenCalledWith(
+        'https://example.com/oauth/token',
+        expectedBody, // Use the encoded body
+        { 'Content-Type': 'application/x-www-form-urlencoded' },
+      );
+      const tokens = tokenClient.getTokens();
+      expect(tokens).toMatchObject({
+        access_token: 'new-access-token',
+        refresh_token: 'new-refresh-token',
+        token_type: 'Bearer',
+      });
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Exchanged grant for tokens',
+        {
+          grantType: GrantType.AuthorizationCode,
+        },
+      );
+    });
+
+    it('should handle errors during token exchange gracefully', async () => {
+      // Arrange
+      const code = 'auth-code';
+      const codeVerifier = 'code-verifier';
+      const mockError = new Error('Token exchange failed');
+
+      // Set the grantType to AuthorizationCode
+      mockConfig.grantType = GrantType.AuthorizationCode;
+
+      // Mock the HTTP client's post method to reject with mockError
+      (mockHttpClient.post as jest.Mock).mockRejectedValue(mockError);
+
+      // Act & Assert
+      await expect(
+        tokenClient.exchangeCodeForToken(code, codeVerifier),
+      ).rejects.toThrow(ClientError);
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Failed to exchange grant for tokens',
+        expect.objectContaining({
+          error: mockError,
+          grantType: GrantType.AuthorizationCode,
+        }),
+      );
+    });
+  });
+
+  describe('buildTokenRequestParams', () => {
+    it('should build correct parameters for Authorization Code grant type', () => {
+      // Arrange
+      const code = 'auth-code';
+      const codeVerifier = 'code-verifier';
+      mockConfig.grantType = GrantType.AuthorizationCode;
+
+      // Act
+      // @ts-ignore - testing private method
+      const params = tokenClient.buildTokenRequestParams(code, codeVerifier);
+
+      // Assert
+      expect(params).toEqual({
+        grant_type: GrantType.AuthorizationCode,
+        client_id: 'test-client-id',
+        redirect_uri: 'https://example.com/callback',
+        code: 'auth-code',
+        code_verifier: 'code-verifier',
+      });
+    });
+
+    it('should build correct parameters for Refresh Token grant type', () => {
+      // Arrange
+      const code = 'refresh-token';
+      mockConfig.grantType = GrantType.RefreshToken;
+
+      // Act
+      // @ts-ignore - testing private method
+      const params = tokenClient.buildTokenRequestParams(code);
+
+      // Assert
+      expect(params).toEqual({
+        grant_type: GrantType.RefreshToken,
+        client_id: 'test-client-id',
+        redirect_uri: 'https://example.com/callback',
+        refresh_token: 'refresh-token',
+      });
+    });
+
+    it('should throw an error for unsupported grant types', () => {
+      // Arrange
+      const code = 'unsupported-code';
+      mockConfig.grantType = 'unsupported_grant_type' as GrantType;
+
+      // Act & Assert
+      expect(() =>
+        // @ts-ignore - testing private method
+        tokenClient.buildTokenRequestParams(code),
+      ).toThrowError(ClientError);
+    });
+  });
 });

@@ -3,7 +3,7 @@
  * Defines the `IAuth` interface for handling authentication flows.
  * This interface provides a contract for implementing OAuth2/OIDC operations,
  * including authorization URL generation, token exchange, device authorization,
- * and logout processes.
+ * polling, handling redirects, and logout processes.
  *
  * @module src/interfaces/IAuth
  */
@@ -20,9 +20,9 @@ export interface IAuthorizationUrlResponse {
   url: string;
 
   /**
-   * The code verifier used for PKCE, if applicable.
+   * The state parameter used for CSRF protection.
    */
-  codeVerifier?: string;
+  state: string;
 }
 
 /**
@@ -61,76 +61,73 @@ export interface IDeviceAuthorizationResponse {
  * Defines the `IAuth` interface for managing authentication flows.
  *
  * The `IAuth` interface provides methods for generating authorization URLs,
- * exchanging authorization codes for tokens, handling device authorization flows,
- * polling for tokens, and generating logout URLs. Implementations of this interface
- * can support various OAuth2/OIDC grant types and PKCE configurations.
+ * handling redirect callbacks, exchanging authorization codes for tokens,
+ * managing device authorization flows, polling for tokens, and generating
+ * logout URLs. Implementations of this interface can support various
+ * OAuth2/OIDC grant types and PKCE configurations.
  */
 export interface IAuth {
   /**
    * Generates the authorization URL to initiate the OAuth2/OIDC flow.
    *
    * This method constructs the URL that the client application should redirect
-   * the user to in order to begin the authentication process. It supports PKCE
-   * if configured and returns the code verifier when applicable.
+   * the user to in order to begin the authentication process. It internally
+   * generates and stores a unique state and nonce for CSRF protection and
+   * ID token validation, respectively.
    *
-   * @param {string} state - A unique state string for CSRF protection.
-   * @param {string} [nonce] - Optional nonce for ID token validation.
-   * @returns {Promise<IAuthorizationUrlResponse>} An object containing the authorization URL and optional code verifier.
+   * @returns {Promise<IAuthorizationUrlResponse>} An object containing the authorization URL and the generated state.
    *
    * @throws {ClientError} If the grant type does not support authorization URLs.
    *
    * @example
    * ```typescript
-   * const { url, codeVerifier } = await authClient.getAuthorizationUrl('randomState');
+   * const { url, state } = await authClient.getAuthorizationUrl();
    * window.location.href = url;
+   * // Store `state` to validate upon redirect
    * ```
    */
-  getAuthorizationUrl(
-    state: string,
-    nonce?: string,
-  ): Promise<IAuthorizationUrlResponse>;
+  getAuthorizationUrl(): Promise<IAuthorizationUrlResponse>;
 
   /**
-   * Retrieves the previously generated PKCE code verifier.
+   * Handles the redirect callback from the authorization server for authorization code flow.
    *
-   * This method returns the code verifier that was generated during the authorization
-   * URL creation. It is used during the token exchange process to validate the PKCE flow.
-   *
-   * @returns {string | null} The code verifier if it exists, otherwise `null`.
-   *
-   * @example
-   * ```typescript
-   * const codeVerifier = authClient.getCodeVerifier();
-   * ```
-   */
-  getCodeVerifier(): string | null;
-
-  /**
-   * Exchanges an authorization code for tokens.
-   *
-   * This method sends a request to the token endpoint to exchange the provided
-   * authorization code for access and ID tokens. It supports PKCE and various
-   * grant types, including Resource Owner Password Credentials.
+   * This method processes the authorization response, including validating the
+   * returned state to prevent CSRF attacks, exchanging the authorization code
+   * for tokens, and validating the ID token's nonce.
    *
    * @param {string} code - The authorization code received from the authorization server.
-   * @param {string} [codeVerifier] - Optional code verifier if PKCE is used.
-   * @param {string} [username] - Optional username for Resource Owner Password Credentials grant.
-   * @param {string} [password] - Optional password for Resource Owner Password Credentials grant.
-   * @returns {Promise<void>} Resolves when tokens are successfully obtained and stored.
+   * @param {string} returnedState - The state returned in the redirect to validate against CSRF.
+   * @returns {Promise<void>} Resolves when the redirect has been successfully handled.
    *
-   * @throws {ClientError} If the token exchange fails or required parameters are missing.
+   * @throws {ClientError} If state validation fails or token exchange fails.
    *
    * @example
    * ```typescript
-   * await authClient.exchangeCodeForToken(authCode, codeVerifier);
+   * const code = 'authorization-code-from-redirect';
+   * const returnedState = 'state-from-redirect';
+   * await authClient.handleRedirect(code, returnedState);
    * ```
    */
-  exchangeCodeForToken(
-    code: string,
-    codeVerifier?: string,
-    username?: string,
-    password?: string,
-  ): Promise<void>;
+  handleRedirect(code: string, returnedState: string): Promise<void>;
+
+  /**
+   * Handles the redirect callback for implicit flow.
+   *
+   * This method processes the authorization response by extracting tokens directly
+   * from the URL fragment, validates the returned state, and stores the tokens securely.
+   *
+   * @param {string} fragment - The URL fragment containing tokens (e.g., access_token, id_token).
+   * @returns {Promise<void>} Resolves when tokens are successfully extracted and stored.
+   *
+   * @throws {ClientError} If token extraction fails or state validation fails.
+   *
+   * @example
+   * ```typescript
+   * const fragment = window.location.hash;
+   * await authClient.handleRedirectForImplicitFlow(fragment);
+   * ```
+   */
+  handleRedirectForImplicitFlow(fragment: string): Promise<void>;
 
   /**
    * Initiates the device authorization request to obtain device and user codes.
