@@ -3,7 +3,7 @@
  * Defines the `ClaimsValidator` class, responsible for validating claims in a JWT payload.
  * This class ensures that critical claims such as `iss`, `aud`, `exp`, and `nonce` conform to expected values.
  *
- * @module src/utils/ClaimsValidator
+ * @module src/classes/ClaimsValidator
  */
 
 import { ClientError } from '../errors/ClientError';

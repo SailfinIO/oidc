@@ -1,4 +1,4 @@
-// src/clients/Token.ts
+// src/classes/Token.ts
 
 import {
   IClientConfig,

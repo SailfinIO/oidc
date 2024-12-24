@@ -4,7 +4,7 @@
  * of a JWT using public keys retrieved from a JWKS endpoint. The class supports
  * multiple key types and algorithms.
  *
- * @module src/utils/SignatureVerifier
+ * @module src/classes/SignatureVerifier
  */
 
 import { constants, verify } from 'crypto';

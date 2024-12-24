@@ -1,4 +1,4 @@
-// src/clients/UserInfo.ts
+// src/classes/UserInfo.ts
 
 import {
   IUserInfo,

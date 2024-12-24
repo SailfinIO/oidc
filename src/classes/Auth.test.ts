@@ -19,6 +19,7 @@ import {
 import { ClientError } from '../errors/ClientError';
 import { buildLogoutUrl, sleep } from '../utils';
 import { PkceMethod, Scopes, GrantType } from '../enums';
+import { JwtValidator } from './JwtValidator';
 
 describe('Auth', () => {
   let mockIssuer: jest.Mocked<IIssuer>;
@@ -433,6 +434,177 @@ describe('Auth', () => {
           expect(mockLogger.error).toHaveBeenCalledWith(
             'Failed to generate authorization URL',
             { error: expect.any(ClientError) },
+          );
+        });
+      });
+      // src/clients/Auth.test.ts
+
+      describe('handleRedirect', () => {
+        let auth: IAuth;
+        let config: IClientConfig;
+
+        beforeEach(() => {
+          config = {
+            clientId: 'test-client-id',
+            redirectUri: 'https://example.com/callback',
+            scopes: [Scopes.OpenId, Scopes.Profile],
+            discoveryUrl:
+              'https://example.com/.well-known/openid-configuration',
+            grantType: GrantType.AuthorizationCode,
+            pkce: true,
+            pkceMethod: PkceMethod.S256,
+            postLogoutRedirectUri: 'https://example.com/logout-callback',
+          };
+          auth = new Auth(
+            config,
+            mockLogger,
+            mockIssuer,
+            mockHttpClient,
+            mockTokenClient,
+          );
+        });
+
+        it('should handle redirect successfully and validate ID token', async () => {
+          const code = 'auth-code';
+          const returnedState = 'valid-state';
+          const expectedNonce = 'generated-nonce';
+
+          // Mock state retrieval
+          auth['state'].addState(returnedState, expectedNonce);
+
+          // Mock token exchange
+          const tokenResponse = {
+            access_token: 'access-token',
+            id_token: 'id-token',
+            token_type: 'Bearer',
+            expires_in: 3600,
+          };
+          mockTokenClient.exchangeCodeForToken.mockResolvedValueOnce();
+          mockTokenClient.getTokens.mockReturnValueOnce(tokenResponse);
+
+          // Mock issuer discovery
+          mockIssuer.discover.mockResolvedValueOnce(
+            mockClientMetadata as ClientMetadata,
+          );
+
+          // create Jwt Payload
+          const jwtPayload = {
+            sub: '12345',
+            iss: 'https://example.com/',
+            aud: 'test-client-id',
+            nonce: expectedNonce,
+            exp: Math.floor(Date.now() / 1000) + 3600,
+          };
+
+          // Mock JWT validation
+          jest
+            .spyOn(JwtValidator.prototype, 'validateIdToken')
+            .mockResolvedValueOnce(jwtPayload);
+
+          await auth.handleRedirect(code, returnedState);
+
+          expect(mockTokenClient.exchangeCodeForToken).toHaveBeenCalledWith(
+            code,
+            // @ts-ignore // Private method
+            auth.getCodeVerifier(),
+          );
+          expect(mockTokenClient.getTokens).toHaveBeenCalled();
+          expect(mockIssuer.discover).toHaveBeenCalled();
+          expect(JwtValidator.prototype.validateIdToken).toHaveBeenCalledWith(
+            'id-token',
+            expectedNonce,
+          );
+          expect(mockLogger.info).toHaveBeenCalledWith(
+            'ID token validated successfully',
+          );
+          // @ts-ignore // Private method
+          expect(auth.getCodeVerifier()).toBeNull();
+        });
+
+        it('should throw ClientError if state does not match', async () => {
+          const code = 'auth-code';
+          const returnedState = 'invalid-state';
+
+          await expect(
+            auth.handleRedirect(code, returnedState),
+          ).rejects.toThrow(ClientError);
+          expect(mockLogger.error).not.toHaveBeenCalled();
+          expect(mockTokenClient.exchangeCodeForToken).not.toHaveBeenCalled();
+        });
+
+        it('should throw ClientError if token exchange fails', async () => {
+          const code = 'auth-code';
+          const returnedState = 'valid-state';
+          const expectedNonce = 'generated-nonce';
+
+          auth['state'].addState(returnedState, expectedNonce);
+          const exchangeError = new ClientError('Exchange failed');
+          mockTokenClient.exchangeCodeForToken.mockRejectedValueOnce(
+            exchangeError,
+          );
+
+          await expect(
+            auth.handleRedirect(code, returnedState),
+          ).rejects.toThrow(ClientError);
+          expect(mockLogger.error).toHaveBeenCalledWith(
+            'Failed to exchange authorization code for tokens',
+            { error: exchangeError },
+          );
+        });
+
+        it('should log a warning if no ID token is returned', async () => {
+          const code = 'auth-code';
+          const returnedState = 'valid-state';
+          const expectedNonce = 'generated-nonce';
+
+          auth['state'].addState(returnedState, expectedNonce);
+
+          const tokenResponse = {
+            access_token: 'access-token',
+            token_type: 'Bearer',
+            expires_in: 3600,
+          };
+          mockTokenClient.exchangeCodeForToken.mockResolvedValueOnce();
+          mockTokenClient.getTokens.mockReturnValueOnce(tokenResponse);
+
+          await auth.handleRedirect(code, returnedState);
+
+          expect(mockLogger.warn).toHaveBeenCalledWith(
+            'No ID token returned to validate',
+          );
+          // @ts-ignore // Private method
+          expect(auth.getCodeVerifier()).toBeNull();
+        });
+
+        it('should throw ClientError if ID token validation fails', async () => {
+          const code = 'auth-code';
+          const returnedState = 'valid-state';
+          const expectedNonce = 'generated-nonce';
+
+          auth['state'].addState(returnedState, expectedNonce);
+
+          const tokenResponse = {
+            access_token: 'access-token',
+            id_token: 'invalid-id-token',
+            token_type: 'Bearer',
+            expires_in: 3600,
+          };
+          mockTokenClient.exchangeCodeForToken.mockResolvedValueOnce();
+          mockTokenClient.getTokens.mockReturnValueOnce(tokenResponse);
+
+          mockIssuer.discover.mockResolvedValueOnce(
+            mockClientMetadata as ClientMetadata,
+          );
+          jest
+            .spyOn(JwtValidator.prototype, 'validateIdToken')
+            .mockRejectedValueOnce(new Error('Invalid ID token'));
+
+          await expect(
+            auth.handleRedirect(code, returnedState),
+          ).rejects.toThrow();
+          expect(mockLogger.error).toHaveBeenCalledWith(
+            'Failed to validate ID token',
+            { error: expect.any(Error) },
           );
         });
       });

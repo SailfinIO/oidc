@@ -1,4 +1,4 @@
-// src/clients/Auth.ts
+// src/classes/Auth.ts
 
 import { Token } from './Token';
 import { ClientError } from '../errors/ClientError';
@@ -175,24 +175,42 @@ export class Auth implements IAuth {
       );
     }
 
-    // Exchange code for tokens
-    await this.tokenClient.exchangeCodeForToken(code, this.codeVerifier);
+    try {
+      // Exchange code for tokens
+      await this.tokenClient.exchangeCodeForToken(code, this.codeVerifier);
+    } catch (error) {
+      this.logger.error('Failed to exchange authorization code for tokens', {
+        error,
+      });
+      throw new ClientError('Token exchange failed', 'TOKEN_EXCHANGE_ERROR', {
+        originalError: error,
+      });
+    }
 
     this.codeVerifier = null;
 
-    // Validate ID token if present
-    const tokens = this.tokenClient.getTokens();
-    const client = await this.issuer.discover();
-    if (tokens?.id_token) {
-      const jwtValidator = new JwtValidator(
-        this.logger as Logger,
-        client,
-        this.config.clientId,
+    try {
+      // Validate ID token if present
+      const tokens = this.tokenClient.getTokens();
+      const client = await this.issuer.discover();
+      if (tokens?.id_token) {
+        const jwtValidator = new JwtValidator(
+          this.logger as Logger,
+          client,
+          this.config.clientId,
+        );
+        await jwtValidator.validateIdToken(tokens.id_token, expectedNonce);
+        this.logger.info('ID token validated successfully');
+      } else {
+        this.logger.warn('No ID token returned to validate');
+      }
+    } catch (error) {
+      this.logger.error('Failed to validate ID token', { error });
+      throw new ClientError(
+        'ID token validation failed',
+        'ID_TOKEN_VALIDATION_ERROR',
+        { originalError: error },
       );
-      await jwtValidator.validateIdToken(tokens.id_token, expectedNonce);
-      this.logger.info('ID token validated successfully');
-    } else {
-      this.logger.warn('No ID token returned to validate');
     }
   }
 

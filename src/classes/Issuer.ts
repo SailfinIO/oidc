@@ -1,4 +1,4 @@
-// src/clients/Issuer.ts
+// src/classes/Issuer.ts
 
 import { IHttp, ICache, IIssuer, ILogger, ClientMetadata } from '../interfaces';
 import { ClientError } from '../errors/ClientError';

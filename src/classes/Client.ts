@@ -1,4 +1,4 @@
-// src/clients/Client.ts
+// src/classes/Client.ts
 
 import { Auth } from './Auth';
 import { UserInfo } from './UserInfo';

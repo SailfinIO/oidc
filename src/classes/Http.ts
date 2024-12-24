@@ -5,7 +5,7 @@
  * It uses the built-in Node.js `http` and `https` libraries by default, but can be configured
  * with a custom HTTP library.
  *
- * @module src/clients/Http
+ * @module src/classes/Http
  */
 
 import { URL } from 'url';

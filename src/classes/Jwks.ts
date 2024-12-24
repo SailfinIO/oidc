@@ -3,7 +3,7 @@
  * Provides a client for managing and retrieving JSON Web Keys (JWKs) from a JWKS URI.
  * This class includes caching, validation, and efficient key lookup by Key ID (kid).
  *
- * @module src/clients/Jwks
+ * @module src/classes/Jwks
  */
 
 import { InMemoryCache } from '../cache/InMemoryCache';
