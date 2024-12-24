@@ -1,3 +1,9 @@
+## [0.0.5-beta.7](https://github.com/SailfinIO/oidc/compare/v0.0.5-beta.6...v0.0.5-beta.7) (2024-12-24)
+
+### Bug Fixes
+
+* testing for client ([dc90e7d](https://github.com/SailfinIO/oidc/commit/dc90e7db2d337382046ede664206affbf1e6d8d9))
+
 ## [0.0.5-beta.6](https://github.com/SailfinIO/oidc/compare/v0.0.5-beta.5...v0.0.5-beta.6) (2024-12-24)
 
 ### Bug Fixes
