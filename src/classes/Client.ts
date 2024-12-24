@@ -30,8 +30,6 @@ export class Client {
   private readonly httpClient: IHttp;
   private readonly issuer: IIssuer;
   private userInfoClient!: IUserInfo;
-
-  private initializationPromise: Promise<void>;
   private initialized: boolean = false;
 
   constructor(userConfig: Partial<IClientConfig>) {
@@ -68,9 +66,6 @@ export class Client {
     );
 
     this.validateConfig(this.config);
-
-    // Initialize automatically
-    this.initializationPromise = this.initializeInternal();
   }
 
   private async initializeInternal(): Promise<void> {
@@ -129,7 +124,7 @@ export class Client {
 
   private async ensureInitialized(): Promise<void> {
     if (!this.initialized) {
-      await this.initializationPromise;
+      await this.initializeInternal();
     }
   }
 
