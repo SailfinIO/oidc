@@ -5,25 +5,28 @@ import {
   JwtHeader,
   JwtPayload,
   ClientMetadata,
+  IClaimsValidator,
+  ISignatureVerifier,
+  IJwtValidator,
 } from '../interfaces';
 import { Jwks } from '.';
 import { ClaimsValidator } from './ClaimsValidator';
 import { SignatureVerifier } from './SignatureVerifier';
 import { base64UrlDecode } from '../utils/urlUtils';
 
-export class JwtValidator {
+export class JwtValidator implements IJwtValidator {
   private readonly jwks: IJwks;
   private readonly logger: ILogger;
-  private readonly claimsValidator: ClaimsValidator;
-  private readonly signatureVerifier: SignatureVerifier;
+  private readonly claimsValidator: IClaimsValidator;
+  private readonly signatureVerifier: ISignatureVerifier;
 
   constructor(
     logger: ILogger,
     client: ClientMetadata,
     clientId: string,
     jwks?: IJwks,
-    claimsValidator?: ClaimsValidator,
-    signatureVerifier?: SignatureVerifier,
+    claimsValidator?: IClaimsValidator,
+    signatureVerifier?: ISignatureVerifier,
   ) {
     this.logger = logger;
     this.jwks = jwks || new Jwks(client.jwks_uri, logger);

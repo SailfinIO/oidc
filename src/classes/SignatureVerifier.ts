@@ -9,7 +9,7 @@
 
 import { constants, verify } from 'crypto';
 import { ClientError } from '../errors/ClientError';
-import { IJwks, Jwk, JwtHeader } from '../interfaces';
+import { IJwks, ISignatureVerifier, Jwk, JwtHeader } from '../interfaces';
 import { Algorithm } from '../enums';
 import {
   base64UrlDecode,
@@ -67,7 +67,7 @@ const ALGORITHM_HASH_MAP: Record<Algorithm, HashAlgorithm> = {
  *
  * @class SignatureVerifier
  */
-export class SignatureVerifier {
+export class SignatureVerifier implements ISignatureVerifier {
   /**
    * Creates an instance of `SignatureVerifier`.
    *

@@ -7,7 +7,7 @@
  */
 
 import { ClientError } from '../errors/ClientError';
-import { JwtPayload } from '../interfaces';
+import { JwtPayload, IClaimsValidator } from '../interfaces';
 
 /**
  * Validates claims in a JWT payload.
@@ -18,7 +18,7 @@ import { JwtPayload } from '../interfaces';
  *
  * @class ClaimsValidator
  */
-export class ClaimsValidator {
+export class ClaimsValidator implements IClaimsValidator {
   /**
    * The expected issuer of the JWT.
    *

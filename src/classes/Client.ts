@@ -13,6 +13,7 @@ import {
   IUserInfo,
   IUser,
   IIssuer,
+  IJwtValidator,
   IToken,
   IHttp,
   IAuth,
@@ -28,8 +29,9 @@ export class Client {
   private readonly tokenClient: IToken;
   private readonly logger: ILogger;
   private readonly httpClient: IHttp;
+  private readonly issuer: IIssuer;
+  private readonly jwtValidator: IJwtValidator;
   private userInfoClient: IUserInfo;
-  private issuer: IIssuer;
 
   private initialized: boolean = false;
 
@@ -37,7 +39,7 @@ export class Client {
 
   constructor(config: IClientConfig) {
     this.config = config;
-    const envLogLevel = process.env.OIDC_LOG_LEVEL as LogLevel;
+    const envLogLevel = process.env.OIDC_LOG_LEVEL as LogLevel; // Allow overriding log level via env var. This must be one of:  'debug', 'info', 'warn', 'error',
     this.logger =
       config.logging?.logger ||
       new Logger(
@@ -60,6 +62,7 @@ export class Client {
       this.httpClient,
       this.tokenClient,
     );
+
     this.validateConfig(config);
   }
 

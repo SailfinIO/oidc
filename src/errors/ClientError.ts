@@ -53,6 +53,7 @@ export class ClientError extends Error {
     this.name = this.constructor.name;
     this.code = code;
     this.context = context;
+    Object.setPrototypeOf(this, new.target.prototype);
 
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, this.constructor);
