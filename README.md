@@ -18,6 +18,26 @@ This library is built for enterprise-grade TypeScript and Node.js applications, 
 
 **This package it under active development and is not yet ready for production use. Please use with caution and report any issues or bugs you encounter.**
 
+## Table of Contents
+
+- [Features](#features)
+- [Installation](#installation)
+- [Usage](#usage)
+  - [Basic Setup](#basic-setup)
+  - [Token Management](#token-management)
+  - [Device Authorization Flow](#device-authorization-flow)
+  - [Token Introspection and Revocation](#token-introspection-and-revocation)
+  - [Logging](#logging)
+- [Configuration Options](#configuration-options)
+- [API Reference](#api-reference)
+  - [Methods](#methods)
+- [Error Handling](#error-handling)
+- [Testing](#testing)
+  - [Unit Tests](#unit-tests)
+- [Contributing](#contributing)
+- [Support](#support)
+- [License](#license)
+
 ## Features
 
 - **Authorization URL Generation**: Supports PKCE and state validation.
@@ -49,51 +69,45 @@ yarn add @sailfin/oidc
 Here's an example of initializing and using the `OIDCClient`:
 
 ```typescript
-import { OIDCClient } from '@sailfin/oidc';
+import { Client, Scopes } from '@sailfin/oidc';
 
-const oidcClient = new OIDCClient({
+const oidcClient = new Client({
   clientId: 'your-client-id',
-  clientSecret: 'your-client-secret',
-  discoveryUrl:
-    'https://your-oidc-provider.com/.well-known/openid-configuration',
-  redirectUri: 'https://your-redirect-uri.com',
-  scopes: ['openid', 'profile', 'email'],
-  grantType: 'authorization_code',
+  redirectUri: 'https://your-app/callback',
+  discoveryUrl: 'https://issuer.com/.well-known/openid-configuration',
+  scopes: [Scopes.OpenId, Scopes.Profile, Scopes.Email],
 });
 
 (async () => {
-  // Initialize the OIDC client
-  await oidcClient.initialize();
-
-  // Generate an authorization URL
-  const { url } = await oidcClient.getAuthorizationUrl();
+  // Generate the authorization URL
+  const { url, state } = await oidcClient.getAuthorizationUrl();
   console.log(`Visit this URL to authenticate: ${url}`);
 
-  // Handle redirect after authentication (use your framework's routing to get the code and state)
-  await oidcClient.handleRedirect(
-    'your-authorization-code',
-    'your-returned-state',
-  );
+  // Handle the redirect with the authorization code
+  await oidcClient.handleRedirect('auth-code', state);
 
-  // Retrieve user information
+  // Fetch user info
   const userInfo = await oidcClient.getUserInfo();
-  console.log(userInfo);
+  console.log('User Info:', userInfo);
 })();
 ```
 
 ### Token Management
 
-Refresh and retrieve tokens with ease:
+Retrieve, introspect, or revoke tokens with ease:
 
 ```typescript
+// Get the access token
 const accessToken = await oidcClient.getAccessToken();
-console.log(`Access Token: ${accessToken}`);
+console.log('Access Token:', accessToken);
 
-const tokens = oidcClient.getTokens();
-console.log('Tokens:', tokens);
+// Introspect a token
+const tokenInfo = await oidcClient.introspectToken(accessToken);
+console.log('Token Introspection:', tokenInfo);
 
-// Clear stored tokens
-oidcClient.clearTokens();
+// Revoke a refresh token
+await oidcClient.revokeToken('refresh-token', 'refresh_token');
+console.log('Refresh token revoked.');
 ```
 
 ### Device Authorization Flow
@@ -101,17 +115,14 @@ oidcClient.clearTokens();
 Supports device code authentication:
 
 ```typescript
-const deviceAuthorization = await oidcClient.startDeviceAuthorization();
-console.log(
-  'Enter the code on this page:',
-  deviceAuthorization.verification_uri,
-);
-console.log('Your user code:', deviceAuthorization.user_code);
+const { device_code, user_code, verification_uri } =
+  await oidcClient.startDeviceAuthorization();
+
+console.log(`Visit ${verification_uri} and enter the code: ${user_code}`);
 
 // Poll for tokens
-await oidcClient.pollDeviceToken(deviceAuthorization.device_code);
-
-console.log('Device successfully authorized!');
+await oidcClient.pollDeviceToken(device_code);
+console.log('Device successfully authorized.');
 ```
 
 ### Token Introspection and Revocation
@@ -152,9 +163,9 @@ Below are the required and optional parameters for initializing the `OIDCClient`
 
 ### Methods
 
-- `initialize()` - Fetches discovery configuration and initializes the client.
 - `getAuthorizationUrl()` - Generates an authorization URL for user login.
-- `handleRedirect(code, state)` - Handles redirect after login for authorization code flow.
+- `handleRedirect(code, state)` - Processes the authorization code callback.
+- `handleRedirectForImplicitFlow(fragment)` - Processes the implicit flow callback.
 - `getUserInfo()` - Fetches user info from the userinfo endpoint.
 - `getAccessToken()` - Retrieves the current access token, refreshing it if necessary.
 - `clearTokens()` - Clears all stored tokens.
@@ -183,6 +194,16 @@ try {
 }
 ```
 
+## Testing
+
+### Unit Tests
+
+To run the unit tests, use the following command:
+
+```bash
+npm run test
+```
+
 ## Contributing
 
 Contributions are welcome! Please see the [CONTRIBUTING.md](CONTRIBUTING.md) file for guidelines.
@@ -194,7 +215,3 @@ For issues and feature requests, please [open an issue](https://github.com/sailf
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-
----
-
-Happy coding! 🎉

@@ -497,7 +497,7 @@ describe('TokenClient', () => {
 
     it('should successfully revoke a token with a token type hint', async () => {
       const token = 'token-to-revoke';
-      const tokenTypeHint = TokenTypeHint.REFRESH_TOKEN;
+      const tokenTypeHint = TokenTypeHint.RefreshToken;
 
       (mockHttpClient.post as jest.Mock).mockResolvedValue('{}'); // Return valid JSON
 

@@ -29,8 +29,9 @@ export class Client {
   private readonly logger: ILogger;
   private readonly httpClient: IHttp;
   private readonly issuer: IIssuer;
-  private userInfoClient: IUserInfo;
+  private userInfoClient!: IUserInfo;
 
+  private initializationPromise: Promise<void>;
   private initialized: boolean = false;
 
   constructor(userConfig: Partial<IClientConfig>) {
@@ -40,7 +41,7 @@ export class Client {
     // Validate that required fields are provided
     this.validateRequiredConfig(this.config);
 
-    const envLogLevel = process.env.OIDC_LOG_LEVEL as LogLevel; // Allow overriding log level via env var. e.g., OIDC_LOG_LEVEL=debug
+    const envLogLevel = process.env.OIDC_CLIENT_LOG_LEVEL as LogLevel;
 
     this.logger =
       this.config.logging?.logger ||
@@ -67,6 +68,29 @@ export class Client {
     );
 
     this.validateConfig(this.config);
+
+    // Initialize automatically
+    this.initializationPromise = this.initializeInternal();
+  }
+
+  private async initializeInternal(): Promise<void> {
+    try {
+      this.logger.debug('Initializing OIDC Client');
+      const client = await this.issuer.discover();
+      this.userInfoClient = new UserInfo(
+        this.tokenClient,
+        client,
+        this.httpClient,
+        this.logger,
+      );
+      this.initialized = true;
+      this.logger.info('OIDC Client initialized successfully');
+    } catch (error) {
+      this.logger.error('Failed to initialize OIDC Client', { error });
+      throw new ClientError('Initialization failed', 'INITIALIZATION_ERROR', {
+        originalError: error,
+      });
+    }
   }
 
   private validateRequiredConfig(config: IClientConfig): void {
@@ -103,25 +127,9 @@ export class Client {
     }
   }
 
-  public async initialize(): Promise<void> {
-    this.logger.debug('Initializing OIDC Client');
-    const client = await this.issuer.discover();
-    this.userInfoClient = new UserInfo(
-      this.tokenClient,
-      client,
-      this.httpClient,
-      this.logger,
-    );
-    this.initialized = true;
-    this.logger.info('OIDC Client initialized successfully');
-  }
-
-  private ensureInitialized() {
+  private async ensureInitialized(): Promise<void> {
     if (!this.initialized) {
-      throw new ClientError(
-        'OIDCClient not initialized. Call initialize() first.',
-        'NOT_INITIALIZED',
-      );
+      await this.initializationPromise;
     }
   }
 
@@ -135,7 +143,7 @@ export class Client {
    * @returns The authorization URL and the generated state.
    */
   public async getAuthorizationUrl(): Promise<{ url: string; state: string }> {
-    this.ensureInitialized();
+    await this.ensureInitialized();
     return this.auth.getAuthorizationUrl();
   }
 
@@ -149,7 +157,7 @@ export class Client {
     code: string,
     returnedState: string,
   ): Promise<void> {
-    this.ensureInitialized();
+    await this.ensureInitialized();
     await this.auth.handleRedirect(code, returnedState);
   }
 
@@ -159,7 +167,7 @@ export class Client {
    * @param fragment The URL fragment containing tokens.
    */
   public async handleRedirectForImplicitFlow(fragment: string): Promise<void> {
-    this.ensureInitialized();
+    await this.ensureInitialized();
     await this.auth.handleRedirectForImplicitFlow(fragment);
   }
 
@@ -168,7 +176,7 @@ export class Client {
    * @returns User information.
    */
   public async getUserInfo(): Promise<IUser> {
-    this.ensureInitialized();
+    await this.ensureInitialized();
     return this.userInfoClient.getUserInfo();
   }
 
@@ -180,7 +188,7 @@ export class Client {
   public async introspectToken(
     token: string,
   ): Promise<ITokenIntrospectionResponse> {
-    this.ensureInitialized();
+    await this.ensureInitialized();
     return this.tokenClient.introspectToken(token);
   }
 
@@ -193,7 +201,7 @@ export class Client {
     token: string,
     tokenTypeHint?: TokenTypeHint,
   ): Promise<void> {
-    this.ensureInitialized();
+    await this.ensureInitialized();
     return this.tokenClient.revokeToken(token, tokenTypeHint);
   }
 
@@ -208,7 +216,7 @@ export class Client {
     expires_in: number;
     interval: number;
   }> {
-    this.ensureInitialized();
+    await this.ensureInitialized();
     return this.auth.startDeviceAuthorization();
   }
 
@@ -223,7 +231,7 @@ export class Client {
     interval: number = 5,
     timeout?: number,
   ): Promise<void> {
-    this.ensureInitialized();
+    await this.ensureInitialized();
     return this.auth.pollDeviceToken(device_code, interval, timeout);
   }
 
@@ -232,7 +240,7 @@ export class Client {
    * @returns The access token or null if not available.
    */
   public async getAccessToken(): Promise<string | null> {
-    this.ensureInitialized();
+    await this.ensureInitialized();
     return this.tokenClient.getAccessToken();
   }
 
@@ -240,16 +248,16 @@ export class Client {
    * Retrieves all stored tokens.
    * @returns The token response or null if no tokens are stored.
    */
-  public getTokens(): ITokenResponse | null {
-    this.ensureInitialized();
+  public async getTokens(): Promise<ITokenResponse | null> {
+    await this.ensureInitialized();
     return this.tokenClient.getTokens();
   }
 
   /**
    * Clears all stored tokens.
    */
-  public clearTokens(): void {
-    this.ensureInitialized();
+  public async clearTokens(): Promise<void> {
+    await this.ensureInitialized();
     this.tokenClient.clearTokens();
   }
 
@@ -259,7 +267,7 @@ export class Client {
    * @returns The logout URL to which the user should be redirected.
    */
   public async logout(idTokenHint?: string): Promise<string> {
-    this.ensureInitialized();
+    await this.ensureInitialized();
     const logoutUrl = await this.auth.getLogoutUrl(idTokenHint);
     this.logger.info('Logout initiated', { logoutUrl });
     return logoutUrl;

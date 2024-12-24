@@ -7,10 +7,10 @@ export enum TokenTypeHint {
   /**
    * Access Token Hint
    */
-  ACCESS_TOKEN = 'access_token',
+  AccessToken = 'access_token',
 
   /**
    * Refresh Token Hint
    */
-  REFRESH_TOKEN = 'refresh_token',
+  RefreshToken = 'refresh_token',
 }
