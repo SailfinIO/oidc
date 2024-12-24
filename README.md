@@ -149,15 +149,38 @@ oidcClient.setLogLevel('debug');
 
 Below are the required and optional parameters for initializing the `OIDCClient`:
 
-| Parameter      | Type       | Required | Description                                        |
-| -------------- | ---------- | -------- | -------------------------------------------------- |
-| `clientId`     | `string`   | Yes      | Client ID registered with the OIDC provider.       |
-| `clientSecret` | `string`   | No       | Client secret (not needed for public clients).     |
-| `discoveryUrl` | `string`   | Yes      | URL to the OIDC provider's discovery endpoint.     |
-| `redirectUri`  | `string`   | Yes      | Redirect URI registered with the OIDC provider.    |
-| `scopes`       | `string[]` | Yes      | List of scopes for the OIDC flow (e.g., `openid`). |
-| `grantType`    | `string`   | No       | Grant type (default: `authorization_code`).        |
-| `logLevel`     | `string`   | No       | Logging level (`info`, `debug`, `warn`, `error`).  |
+| Parameter      | Type        | Required | Description                                        |
+| -------------- | ----------- | -------- | -------------------------------------------------- |
+| `clientId`     | `string`    | Yes      | Client ID registered with the OIDC provider.       |
+| `clientSecret` | `string`    | No       | Client secret (not needed for public clients).     |
+| `discoveryUrl` | `string`    | Yes      | URL to the OIDC provider's discovery endpoint.     |
+| `redirectUri`  | `string`    | Yes      | Redirect URI registered with the OIDC provider.    |
+| `scopes`       | `Scopes[]`  | Yes      | List of scopes for the OIDC flow (e.g., `openid`). |
+| `grantType`    | `GrantType` | No       | Grant type (default: `authorization_code`).        |
+| `logLevel`     | `LogLevel`  | No       | Logging level (`info`, `debug`, `warn`, `error`).  |
+
+`Scopes`, `GrantType`, and `LogLevel` are enums provided by the library. This is a non-exhaustive list of available values:
+
+```typescript
+enum Scopes {
+  OpenId = 'openid',
+  Profile = 'profile',
+  Email = 'email',
+}
+
+enum GrantType {
+  AuthorizationCode = 'authorization_code',
+  ClientCredentials = 'client_credentials',
+  DeviceCode = 'urn:ietf:params:oauth:grant-type:device_code',
+}
+
+enum LogLevel {
+  Info = 'info',
+  Debug = 'debug',
+  Warn = 'warn',
+  Error = 'error',
+}
+```
 
 ## API Reference
 
