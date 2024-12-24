@@ -1,13 +1,13 @@
-// src/clients/JwksClient.test.ts
-import { JwksClient } from './JwksClient'; // Adjust the import path as necessary
-import { ILogger, ICache, IHttpClient, Jwk, JwksResponse } from '../interfaces';
+// src/clients/Jwks.test.ts
+import { Jwks } from './Jwks'; // Adjust the import path as necessary
+import { ILogger, ICache, IHttp, Jwk, JwksResponse } from '../interfaces';
 import { ClientError } from '../errors/ClientError';
 
-describe('JwksClient', () => {
-  let client: JwksClient;
+describe('Jwks', () => {
+  let client: Jwks;
   let logger: ILogger;
   let cache: ICache<Jwk[]>;
-  let httpClient: IHttpClient;
+  let httpClient: IHttp;
 
   const jwksUri = 'https://example.com/.well-known/jwks.json';
   const sampleJWKS = {
@@ -63,27 +63,25 @@ describe('JwksClient', () => {
     // Default mock for httpClient.get to resolve with sampleJWKS
     (httpClient.get as jest.Mock).mockResolvedValue(JSON.stringify(sampleJWKS));
 
-    client = new JwksClient(jwksUri, logger, httpClient, cache, 3600000);
+    client = new Jwks(jwksUri, logger, httpClient, cache, 3600000);
   });
 
   describe('Constructor', () => {
     it('should initialize with provided dependencies', () => {
-      expect(client).toBeInstanceOf(JwksClient);
+      expect(client).toBeInstanceOf(Jwks);
       expect(logger).toBeDefined();
       expect(httpClient).toBeDefined();
       expect(cache).toBeDefined();
     });
 
     it('should throw ClientError if jwksUri is invalid', () => {
-      expect(() => new JwksClient('', logger)).toThrowError(ClientError);
-      expect(() => new JwksClient('', logger)).toThrow(
-        'Invalid JWKS URI provided',
-      );
+      expect(() => new Jwks('', logger)).toThrowError(ClientError);
+      expect(() => new Jwks('', logger)).toThrow('Invalid JWKS URI provided');
     });
 
     it('should use default HTTPClient and cache if not provided', () => {
-      const newClient = new JwksClient(jwksUri, logger);
-      expect(newClient).toBeInstanceOf(JwksClient);
+      const newClient = new Jwks(jwksUri, logger);
+      expect(newClient).toBeInstanceOf(Jwks);
       // Further checks can be added to ensure defaults are used
     });
   });

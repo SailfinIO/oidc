@@ -1,37 +1,37 @@
-// src/clients/UserInfoClient.ts
+// src/clients/UserInfo.ts
 
 import {
-  IUserInfoClient,
-  IDiscoveryConfig,
   IUserInfo,
-  IHttpClient,
+  IUser,
+  IHttp,
   ILogger,
-  ITokenClient,
+  IToken,
+  ClientMetadata,
 } from '../interfaces';
 import { ClientError } from '../errors/ClientError';
 
-export class UserInfoClient implements IUserInfoClient {
-  private tokenClient: ITokenClient;
-  private discoveryConfig: IDiscoveryConfig;
-  private httpClient: IHttpClient;
+export class UserInfo implements IUserInfo {
+  private tokenClient: IToken;
+  private client: ClientMetadata;
+  private httpClient: IHttp;
   private logger: ILogger;
 
   /**
-   * Creates an instance of UserInfoClient.
+   * Creates an instance of UserInfo.
    *
-   * @param {ITokenClient} tokenClient - The token client to retrieve access tokens.
-   * @param {IDiscoveryConfig} discoveryConfig - The discovery configuration containing the userinfo endpoint.
-   * @param {IHttpClient} httpClient - The HTTP client for making requests.
+   * @param {IToken} tokenClient - The token client to retrieve access tokens.
+   * @param {ClientMetadata} client - The discovery configuration containing the userinfo endpoint.
+   * @param {IHttp} httpClient - The HTTP client for making requests.
    * @param {ILogger} logger - Logger instance for logging operations and errors.
    */
   constructor(
-    tokenClient: ITokenClient,
-    discoveryConfig: IDiscoveryConfig,
-    httpClient: IHttpClient,
+    tokenClient: IToken,
+    client: ClientMetadata,
+    httpClient: IHttp,
     logger: ILogger,
   ) {
     this.tokenClient = tokenClient;
-    this.discoveryConfig = discoveryConfig;
+    this.client = client;
     this.httpClient = httpClient;
     this.logger = logger;
   }
@@ -39,10 +39,10 @@ export class UserInfoClient implements IUserInfoClient {
   /**
    * Retrieves user information from the UserInfo endpoint.
    *
-   * @returns {Promise<IUserInfo>} The user information.
+   * @returns {Promise<IUser>} The user information.
    * @throws {ClientError} If fetching user info fails or no valid access token is available.
    */
-  public async getUserInfo(): Promise<IUserInfo> {
+  public async getUserInfo(): Promise<IUser> {
     const accessToken = await this.tokenClient.getAccessToken();
     if (!accessToken) {
       this.logger.warn(
@@ -54,7 +54,7 @@ export class UserInfoClient implements IUserInfoClient {
       );
     }
 
-    const userInfoEndpoint = this.discoveryConfig.userinfo_endpoint;
+    const userInfoEndpoint = this.client.userinfo_endpoint;
     const headers = {
       Authorization: `Bearer ${accessToken}`,
     };
@@ -63,7 +63,7 @@ export class UserInfoClient implements IUserInfoClient {
 
     try {
       const response = await this.httpClient.get(userInfoEndpoint, headers);
-      let userInfo: IUserInfo;
+      let userInfo: IUser;
       try {
         userInfo = JSON.parse(response);
       } catch (parseError) {

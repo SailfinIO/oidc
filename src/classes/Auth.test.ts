@@ -1,34 +1,35 @@
-// src/clients/AuthClient.test.ts
+// src/clients/Auth.test.ts
 
 jest.mock('../utils', () => ({
   ...jest.requireActual('../utils'),
   sleep: jest.fn(), // Mock the sleep function
 }));
 
-import { AuthClient } from './AuthClient';
-import { TokenClient } from './TokenClient';
+import { Auth } from './Auth';
+import { Token } from './Token';
 import {
-  IDiscoveryClient,
-  IDiscoveryConfig,
+  IIssuer,
+  ClientMetadata,
   IClientConfig,
   ILogger,
-  IHttpClient,
+  IHttp,
   ITokenResponse,
-  ITokenClient,
+  IToken,
+  IAuth,
 } from '../interfaces';
-import { GrantType } from '../enums/GrantType';
 import { ClientError } from '../errors/ClientError';
 import { buildLogoutUrl, sleep } from '../utils';
+import { PkceMethod, Scopes, GrantType } from '../enums';
 
-describe('AuthClient', () => {
-  let mockDiscoveryClient: jest.Mocked<IDiscoveryClient>;
-  let mockHttpClient: jest.Mocked<IHttpClient>;
+describe('Auth', () => {
+  let mockIssuer: jest.Mocked<IIssuer>;
+  let mockHttpClient: jest.Mocked<IHttp>;
   let mockLogger: jest.Mocked<ILogger>;
-  let mockTokenClient: jest.Mocked<ITokenClient>;
-  let authClient: AuthClient;
+  let mockTokenClient: jest.Mocked<IToken>;
+  let auth: IAuth;
   let config: IClientConfig;
 
-  const mockDiscoveryConfig: IDiscoveryConfig = {
+  const mockClientMetadata: Partial<ClientMetadata> = {
     issuer: 'https://example.com/',
     authorization_endpoint: 'https://example.com/oauth2/authorize',
     token_endpoint: 'https://example.com/oauth2/token',
@@ -60,8 +61,8 @@ describe('AuthClient', () => {
       trace: jest.fn(),
     };
 
-    mockDiscoveryClient = {
-      getDiscoveryConfig: jest.fn().mockResolvedValue(mockDiscoveryConfig),
+    mockIssuer = {
+      discoverClient: jest.fn().mockResolvedValue(mockClientMetadata),
     };
 
     mockTokenClient = {
@@ -76,25 +77,25 @@ describe('AuthClient', () => {
 
     // Mock TokenClient methods if necessary
     jest
-      .spyOn(TokenClient.prototype, 'setTokens')
+      .spyOn(Token.prototype, 'setTokens')
       .mockImplementation(mockTokenClient.setTokens);
     jest
-      .spyOn(TokenClient.prototype, 'getTokens')
+      .spyOn(Token.prototype, 'getTokens')
       .mockImplementation(mockTokenClient.getTokens);
     jest
-      .spyOn(TokenClient.prototype, 'getAccessToken')
+      .spyOn(Token.prototype, 'getAccessToken')
       .mockImplementation(mockTokenClient.getAccessToken);
     jest
-      .spyOn(TokenClient.prototype, 'refreshAccessToken')
+      .spyOn(Token.prototype, 'refreshAccessToken')
       .mockImplementation(mockTokenClient.refreshAccessToken);
     jest
-      .spyOn(TokenClient.prototype, 'clearTokens')
+      .spyOn(Token.prototype, 'clearTokens')
       .mockImplementation(mockTokenClient.clearTokens);
     jest
-      .spyOn(TokenClient.prototype, 'introspectToken')
+      .spyOn(Token.prototype, 'introspectToken')
       .mockImplementation(mockTokenClient.introspectToken);
     jest
-      .spyOn(TokenClient.prototype, 'revokeToken')
+      .spyOn(Token.prototype, 'revokeToken')
       .mockImplementation(mockTokenClient.revokeToken);
   });
 
@@ -112,30 +113,25 @@ describe('AuthClient', () => {
     GrantType.JWTBearer,
     GrantType.SAML2Bearer,
     GrantType.Custom,
-  ])('AuthClient with GrantType: %s', (grantType) => {
+  ])('auth with GrantType: %s', (grantType) => {
     beforeEach(() => {
       config = {
         clientId: 'test-client-id',
         redirectUri: 'https://example.com/callback',
-        scopes: ['openid', 'profile'],
+        scopes: [Scopes.OpenId, Scopes.Profile],
         discoveryUrl: 'https://example.com/.well-known/openid-configuration',
         grantType,
         pkce: grantType === GrantType.AuthorizationCode,
-        pkceMethod: 'S256',
+        pkceMethod: PkceMethod.S256,
         postLogoutRedirectUri: 'https://example.com/logout-callback', // Ensure this is set if required
         // Add other necessary config fields if required
       };
-      authClient = new AuthClient(
-        config,
-        mockLogger,
-        mockDiscoveryClient,
-        mockHttpClient,
-      );
+      auth = new Auth(config, mockLogger, mockIssuer, mockHttpClient);
     });
 
     describe('constructor', () => {
-      it('should create an instance of AuthClient', () => {
-        expect(authClient).toBeInstanceOf(AuthClient);
+      it('should create an instance of Auth', () => {
+        expect(auth).toBeInstanceOf(Auth);
       });
     });
 
@@ -148,13 +144,11 @@ describe('AuthClient', () => {
           const state = 'test-state';
           const nonce = 'test-nonce';
 
-          const result = await authClient.getAuthorizationUrl(state, nonce);
+          const result = await auth.getAuthorizationUrl(state, nonce);
 
-          expect(mockDiscoveryClient.getDiscoveryConfig).toHaveBeenCalledTimes(
-            1,
-          );
+          expect(mockIssuer.discoverClient).toHaveBeenCalledTimes(1);
           expect(result.url).toContain(
-            mockDiscoveryConfig.authorization_endpoint,
+            mockClientMetadata.authorization_endpoint,
           );
           if (grantType === GrantType.AuthorizationCode && config.pkce) {
             expect(result.codeVerifier).toBeDefined();
@@ -168,7 +162,7 @@ describe('AuthClient', () => {
         });
       } else {
         it('should throw ClientError if grant type does not support authorization URLs', async () => {
-          await expect(authClient.getAuthorizationUrl('state')).rejects.toThrow(
+          await expect(auth.getAuthorizationUrl('state')).rejects.toThrow(
             ClientError,
           );
           expect(mockLogger.debug).not.toHaveBeenCalledWith(
@@ -200,7 +194,7 @@ describe('AuthClient', () => {
         );
 
         if (grantType === GrantType.Password) {
-          await authClient.exchangeCodeForToken(
+          await auth.exchangeCodeForToken(
             code,
             codeVerifier,
             username,
@@ -213,14 +207,14 @@ describe('AuthClient', () => {
           grantType === GrantType.SAML2Bearer ||
           grantType === GrantType.Custom
         ) {
-          await authClient.exchangeCodeForToken(code, codeVerifier);
+          await auth.exchangeCodeForToken(code, codeVerifier);
         } else {
-          await authClient.exchangeCodeForToken(code, codeVerifier);
+          await auth.exchangeCodeForToken(code, codeVerifier);
         }
 
-        expect(mockDiscoveryClient.getDiscoveryConfig).toHaveBeenCalledTimes(1);
+        expect(mockIssuer.discoverClient).toHaveBeenCalledTimes(1);
         expect(mockHttpClient.post).toHaveBeenCalledWith(
-          mockDiscoveryConfig.token_endpoint,
+          mockClientMetadata.token_endpoint,
           expect.any(String),
           { 'Content-Type': 'application/x-www-form-urlencoded' },
         );
@@ -254,7 +248,7 @@ describe('AuthClient', () => {
 
       if (grantType === GrantType.Password) {
         it('should throw error if username or password is missing for Password grant type', async () => {
-          await expect(authClient.exchangeCodeForToken('code')).rejects.toThrow(
+          await expect(auth.exchangeCodeForToken('code')).rejects.toThrow(
             ClientError,
           );
           expect(mockLogger.error).not.toHaveBeenCalled();
@@ -276,16 +270,11 @@ describe('AuthClient', () => {
         // Handle Password grant type requiring username and password
         if (grantType === GrantType.Password) {
           await expect(
-            authClient.exchangeCodeForToken(
-              code,
-              codeVerifier,
-              username,
-              password,
-            ),
+            auth.exchangeCodeForToken(code, codeVerifier, username, password),
           ).rejects.toThrow(ClientError);
         } else {
           await expect(
-            authClient.exchangeCodeForToken(code, codeVerifier),
+            auth.exchangeCodeForToken(code, codeVerifier),
           ).rejects.toThrow(ClientError);
         }
 
@@ -312,19 +301,17 @@ describe('AuthClient', () => {
             interval: 5,
           };
 
-          mockDiscoveryClient.getDiscoveryConfig.mockResolvedValueOnce({
-            ...mockDiscoveryConfig,
+          mockIssuer.discoverClient.mockResolvedValueOnce({
+            ...mockClientMetadata,
             device_authorization_endpoint: deviceEndpoint,
-          });
+          } as ClientMetadata);
           mockHttpClient.post.mockResolvedValueOnce(
             JSON.stringify(deviceResponse),
           );
 
-          const result = await authClient.startDeviceAuthorization();
+          const result = await auth.startDeviceAuthorization();
 
-          expect(mockDiscoveryClient.getDiscoveryConfig).toHaveBeenCalledTimes(
-            1,
-          );
+          expect(mockIssuer.discoverClient).toHaveBeenCalledTimes(1);
           expect(mockHttpClient.post).toHaveBeenCalledWith(
             deviceEndpoint,
             expect.stringContaining(`client_id=${config.clientId}`),
@@ -337,12 +324,12 @@ describe('AuthClient', () => {
         });
 
         it('should throw ClientError if device_authorization_endpoint is missing', async () => {
-          mockDiscoveryClient.getDiscoveryConfig.mockResolvedValueOnce({
-            ...mockDiscoveryConfig,
+          mockIssuer.discoverClient.mockResolvedValueOnce({
+            ...mockClientMetadata,
             device_authorization_endpoint: undefined,
-          });
+          } as ClientMetadata);
 
-          await expect(authClient.startDeviceAuthorization()).rejects.toThrow(
+          await expect(auth.startDeviceAuthorization()).rejects.toThrow(
             ClientError,
           );
 
@@ -354,14 +341,14 @@ describe('AuthClient', () => {
 
         it('should handle errors during device authorization initiation', async () => {
           const deviceEndpoint = 'https://example.com/oauth2/device_authorize';
-          mockDiscoveryClient.getDiscoveryConfig.mockResolvedValueOnce({
-            ...mockDiscoveryConfig,
+          mockIssuer.discoverClient.mockResolvedValueOnce({
+            ...mockClientMetadata,
             device_authorization_endpoint: deviceEndpoint,
-          });
+          } as ClientMetadata);
           const mockError = new Error('Device authorization failed');
           mockHttpClient.post.mockRejectedValueOnce(mockError);
 
-          await expect(authClient.startDeviceAuthorization()).rejects.toThrow(
+          await expect(auth.startDeviceAuthorization()).rejects.toThrow(
             ClientError,
           );
           expect(mockLogger.error).toHaveBeenCalledWith(
@@ -376,7 +363,7 @@ describe('AuthClient', () => {
         describe('Immediate Error Handling', () => {
           it('should throw ClientError immediately on unexpected error', async () => {
             const device_code = 'device-code';
-            const tokenEndpoint = mockDiscoveryConfig.token_endpoint;
+            const tokenEndpoint = mockClientMetadata.token_endpoint;
 
             // Create an Error object with context.body
             const mockError = Object.assign(new Error('Unexpected error'), {
@@ -387,7 +374,7 @@ describe('AuthClient', () => {
             mockHttpClient.post.mockRejectedValueOnce(mockError);
 
             await expect(
-              authClient.pollDeviceToken(device_code, 5, 10000),
+              auth.pollDeviceToken(device_code, 5, 10000),
             ).rejects.toThrow(ClientError);
 
             expect(mockHttpClient.post).toHaveBeenCalledTimes(1);
@@ -427,7 +414,7 @@ describe('AuthClient', () => {
 
           // it('should successfully poll and obtain tokens for DeviceCode grant', async () => {
           //   const device_code = 'device-code';
-          //   const tokenEndpoint = mockDiscoveryConfig.token_endpoint;
+          //   const tokenEndpoint = mockClientMetadata.token_endpoint;
 
           //   // Mock responses: first response is authorization_pending, then success
           //   mockHttpClient.post
@@ -448,7 +435,7 @@ describe('AuthClient', () => {
           //     );
 
           //   // Act
-          //   const pollPromise = authClient.pollDeviceToken(
+          //   const pollPromise = auth.pollDeviceToken(
           //     device_code,
           //     5,
           //     10000,
@@ -516,7 +503,7 @@ describe('AuthClient', () => {
           //     );
 
           //   // Act
-          //   const pollPromise = authClient.pollDeviceToken(
+          //   const pollPromise = auth.pollDeviceToken(
           //     device_code,
           //     5,
           //     20000,
@@ -571,7 +558,7 @@ describe('AuthClient', () => {
           //     }),
           //   );
 
-          //   const pollPromise = authClient.pollDeviceToken(
+          //   const pollPromise = auth.pollDeviceToken(
           //     device_code,
           //     5,
           //     15000,
@@ -620,7 +607,7 @@ describe('AuthClient', () => {
           //     );
 
           //   // Act
-          //   const pollPromise = authClient.pollDeviceToken(
+          //   const pollPromise = auth.pollDeviceToken(
           //     device_code,
           //     5,
           //     20000,
@@ -658,11 +645,7 @@ describe('AuthClient', () => {
             );
             mockHttpClient.post.mockRejectedValueOnce(unexpectedError);
 
-            const pollPromise = authClient.pollDeviceToken(
-              device_code,
-              5,
-              10000,
-            );
+            const pollPromise = auth.pollDeviceToken(device_code, 5, 10000);
 
             // First poll: unexpected error, method should throw immediately
             await expect(pollPromise).rejects.toThrow(ClientError);
@@ -683,17 +666,15 @@ describe('AuthClient', () => {
           const idTokenHint = 'id-token';
           const state = 'logout-state';
           const expectedLogoutUrl = buildLogoutUrl({
-            endSessionEndpoint: mockDiscoveryConfig.end_session_endpoint,
+            endSessionEndpoint: mockClientMetadata.end_session_endpoint,
             clientId: config.clientId,
             postLogoutRedirectUri: config.postLogoutRedirectUri,
             idTokenHint,
             state,
           });
 
-          const result = await authClient.getLogoutUrl(idTokenHint, state);
-          expect(mockDiscoveryClient.getDiscoveryConfig).toHaveBeenCalledTimes(
-            1,
-          );
+          const result = await auth.getLogoutUrl(idTokenHint, state);
+          expect(mockIssuer.discoverClient).toHaveBeenCalledTimes(1);
           expect(result).toBe(expectedLogoutUrl);
           expect(mockLogger.debug).toHaveBeenCalledWith(
             'Logout URL generated',
@@ -705,14 +686,14 @@ describe('AuthClient', () => {
 
         it('should generate logout URL without idTokenHint and state', async () => {
           const expectedLogoutUrl = buildLogoutUrl({
-            endSessionEndpoint: mockDiscoveryConfig.end_session_endpoint,
+            endSessionEndpoint: mockClientMetadata.end_session_endpoint,
             clientId: config.clientId,
             postLogoutRedirectUri: config.postLogoutRedirectUri,
             idTokenHint: undefined,
             state: undefined,
           });
 
-          const result = await authClient.getLogoutUrl();
+          const result = await auth.getLogoutUrl();
           expect(result).toBe(expectedLogoutUrl);
           expect(mockLogger.debug).toHaveBeenCalledWith(
             'Logout URL generated',
@@ -723,11 +704,11 @@ describe('AuthClient', () => {
         });
 
         it('should throw ClientError if end_session_endpoint is missing', async () => {
-          mockDiscoveryClient.getDiscoveryConfig.mockResolvedValueOnce({
-            ...mockDiscoveryConfig,
+          mockIssuer.discoverClient.mockResolvedValueOnce({
+            ...mockClientMetadata,
             end_session_endpoint: undefined,
-          });
-          await expect(authClient.getLogoutUrl()).rejects.toThrow(ClientError);
+          } as ClientMetadata);
+          await expect(auth.getLogoutUrl()).rejects.toThrow(ClientError);
           expect(mockLogger.error).toHaveBeenCalledWith(
             'Failed to generate logout URL',
             { error: expect.any(ClientError) },

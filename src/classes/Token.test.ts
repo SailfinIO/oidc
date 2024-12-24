@@ -1,22 +1,22 @@
-import { TokenClient } from './TokenClient';
+import { Token } from './Token';
 import {
-  ITokenClient,
+  IToken,
   ILogger,
   IClientConfig,
-  IDiscoveryClient,
-  IHttpClient,
+  IIssuer,
+  IHttp,
   ITokenResponse,
   ITokenIntrospectionResponse,
 } from '../interfaces';
 import { ClientError } from '../errors/ClientError';
-import { GrantType, TokenTypeHint } from '../enums';
+import { GrantType, Scopes, TokenTypeHint } from '../enums';
 
 describe('TokenClient', () => {
-  let tokenClient: ITokenClient;
+  let tokenClient: IToken;
   let mockLogger: ILogger;
   let mockConfig: IClientConfig;
-  let mockDiscoveryClient: IDiscoveryClient;
-  let mockHttpClient: IHttpClient;
+  let mockIssuer: IIssuer;
+  let mockHttpClient: IHttp;
 
   // Fixed timestamp for consistent testing (e.g., Jan 1, 2023 00:00:00 GMT)
   const fixedTimestamp = new Date('2023-01-01T00:00:00Z').getTime();
@@ -52,14 +52,14 @@ describe('TokenClient', () => {
     mockConfig = {
       clientId: 'test-client-id',
       redirectUri: 'https://example.com/callback',
-      scopes: ['openid', 'profile'],
+      scopes: [Scopes.OpenId, Scopes.Profile],
       discoveryUrl: 'https://example.com/.well-known/openid-configuration',
       tokenRefreshThreshold: 60,
       // No clientSecret provided
     };
 
-    mockDiscoveryClient = {
-      getDiscoveryConfig: jest.fn().mockResolvedValue({
+    mockIssuer = {
+      discoverClient: jest.fn().mockResolvedValue({
         token_endpoint: 'https://example.com/oauth/token',
         introspection_endpoint: 'https://example.com/oauth/introspect',
         revocation_endpoint: 'https://example.com/oauth/revoke',
@@ -79,12 +79,7 @@ describe('TokenClient', () => {
       patch: jest.fn(),
     };
 
-    tokenClient = new TokenClient(
-      mockLogger,
-      mockConfig,
-      mockDiscoveryClient,
-      mockHttpClient,
-    );
+    tokenClient = new Token(mockLogger, mockConfig, mockIssuer, mockHttpClient);
   });
 
   afterEach(() => {
@@ -428,7 +423,7 @@ describe('TokenClient', () => {
 
     it('should throw an error if introspection endpoint is unavailable', async () => {
       // Mock discovery config without introspection endpoint
-      (mockDiscoveryClient.getDiscoveryConfig as jest.Mock).mockResolvedValue({
+      (mockIssuer.discoverClient as jest.Mock).mockResolvedValue({
         token_endpoint: 'https://example.com/oauth/token',
         // introspection_endpoint is missing
         revocation_endpoint: 'https://example.com/oauth/revoke',
@@ -495,7 +490,7 @@ describe('TokenClient', () => {
 
     it('should throw an error if revocation endpoint is unavailable', async () => {
       // Mock discovery config without revocation endpoint
-      (mockDiscoveryClient.getDiscoveryConfig as jest.Mock).mockResolvedValue({
+      (mockIssuer.discoverClient as jest.Mock).mockResolvedValue({
         token_endpoint: 'https://example.com/oauth/token',
         introspection_endpoint: 'https://example.com/oauth/introspect',
         // revocation_endpoint is missing

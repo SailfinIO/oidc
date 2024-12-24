@@ -204,23 +204,3 @@ export interface Jwk {
    */
   y?: string;
 }
-
-/**
- * Represents a JSON Web Key Set (JWKS) response.
- *
- * The `JwksResponse` interface defines the structure of a JWKS response,
- * which contains an array of JSON Web Keys (JWK). JWKS is commonly used
- * in OAuth 2.0 and OpenID Connect to represent a set of keys that can be
- * used to verify the signatures of tokens.
- *
- * @interface JwksResponse
- */
-export interface JwksResponse {
-  /**
-   * An array of JSON Web Keys.
-   *
-   * @type {Jwk[]}
-   * @required
-   */
-  keys: Jwk[];
-}

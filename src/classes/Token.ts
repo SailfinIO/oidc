@@ -1,24 +1,24 @@
-// src/clients/TokenClient.ts
+// src/clients/Token.ts
 
 import {
   IClientConfig,
   ITokenResponse,
   ITokenIntrospectionResponse,
-  IDiscoveryClient,
+  IIssuer,
   ILogger,
-  IHttpClient,
-  ITokenClient,
+  IHttp,
+  IToken,
 } from '../interfaces';
 import { ClientError } from '../errors/ClientError';
 import { buildUrlEncodedBody } from '../utils';
 import { GrantType } from '../enums/GrantType';
 import { TokenTypeHint } from '../enums/TokenTypeHint';
 
-export class TokenClient implements ITokenClient {
+export class Token implements IToken {
   private readonly logger: ILogger;
-  private readonly httpClient: IHttpClient;
+  private readonly httpClient: IHttp;
   private readonly config: IClientConfig;
-  private readonly discoveryClient: IDiscoveryClient;
+  private readonly issuer: IIssuer;
 
   private accessToken: string | null = null;
   private refreshToken: string | null = null;
@@ -28,13 +28,13 @@ export class TokenClient implements ITokenClient {
   constructor(
     logger: ILogger,
     config: IClientConfig,
-    discoveryClient: IDiscoveryClient,
-    httpClient: IHttpClient,
+    issuer: IIssuer,
+    httpClient: IHttp,
   ) {
     this.logger = logger;
     this.config = config;
     this.httpClient = httpClient;
-    this.discoveryClient = discoveryClient;
+    this.issuer = issuer;
   }
 
   public setTokens(tokenResponse: ITokenResponse): void {
@@ -78,8 +78,8 @@ export class TokenClient implements ITokenClient {
       throw error;
     }
 
-    const discoveryConfig = await this.discoveryClient.getDiscoveryConfig();
-    const tokenEndpoint = discoveryConfig.token_endpoint;
+    const issuer = await this.issuer.discoverClient();
+    const tokenEndpoint = issuer.token_endpoint;
 
     const params: Record<string, string> = {
       grant_type: GrantType.RefreshToken,
@@ -137,8 +137,8 @@ export class TokenClient implements ITokenClient {
   public async introspectToken(
     token: string,
   ): Promise<ITokenIntrospectionResponse> {
-    const discoveryConfig = await this.discoveryClient.getDiscoveryConfig();
-    if (!discoveryConfig.introspection_endpoint) {
+    const issuer = await this.issuer.discoverClient();
+    if (!issuer.introspection_endpoint) {
       throw new ClientError(
         'No introspection endpoint available',
         'INTROSPECTION_UNSUPPORTED',
@@ -156,7 +156,7 @@ export class TokenClient implements ITokenClient {
 
     try {
       const introspectionResult = await this.performTokenRequest(
-        discoveryConfig.introspection_endpoint,
+        issuer.introspection_endpoint,
         params,
       );
       this.logger.debug('Token introspected successfully', {
@@ -182,8 +182,8 @@ export class TokenClient implements ITokenClient {
     token: string,
     tokenTypeHint?: TokenTypeHint,
   ): Promise<void> {
-    const discoveryConfig = await this.discoveryClient.getDiscoveryConfig();
-    if (!discoveryConfig.revocation_endpoint) {
+    const issuer = await this.issuer.discoverClient();
+    if (!issuer.revocation_endpoint) {
       throw new ClientError(
         'No revocation endpoint available',
         'REVOCATION_UNSUPPORTED',
@@ -204,10 +204,7 @@ export class TokenClient implements ITokenClient {
     }
 
     try {
-      await this.performTokenRequest(
-        discoveryConfig.revocation_endpoint,
-        params,
-      );
+      await this.performTokenRequest(issuer.revocation_endpoint, params);
       this.logger.info('Token revoked successfully');
       // If this is the currently stored token, consider clearing them
       if (token === this.accessToken || token === this.refreshToken) {

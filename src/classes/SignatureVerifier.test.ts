@@ -3,13 +3,13 @@
 import { constants, verify as cryptoVerify } from 'crypto';
 import { SignatureVerifier } from './SignatureVerifier';
 import { ClientError } from '../errors/ClientError';
-import { JwksClient } from '../clients';
-import { ecDsaSignatureFromRaw } from './derEncoding';
-import { ecJwkToPem } from './ecKeyConverter';
-import { rsaJwkToPem } from './rsaKeyConverter';
+import { Jwks } from '.';
+import { ecDsaSignatureFromRaw } from '../utils/derEncoding';
+import { ecJwkToPem } from '../utils/ecKeyConverter';
+import { rsaJwkToPem } from '../utils/rsaKeyConverter';
 import { Algorithm } from '../enums';
-import { IDiscoveryConfig, ILogger } from '../interfaces';
-import { base64UrlDecode } from './urlUtils';
+import { ClientMetadata, ILogger } from '../interfaces';
+import { base64UrlDecode } from '../utils/urlUtils';
 
 // Correctly mock individual modules
 jest.mock('crypto', () => ({
@@ -17,27 +17,27 @@ jest.mock('crypto', () => ({
   verify: jest.fn(),
 }));
 
-jest.mock('../clients/JwksClient'); // Assuming JwksClient is a class
+jest.mock('./Jwks');
 
-jest.mock('./rsaKeyConverter', () => ({
+jest.mock('../utils/rsaKeyConverter', () => ({
   rsaJwkToPem: jest.fn(),
 }));
 
-jest.mock('./ecKeyConverter', () => ({
+jest.mock('../utils/ecKeyConverter', () => ({
   ecJwkToPem: jest.fn(),
 }));
 
-jest.mock('./derEncoding', () => ({
+jest.mock('../utils/derEncoding', () => ({
   ecDsaSignatureFromRaw: jest.fn(),
 }));
 
-jest.mock('./urlUtils', () => ({
+jest.mock('../utils/urlUtils', () => ({
   base64UrlDecode: jest.fn((input: string) => Buffer.from(input)),
 }));
 
 describe('SignatureVerifier', () => {
-  let jwksClientMock: jest.Mocked<JwksClient>;
-  let discoveryConfig: IDiscoveryConfig;
+  let jwksMock: jest.Mocked<Jwks>;
+  let client: Partial<ClientMetadata>;
   let mockLogger: jest.Mocked<ILogger>;
   let verifier: SignatureVerifier;
 
@@ -50,7 +50,7 @@ describe('SignatureVerifier', () => {
       debug: jest.fn(),
     };
 
-    discoveryConfig = {
+    client = {
       issuer: 'https://auth.example.com',
       jwks_uri: 'https://auth.example.com/.well-known/jwks.json',
       authorization_endpoint: 'https://auth.example.com/authorize',
@@ -58,13 +58,10 @@ describe('SignatureVerifier', () => {
       userinfo_endpoint: 'https://auth.example.com/userinfo',
     };
 
-    // Instantiate the mocked JwksClient
-    jwksClientMock = new JwksClient(
-      discoveryConfig.jwks_uri,
-      mockLogger,
-    ) as jest.Mocked<JwksClient>;
+    // Instantiate the mocked Jwks
+    jwksMock = new Jwks(client.jwks_uri, mockLogger) as jest.Mocked<Jwks>;
 
-    verifier = new SignatureVerifier(jwksClientMock);
+    verifier = new SignatureVerifier(jwksMock);
 
     // Set up return values for mocked functions
     (ecJwkToPem as jest.Mock).mockReturnValue('mockEcPem');
@@ -99,14 +96,14 @@ describe('SignatureVerifier', () => {
 
   describe('Happy Paths', () => {
     it('should verify a valid RSA token', async () => {
-      jwksClientMock.getKey.mockResolvedValue(validRsaJwk);
+      jwksMock.getKey.mockResolvedValue(validRsaJwk);
       (cryptoVerify as jest.Mock).mockReturnValue(true);
 
       await expect(
         verifier.verify(validHeader, validIdToken),
       ).resolves.toBeUndefined();
 
-      expect(jwksClientMock.getKey).toHaveBeenCalledWith('validKid');
+      expect(jwksMock.getKey).toHaveBeenCalledWith('validKid');
       expect(rsaJwkToPem).toHaveBeenCalledWith('some-n', 'some-e');
       expect(cryptoVerify).toHaveBeenCalledWith(
         'sha256',
@@ -118,14 +115,14 @@ describe('SignatureVerifier', () => {
 
     it('should verify a valid EC token', async () => {
       const ecHeader = { kid: 'validKid', alg: 'ES256' as Algorithm };
-      jwksClientMock.getKey.mockResolvedValue(validEcJwk);
+      jwksMock.getKey.mockResolvedValue(validEcJwk);
       (cryptoVerify as jest.Mock).mockReturnValue(true);
 
       await expect(
         verifier.verify(ecHeader, validIdToken),
       ).resolves.toBeUndefined();
 
-      expect(jwksClientMock.getKey).toHaveBeenCalledWith('validKid');
+      expect(jwksMock.getKey).toHaveBeenCalledWith('validKid');
       expect(ecJwkToPem).toHaveBeenCalledWith('P-256', 'some-x', 'some-y');
       expect(ecDsaSignatureFromRaw).toHaveBeenCalledWith(
         Buffer.from('signature'),
@@ -166,7 +163,7 @@ describe('SignatureVerifier', () => {
     });
 
     it('should throw if token format is invalid (not 3 parts)', async () => {
-      jwksClientMock.getKey.mockResolvedValue(validRsaJwk);
+      jwksMock.getKey.mockResolvedValue(validRsaJwk);
       await expect(
         verifier.verify(validHeader, 'invalid.token'),
       ).rejects.toThrow(
@@ -183,7 +180,7 @@ describe('SignatureVerifier', () => {
         return Buffer.from(input);
       });
 
-      jwksClientMock.getKey.mockResolvedValue(validRsaJwk);
+      jwksMock.getKey.mockResolvedValue(validRsaJwk);
       await expect(
         verifier.verify(validHeader, 'header.payload.@@@'),
       ).rejects.toThrow(
@@ -196,7 +193,7 @@ describe('SignatureVerifier', () => {
 
     it('should throw if unsupported algorithm is given', async () => {
       const unsupportedHeader = { kid: 'validKid', alg: 'XYZ256' as Algorithm };
-      jwksClientMock.getKey.mockResolvedValue({ kty: 'RSA' } as any);
+      jwksMock.getKey.mockResolvedValue({ kty: 'RSA' } as any);
       await expect(
         verifier.verify(unsupportedHeader, validIdToken),
       ).rejects.toThrow(
@@ -209,7 +206,7 @@ describe('SignatureVerifier', () => {
 
     it('should throw if JWK kty does not match algorithm type', async () => {
       // alg RS256 expects RSA key but we give EC
-      jwksClientMock.getKey.mockResolvedValue(validEcJwk);
+      jwksMock.getKey.mockResolvedValue(validEcJwk);
       await expect(verifier.verify(validHeader, validIdToken)).rejects.toThrow(
         new ClientError(
           'JWK kty mismatch. Expected RSA for alg RS256',
@@ -221,7 +218,7 @@ describe('SignatureVerifier', () => {
     it('should throw if EC curve is incorrect for ES256', async () => {
       const incorrectCurveJwk = { ...validEcJwk, crv: 'P-384' };
       const ecHeader = { kid: 'validKid', alg: 'ES256' as Algorithm };
-      jwksClientMock.getKey.mockResolvedValue(incorrectCurveJwk);
+      jwksMock.getKey.mockResolvedValue(incorrectCurveJwk);
       await expect(verifier.verify(ecHeader, validIdToken)).rejects.toThrow(
         new ClientError(
           'Incorrect curve for ES256',
@@ -231,7 +228,7 @@ describe('SignatureVerifier', () => {
     });
 
     it('should throw if signature verification fails for RSA', async () => {
-      jwksClientMock.getKey.mockResolvedValue(validRsaJwk);
+      jwksMock.getKey.mockResolvedValue(validRsaJwk);
       (cryptoVerify as jest.Mock).mockReturnValue(false);
 
       await expect(verifier.verify(validHeader, validIdToken)).rejects.toThrow(
@@ -243,7 +240,7 @@ describe('SignatureVerifier', () => {
     });
 
     it('should throw if key type is unsupported', async () => {
-      jwksClientMock.getKey.mockResolvedValue({
+      jwksMock.getKey.mockResolvedValue({
         kty: 'foo',
         alg: 'RS256',
       } as any);
@@ -260,7 +257,7 @@ describe('SignatureVerifier', () => {
     it('should handle PS algorithms (RSA-PSS)', async () => {
       const psHeader = { kid: 'validKid', alg: 'PS256' as Algorithm };
       const psJwk = { ...validRsaJwk, alg: 'PS256' };
-      jwksClientMock.getKey.mockResolvedValue(psJwk);
+      jwksMock.getKey.mockResolvedValue(psJwk);
       (cryptoVerify as jest.Mock).mockReturnValue(true);
 
       await expect(
@@ -277,7 +274,7 @@ describe('SignatureVerifier', () => {
     it('should throw if HS algorithm is used (unsupported in current implementation)', async () => {
       const hsHeader = { kid: 'validKid', alg: 'HS256' as Algorithm };
       // For HS256, we expect 'oct' key type
-      jwksClientMock.getKey.mockResolvedValue({
+      jwksMock.getKey.mockResolvedValue({
         kty: 'oct',
         alg: 'HS256',
       } as any);

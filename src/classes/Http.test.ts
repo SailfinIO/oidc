@@ -1,6 +1,6 @@
-// src/utils/HTTPClient.test.ts
+// src/utils/Http.test.ts
 
-import { HTTPClient } from './HTTPClient';
+import { Http } from './Http';
 import { ILogger } from '../interfaces/ILogger';
 import { IncomingMessage, ClientRequest } from 'http';
 import { EventEmitter } from 'events';
@@ -9,7 +9,7 @@ import { ClientError } from '../errors/ClientError';
 describe('HTTPClient', () => {
   let mockHttpLib: jest.Mock;
   let mockLogger: jest.Mocked<ILogger>;
-  let httpClient: HTTPClient;
+  let httpClient: Http;
 
   beforeEach(() => {
     mockHttpLib = jest.fn();
@@ -20,7 +20,7 @@ describe('HTTPClient', () => {
       warn: jest.fn(),
       debug: jest.fn(),
     };
-    httpClient = new HTTPClient(mockLogger, mockHttpLib);
+    httpClient = new Http(mockLogger, mockHttpLib);
   });
 
   /**
@@ -294,7 +294,7 @@ describe('HTTPClient', () => {
 
   it('should use a custom IHttpLibrary when provided', async () => {
     const customHttpLib = jest.fn();
-    const customHttpClient = new HTTPClient(mockLogger, customHttpLib);
+    const customHttpClient = new Http(mockLogger, customHttpLib);
 
     const mockResponse = createMockIncomingMessage(
       200,

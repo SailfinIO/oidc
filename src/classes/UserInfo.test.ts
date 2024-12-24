@@ -1,25 +1,25 @@
 // src/clients/UserInfoClient.test.ts
 
-import { UserInfoClient } from './UserInfoClient';
+import { UserInfo } from './UserInfo';
 import {
-  IUserInfoClient,
-  IDiscoveryConfig,
   IUserInfo,
-  IHttpClient,
+  IUser,
+  IHttp,
   ILogger,
-  ITokenClient,
+  IToken,
+  ClientMetadata,
 } from '../interfaces';
 import { ClientError } from '../errors/ClientError';
 
 describe('UserInfoClient', () => {
-  let userInfoClient: IUserInfoClient;
-  let mockTokenClient: jest.Mocked<ITokenClient>;
-  let mockDiscoveryConfig: IDiscoveryConfig;
-  let mockHttpClient: jest.Mocked<IHttpClient>;
+  let userInfoClient: IUserInfo;
+  let mockTokenClient: jest.Mocked<IToken>;
+  let mockDiscoveryConfig: Partial<ClientMetadata>;
+  let mockHttpClient: jest.Mocked<IHttp>;
   let mockLogger: jest.Mocked<ILogger>;
 
   const userInfoEndpoint = 'https://example.com/userinfo';
-  const sampleUserInfo: IUserInfo = {
+  const sampleUserInfo: IUser = {
     sub: 'user123',
     name: 'John Doe',
     email: 'john.doe@example.com',
@@ -68,9 +68,9 @@ describe('UserInfoClient', () => {
       trace: jest.fn(),
     };
 
-    userInfoClient = new UserInfoClient(
+    userInfoClient = new UserInfo(
       mockTokenClient,
-      mockDiscoveryConfig,
+      mockDiscoveryConfig as ClientMetadata,
       mockHttpClient,
       mockLogger,
     );

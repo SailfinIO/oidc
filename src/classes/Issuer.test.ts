@@ -1,29 +1,22 @@
-// src/clients/DiscoveryClient.test.ts
+// src/clients/Issuer.test.ts
 
-import { DiscoveryClient } from './DiscoveryClient';
-import {
-  ILogger,
-  ICache,
-  IHttpClient,
-  IDiscoveryConfig,
-  IDiscoveryClient,
-} from '../interfaces';
+import { Issuer } from './Issuer';
+import { ILogger, ICache, IHttp, ClientMetadata, IIssuer } from '../interfaces';
 import { ClientError } from '../errors/ClientError';
 
-describe('DiscoveryClient', () => {
-  let discoveryClient: IDiscoveryClient;
+describe('Issuer', () => {
+  let issuer: IIssuer;
   let logger: ILogger;
-  let httpClient: IHttpClient;
-  let cache: ICache<IDiscoveryConfig>;
+  let httpClient: IHttp;
+  let cache: ICache<ClientMetadata>;
 
   const discoveryUrl = 'https://example.com/.well-known/openid-configuration';
-  const sampleConfig: IDiscoveryConfig = {
+  const sampleConfig: Partial<ClientMetadata> = {
     issuer: 'https://example.com/',
     authorization_endpoint: 'https://example.com/oauth2/authorize',
     token_endpoint: 'https://example.com/oauth2/token',
     userinfo_endpoint: 'https://example.com/userinfo',
     jwks_uri: 'https://example.com/.well-known/jwks.json',
-    // Add other fields as necessary
   };
 
   beforeEach(() => {
@@ -64,33 +57,23 @@ describe('DiscoveryClient', () => {
 
   describe('Constructor', () => {
     it('should initialize with provided dependencies', () => {
-      discoveryClient = new DiscoveryClient(
-        discoveryUrl,
-        logger,
-        httpClient,
-        cache,
-        3600000,
-      );
-      expect(discoveryClient).toBeInstanceOf(DiscoveryClient);
+      issuer = new Issuer(discoveryUrl, logger, httpClient, cache, 3600000);
+      expect(issuer).toBeInstanceOf(Issuer);
     });
 
     it('should throw ClientError if discoveryUrl is invalid', () => {
-      expect(() => new DiscoveryClient('', logger)).toThrowError(ClientError);
-      expect(() => new DiscoveryClient('', logger)).toThrow(
+      expect(() => new Issuer('', logger)).toThrowError(ClientError);
+      expect(() => new Issuer('', logger)).toThrow(
         'Invalid discovery URL provided',
       );
     });
 
     it('should use default HTTPClient and InMemoryCache if not provided', () => {
-      discoveryClient = new DiscoveryClient(discoveryUrl, logger);
-      expect(discoveryClient).toBeInstanceOf(DiscoveryClient);
+      issuer = new Issuer(discoveryUrl, logger);
+      expect(issuer).toBeInstanceOf(Issuer);
       // Further checks can be added if necessary
     });
   });
-
-  // src/clients/DiscoveryClient.test.ts
-
-  // ...
 
   describe('getDiscoveryConfig', () => {
     it('should fetch config and cache it if cache is empty', async () => {
@@ -99,16 +82,10 @@ describe('DiscoveryClient', () => {
         JSON.stringify(sampleConfig),
       );
 
-      discoveryClient = new DiscoveryClient(
-        discoveryUrl,
-        logger,
-        httpClient,
-        cache,
-        3600000,
-      );
+      issuer = new Issuer(discoveryUrl, logger, httpClient, cache, 3600000);
 
-      const config = await discoveryClient.getDiscoveryConfig();
-      expect(config).toStrictEqual(sampleConfig); // Changed from toBe to toStrictEqual
+      const config = await issuer.discoverClient();
+      expect(config).toStrictEqual(sampleConfig);
       expect(cache.get).toHaveBeenCalledWith('discoveryConfig');
       expect(logger.debug).toHaveBeenCalledWith(
         'Cache miss for discovery config.',
@@ -136,15 +113,9 @@ describe('DiscoveryClient', () => {
         JSON.stringify(sampleConfig),
       );
 
-      discoveryClient = new DiscoveryClient(
-        discoveryUrl,
-        logger,
-        httpClient,
-        cache,
-        3600000,
-      );
+      issuer = new Issuer(discoveryUrl, logger, httpClient, cache, 3600000);
 
-      const config = await discoveryClient.getDiscoveryConfig(true);
+      const config = await issuer.discoverClient(true);
       expect(config).toStrictEqual(sampleConfig); // Changed from toBe to toStrictEqual
 
       // Change expectation: cache.get should NOT be called when forceRefresh is true
@@ -167,18 +138,12 @@ describe('DiscoveryClient', () => {
         JSON.stringify(sampleConfig),
       );
 
-      discoveryClient = new DiscoveryClient(
-        discoveryUrl,
-        logger,
-        httpClient,
-        cache,
-        3600000,
-      );
+      issuer = new Issuer(discoveryUrl, logger, httpClient, cache, 3600000);
 
       // Initiate two simultaneous fetches
       const [config1, config2] = await Promise.all([
-        discoveryClient.getDiscoveryConfig(),
-        discoveryClient.getDiscoveryConfig(),
+        issuer.discoverClient(),
+        issuer.discoverClient(),
       ]);
 
       expect(config1).toStrictEqual(sampleConfig); // Changed from toBe to toStrictEqual
@@ -195,15 +160,9 @@ describe('DiscoveryClient', () => {
         new Error('Network failure'),
       );
 
-      discoveryClient = new DiscoveryClient(
-        discoveryUrl,
-        logger,
-        httpClient,
-        cache,
-        3600000,
-      );
+      issuer = new Issuer(discoveryUrl, logger, httpClient, cache, 3600000);
 
-      await expect(discoveryClient.getDiscoveryConfig()).rejects.toMatchObject({
+      await expect(issuer.discoverClient()).rejects.toMatchObject({
         message: 'Unable to fetch discovery configuration',
         code: 'DISCOVERY_ERROR',
         context: { originalError: expect.any(Error) },
@@ -222,15 +181,9 @@ describe('DiscoveryClient', () => {
       (cache.get as jest.Mock).mockReturnValue(undefined);
       (httpClient.get as jest.Mock).mockResolvedValue('invalid-json');
 
-      discoveryClient = new DiscoveryClient(
-        discoveryUrl,
-        logger,
-        httpClient,
-        cache,
-        3600000,
-      );
+      issuer = new Issuer(discoveryUrl, logger, httpClient, cache, 3600000);
 
-      await expect(discoveryClient.getDiscoveryConfig()).rejects.toMatchObject({
+      await expect(issuer.discoverClient()).rejects.toMatchObject({
         message: 'Unable to fetch discovery configuration',
         code: 'DISCOVERY_ERROR',
         context: { originalError: expect.any(SyntaxError) },
@@ -254,15 +207,9 @@ describe('DiscoveryClient', () => {
         JSON.stringify(invalidConfig),
       );
 
-      discoveryClient = new DiscoveryClient(
-        discoveryUrl,
-        logger,
-        httpClient,
-        cache,
-        3600000,
-      );
+      issuer = new Issuer(discoveryUrl, logger, httpClient, cache, 3600000);
 
-      await expect(discoveryClient.getDiscoveryConfig()).rejects.toMatchObject({
+      await expect(issuer.discoverClient()).rejects.toMatchObject({
         message: 'Invalid discovery configuration: Missing or invalid issuer.',
         code: 'INVALID_DISCOVERY_CONFIG',
       });
@@ -285,15 +232,9 @@ describe('DiscoveryClient', () => {
         JSON.stringify(invalidConfig),
       );
 
-      discoveryClient = new DiscoveryClient(
-        discoveryUrl,
-        logger,
-        httpClient,
-        cache,
-        3600000,
-      );
+      issuer = new Issuer(discoveryUrl, logger, httpClient, cache, 3600000);
 
-      await expect(discoveryClient.getDiscoveryConfig()).rejects.toMatchObject({
+      await expect(issuer.discoverClient()).rejects.toMatchObject({
         message:
           'Invalid discovery configuration: Missing or invalid jwks_uri.',
         code: 'INVALID_DISCOVERY_CONFIG',

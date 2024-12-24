@@ -1,11 +1,11 @@
 /**
  * @fileoverview
- * Implements the `IHttpClient` interface for making HTTP requests.
+ * Implements the `IHttp` interface for making HTTP requests.
  * This class supports all standard HTTP methods, allowing custom headers and body payloads.
  * It uses the built-in Node.js `http` and `https` libraries by default, but can be configured
  * with a custom HTTP library.
  *
- * @module src/clients/HTTPClient
+ * @module src/clients/Http
  */
 
 import { URL } from 'url';
@@ -19,7 +19,7 @@ import {
 } from 'https';
 import {
   ILogger,
-  IHttpClient,
+  IHttp,
   IHttpLibrary,
   MakeRequestOptions,
 } from '../interfaces';
@@ -29,12 +29,12 @@ import { ClientError } from '../errors/ClientError';
 /**
  * Represents an HTTP client for making HTTP requests.
  *
- * The `HTTPClient` class implements the `IHttpClient` interface and provides methods
+ * The `Http` class implements the `IHttp` interface and provides methods
  * for performing HTTP requests using standard or custom HTTP libraries.
  *
- * @class HTTPClient
+ * @class Http
  */
-export class HTTPClient implements IHttpClient {
+export class Http implements IHttp {
   /**
    * Logger instance for logging HTTP request details and errors.
    *
@@ -52,7 +52,7 @@ export class HTTPClient implements IHttpClient {
   private httpLib?: IHttpLibrary;
 
   /**
-   * Creates an instance of HTTPClient.
+   * Creates an instance of Http.
    *
    * @param {ILogger} logger - Logger instance for logging operations and errors.
    * @param {IHttpLibrary} [httpLib] - Optional custom HTTP library for making requests.

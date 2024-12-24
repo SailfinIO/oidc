@@ -1,10 +1,9 @@
 // src/interfaces/index.ts
 
 export * from './ILogger';
-export * from './IDiscoveryConfig';
 export * from './IClientConfig';
 export * from './ITokenResponse';
-export * from './IUserInfo';
+export * from './IUser';
 export * from './ISessionData';
 export * from './ISessionStore';
 export * from './UnknownObject';
@@ -15,8 +14,11 @@ export * from './ITokenIntrospectionResponse';
 export * from './Jwk';
 export * from './Jwt';
 export * from './ICache';
-export * from './IHttpClient';
+export * from './IHttp';
 export * from './MakeRequestOptions';
-export * from './IDiscoveryClient';
-export * from './ITokenClient';
-export * from './IUserInfoClient';
+export * from './IIssuer';
+export * from './IToken';
+export * from './IUserInfo';
+export * from './ClientMetadata';
+export * from './IAuthClient';
+export * from './IJwks';

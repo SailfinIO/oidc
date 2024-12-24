@@ -1,6 +1,6 @@
-// src/clients/AuthClient.ts
+// src/clients/Auth.ts
 
-import { TokenClient } from './TokenClient';
+import { Token } from './Token';
 import { ClientError } from '../errors/ClientError';
 import {
   buildAuthorizationUrl,
@@ -11,45 +11,43 @@ import {
 import {
   ILogoutUrlParams,
   ITokenResponse,
-  IHttpClient,
-  IDiscoveryClient,
+  IHttp,
+  IIssuer,
   ILogger,
-  ITokenClient,
+  IToken,
   IClientConfig,
+  ClientMetadata,
+  IAuth,
 } from '../interfaces';
 import { GrantType } from '../enums/GrantType';
 import { createHash, randomBytes } from 'crypto';
 import { Algorithm } from '../enums/Algorithm';
 import { BinaryToTextEncoding } from '../enums/BinaryToTextEncoding';
+import { PkceMethod } from '../enums';
 
-export class AuthClient {
+export class Auth implements IAuth {
   private readonly config: IClientConfig;
-  private readonly discoveryClient: IDiscoveryClient;
-  private readonly tokenClient: ITokenClient;
+  private readonly issuer: IIssuer;
+  private readonly tokenClient: IToken;
   private readonly logger: ILogger;
-  private readonly httpClient: IHttpClient;
+  private readonly httpClient: IHttp;
 
   private codeVerifier: string | null = null;
 
   constructor(
     config: IClientConfig,
     logger: ILogger,
-    discoveryClient: IDiscoveryClient,
-    httpClient: IHttpClient,
-    tokenClient?: ITokenClient,
+    issuer: IIssuer,
+    httpClient: IHttp,
+    tokenClient?: IToken,
   ) {
     this.config = config;
     this.logger = logger;
     this.httpClient = httpClient;
-    this.discoveryClient = discoveryClient;
+    this.issuer = issuer;
     this.tokenClient =
       tokenClient ||
-      new TokenClient(
-        this.logger,
-        this.config,
-        this.discoveryClient,
-        this.httpClient,
-      );
+      new Token(this.logger, this.config, this.issuer, this.httpClient);
   }
 
   /**
@@ -62,7 +60,7 @@ export class AuthClient {
     state: string,
     nonce?: string,
   ): Promise<{ url: string; codeVerifier?: string }> {
-    const discoveryConfig = await this.discoveryClient.getDiscoveryConfig();
+    const client: ClientMetadata = await this.issuer.discoverClient();
     this.ensureGrantTypeSupportsAuthUrl();
 
     const { codeVerifier, codeChallenge } =
@@ -72,7 +70,7 @@ export class AuthClient {
 
     const url = buildAuthorizationUrl(
       {
-        authorizationEndpoint: discoveryConfig.authorization_endpoint,
+        authorizationEndpoint: client.authorization_endpoint,
         clientId: this.config.clientId,
         redirectUri: this.config.redirectUri,
         responseType: this.config.responseType || 'code',
@@ -81,7 +79,7 @@ export class AuthClient {
         codeChallenge,
         codeChallengeMethod:
           codeChallenge && this.config.pkceMethod !== 'plain'
-            ? this.config.pkceMethod || Algorithm.SHA256
+            ? this.config.pkceMethod || PkceMethod.S256
             : undefined,
       },
       nonce ? { nonce } : undefined,
@@ -134,7 +132,7 @@ export class AuthClient {
    * @returns The generated code challenge string.
    */
   private generateCodeChallenge(verifier: string): string {
-    if (this.config.pkceMethod === 'plain') {
+    if (this.config.pkceMethod === PkceMethod.Plain) {
       return verifier;
     }
 
@@ -165,8 +163,8 @@ export class AuthClient {
     username?: string,
     password?: string,
   ): Promise<void> {
-    const discoveryConfig = await this.discoveryClient.getDiscoveryConfig();
-    const tokenEndpoint = discoveryConfig.token_endpoint;
+    const client: ClientMetadata = await this.issuer.discoverClient();
+    const tokenEndpoint = client.token_endpoint;
 
     const params = this.buildTokenRequestParams(
       code,
@@ -289,9 +287,8 @@ export class AuthClient {
       );
     }
 
-    const discoveryConfig = await this.discoveryClient.getDiscoveryConfig();
-    const deviceEndpoint = (discoveryConfig as any)
-      .device_authorization_endpoint;
+    const client: ClientMetadata = await this.issuer.discoverClient();
+    const deviceEndpoint = client.device_authorization_endpoint;
 
     if (!deviceEndpoint) {
       const error = new ClientError(
@@ -368,8 +365,8 @@ export class AuthClient {
       );
     }
 
-    const discoveryConfig = await this.discoveryClient.getDiscoveryConfig();
-    const tokenEndpoint = discoveryConfig.token_endpoint;
+    const client: ClientMetadata = await this.issuer.discoverClient();
+    const tokenEndpoint = client.token_endpoint;
     const startTime = Date.now();
 
     while (true) {
@@ -464,8 +461,8 @@ export class AuthClient {
     idTokenHint?: string,
     state?: string,
   ): Promise<string> {
-    const discoveryConfig = await this.discoveryClient.getDiscoveryConfig();
-    const endSessionEndpoint = discoveryConfig.end_session_endpoint;
+    const client: ClientMetadata = await this.issuer.discoverClient();
+    const endSessionEndpoint = client.end_session_endpoint;
 
     if (!endSessionEndpoint) {
       const error = new ClientError(

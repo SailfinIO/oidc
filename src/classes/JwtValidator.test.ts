@@ -3,25 +3,25 @@
 // 1. Move jest.mock calls to the top before any imports
 jest.mock('./ClaimsValidator');
 jest.mock('./SignatureVerifier');
-jest.mock('../clients/JwksClient');
-jest.mock('./urlUtils');
+jest.mock('./Jwks');
+jest.mock('../utils/urlUtils');
 
 import { JwtValidator } from './JwtValidator';
 import { ClientError } from '../errors/ClientError';
 import { ClaimsValidator } from './ClaimsValidator';
 import { SignatureVerifier } from './SignatureVerifier';
-import { JwksClient } from '../clients';
-import { ILogger, IDiscoveryConfig } from '../interfaces';
-import { base64UrlDecode } from './urlUtils';
+import { Jwks } from '.';
+import { ILogger, ClientMetadata } from '../interfaces';
+import { base64UrlDecode } from '../utils/urlUtils';
 
 describe('JwtValidator', () => {
   let mockLogger: jest.Mocked<ILogger>;
-  let discoveryConfig: IDiscoveryConfig;
+  let client: Partial<ClientMetadata>;
   let clientId: string;
 
   let claimsValidatorMock: jest.Mocked<ClaimsValidator>;
   let signatureVerifierMock: jest.Mocked<SignatureVerifier>;
-  let jwksClientMock: jest.Mocked<JwksClient>;
+  let jwksMock: jest.Mocked<Jwks>;
 
   beforeEach(() => {
     // Initialize the mock logger with jest.fn() for each method
@@ -33,7 +33,7 @@ describe('JwtValidator', () => {
       debug: jest.fn(),
     };
 
-    discoveryConfig = {
+    client = {
       issuer: 'https://auth.example.com',
       jwks_uri: 'https://auth.example.com/.well-known/jwks.json',
       authorization_endpoint: 'https://auth.example.com/authorize',
@@ -45,20 +45,17 @@ describe('JwtValidator', () => {
 
     // Create mocked instances
     claimsValidatorMock = new ClaimsValidator(
-      discoveryConfig.issuer,
+      client.issuer,
       clientId,
     ) as jest.Mocked<ClaimsValidator>;
     claimsValidatorMock.validate = jest.fn();
 
     signatureVerifierMock = new SignatureVerifier(
-      {} as JwksClient,
+      {} as Jwks,
     ) as jest.Mocked<SignatureVerifier>;
     signatureVerifierMock.verify = jest.fn().mockResolvedValue(undefined);
 
-    jwksClientMock = new JwksClient(
-      discoveryConfig.jwks_uri,
-      mockLogger,
-    ) as jest.Mocked<JwksClient>;
+    jwksMock = new Jwks(client.jwks_uri, mockLogger) as jest.Mocked<Jwks>;
 
     // Reset all mocks before each test
     jest.resetAllMocks();
@@ -66,7 +63,7 @@ describe('JwtValidator', () => {
     // Configure the mocked classes to return the mocked instances
     (ClaimsValidator as jest.Mock).mockReturnValue(claimsValidatorMock);
     (SignatureVerifier as jest.Mock).mockReturnValue(signatureVerifierMock);
-    (JwksClient as jest.Mock).mockReturnValue(jwksClientMock);
+    (Jwks as jest.Mock).mockReturnValue(jwksMock);
 
     // Mock base64UrlDecode to return specific buffers based on input
     (base64UrlDecode as jest.Mock).mockImplementation((input: string) => {
@@ -78,7 +75,7 @@ describe('JwtValidator', () => {
       } else if (input === 'validPayload') {
         return Buffer.from(
           JSON.stringify({
-            iss: discoveryConfig.issuer,
+            iss: client.issuer,
             sub: 'user123',
             aud: clientId,
             exp: Math.floor(Date.now() / 1000) + 3600,
@@ -94,32 +91,27 @@ describe('JwtValidator', () => {
     });
   });
 
-  it('constructs with default jwksClient, claimsValidator, and signatureVerifier if not provided', () => {
-    const validator = new JwtValidator(mockLogger, discoveryConfig, clientId);
-    expect(validator).toBeDefined();
-    expect(JwksClient).toHaveBeenCalledWith(
-      discoveryConfig.jwks_uri,
+  it('constructs with default jwks, claimsValidator, and signatureVerifier if not provided', () => {
+    const validator = new JwtValidator(
       mockLogger,
-    );
-    expect(ClaimsValidator).toHaveBeenCalledWith(
-      discoveryConfig.issuer,
+      client as ClientMetadata,
       clientId,
     );
-    expect(SignatureVerifier).toHaveBeenCalledWith(jwksClientMock);
+    expect(validator).toBeDefined();
+    expect(Jwks).toHaveBeenCalledWith(client.jwks_uri, mockLogger);
+    expect(ClaimsValidator).toHaveBeenCalledWith(client.issuer, clientId);
+    expect(SignatureVerifier).toHaveBeenCalledWith(jwksMock);
   });
 
-  it('constructs with provided jwksClient, claimsValidator, and signatureVerifier', () => {
+  it('constructs with provided jwks, claimsValidator, and signatureVerifier', () => {
     // Create custom instances (these will actually be mocked instances)
-    const customJwks = new JwksClient(discoveryConfig.jwks_uri, mockLogger);
-    const customClaimsValidator = new ClaimsValidator(
-      discoveryConfig.issuer,
-      clientId,
-    );
+    const customJwks = new Jwks(client.jwks_uri, mockLogger);
+    const customClaimsValidator = new ClaimsValidator(client.issuer, clientId);
     const customSignatureVerifier = new SignatureVerifier(customJwks);
 
     const validator = new JwtValidator(
       mockLogger,
-      discoveryConfig,
+      client as ClientMetadata,
       clientId,
       customJwks,
       customClaimsValidator,
@@ -130,7 +122,7 @@ describe('JwtValidator', () => {
     // The JwtValidator should not have called the constructors again since custom instances are provided
     // However, due to jest.mock, the constructors were called when creating custom instances
     // So expect the total number of constructor calls to be 3 (one each for custom instances)
-    expect(JwksClient).toHaveBeenCalledTimes(1); // customJwks
+    expect(Jwks).toHaveBeenCalledTimes(1); // customJwks
     expect(ClaimsValidator).toHaveBeenCalledTimes(1); // customClaimsValidator
     expect(SignatureVerifier).toHaveBeenCalledTimes(1); // customSignatureVerifier
     // JwtValidator constructor should not have called them again
@@ -148,11 +140,15 @@ describe('JwtValidator', () => {
     ].join('.');
 
     it('validates a valid token successfully', async () => {
-      const validator = new JwtValidator(mockLogger, discoveryConfig, clientId);
+      const validator = new JwtValidator(
+        mockLogger,
+        client as ClientMetadata,
+        clientId,
+      );
       const payload = await expect(
         validator.validateIdToken(validIdToken, 'nonce'),
       ).resolves.toEqual({
-        iss: discoveryConfig.issuer,
+        iss: client.issuer,
         sub: 'user123',
         aud: clientId,
         exp: expect.any(Number),
@@ -170,7 +166,7 @@ describe('JwtValidator', () => {
       // Check that claimsValidator.validate was called with the decoded payload and nonce
       expect(claimsValidatorMock.validate).toHaveBeenCalledWith(
         {
-          iss: discoveryConfig.issuer,
+          iss: client.issuer,
           sub: 'user123',
           aud: clientId,
           exp: expect.any(Number),
@@ -190,7 +186,7 @@ describe('JwtValidator', () => {
         {
           header: { alg: 'RS256', typ: 'JWT' },
           payload: {
-            iss: discoveryConfig.issuer,
+            iss: client.issuer,
             sub: 'user123',
             aud: clientId,
             exp: expect.any(Number),
@@ -208,7 +204,11 @@ describe('JwtValidator', () => {
 
     it('throws error if JWT format is invalid (not 3 parts)', async () => {
       const invalidIdToken = 'invalid.token';
-      const validator = new JwtValidator(mockLogger, discoveryConfig, clientId);
+      const validator = new JwtValidator(
+        mockLogger,
+        client as ClientMetadata,
+        clientId,
+      );
 
       await expect(validator.validateIdToken(invalidIdToken)).rejects.toThrow(
         ClientError,
@@ -230,7 +230,11 @@ describe('JwtValidator', () => {
           : Buffer.from('');
       });
 
-      const validator = new JwtValidator(mockLogger, discoveryConfig, clientId);
+      const validator = new JwtValidator(
+        mockLogger,
+        client as ClientMetadata,
+        clientId,
+      );
 
       await expect(
         validator.validateIdToken(invalidJSONIdToken),
@@ -249,7 +253,11 @@ describe('JwtValidator', () => {
         );
       });
 
-      const validator = new JwtValidator(mockLogger, discoveryConfig, clientId);
+      const validator = new JwtValidator(
+        mockLogger,
+        client as ClientMetadata,
+        clientId,
+      );
 
       await expect(validator.validateIdToken(validIdToken)).rejects.toThrow(
         'Claim validation failed',
@@ -257,7 +265,7 @@ describe('JwtValidator', () => {
 
       expect(claimsValidatorMock.validate).toHaveBeenCalledWith(
         {
-          iss: discoveryConfig.issuer,
+          iss: client.issuer,
           sub: 'user123',
           aud: clientId,
           exp: expect.any(Number),
@@ -274,7 +282,7 @@ describe('JwtValidator', () => {
         {
           header: { alg: 'RS256', typ: 'JWT' },
           payload: {
-            iss: discoveryConfig.issuer,
+            iss: client.issuer,
             sub: 'user123',
             aud: clientId,
             exp: expect.any(Number),
@@ -295,7 +303,11 @@ describe('JwtValidator', () => {
         );
       });
 
-      const validator = new JwtValidator(mockLogger, discoveryConfig, clientId);
+      const validator = new JwtValidator(
+        mockLogger,
+        client as ClientMetadata,
+        clientId,
+      );
 
       await expect(validator.validateIdToken(validIdToken)).rejects.toThrow(
         'Signature verification failed',
@@ -315,7 +327,7 @@ describe('JwtValidator', () => {
         {
           header: { alg: 'RS256', typ: 'JWT' },
           payload: {
-            iss: discoveryConfig.issuer,
+            iss: client.issuer,
             sub: 'user123',
             aud: clientId,
             exp: expect.any(Number),
@@ -332,9 +344,13 @@ describe('JwtValidator', () => {
     });
 
     it('returns payload if everything is valid', async () => {
-      const validator = new JwtValidator(mockLogger, discoveryConfig, clientId);
+      const validator = new JwtValidator(
+        mockLogger,
+        client as ClientMetadata,
+        clientId,
+      );
       const payload = await validator.validateIdToken(validIdToken, 'nonce');
-      expect(payload.iss).toBe(discoveryConfig.issuer);
+      expect(payload.iss).toBe(client.issuer);
       expect(payload.aud).toBe(clientId);
       expect(payload.sub).toBe('user123');
       expect(payload.exp).toBeDefined();

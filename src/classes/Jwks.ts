@@ -3,23 +3,30 @@
  * Provides a client for managing and retrieving JSON Web Keys (JWKs) from a JWKS URI.
  * This class includes caching, validation, and efficient key lookup by Key ID (kid).
  *
- * @module src/clients/JwksClient
+ * @module src/clients/Jwks
  */
 
 import { InMemoryCache } from '../cache/InMemoryCache';
 import { ClientError } from '../errors/ClientError';
-import { ILogger, IHttpClient, Jwk, JwksResponse, ICache } from '../interfaces';
-import { HTTPClient } from './HTTPClient';
+import {
+  ILogger,
+  IHttp,
+  Jwk,
+  JwksResponse,
+  ICache,
+  IJwks,
+} from '../interfaces';
+import { Http } from './Http';
 
 /**
  * Represents a client for managing and retrieving JSON Web Keys (JWKs) from a JWKS URI.
  *
- * The `JwksClient` class handles fetching, caching, and validating JWKS responses,
+ * The `Jwks` class handles fetching, caching, and validating JWKS responses,
  * and provides methods to retrieve a JWK by its Key ID (kid).
  *
- * @class JwksClient
+ * @class Jwks
  */
-export class JwksClient {
+export class Jwks implements IJwks {
   /**
    * Promise to manage concurrent JWKS fetches.
    *
@@ -37,11 +44,11 @@ export class JwksClient {
   private cacheKey: string = 'jwks';
 
   /**
-   * Creates an instance of JwksClient.
+   * Creates an instance of Jwks.
    *
    * @param {string} jwksUri - The URI to fetch the JWKS from.
    * @param {ILogger} logger - Logger instance for logging operations and errors.
-   * @param {IHttpClient} [httpClient] - HTTP client for making requests. Defaults to `HTTPClient`.
+   * @param {IHttp} [Http] - HTTP client for making requests. Defaults to `HTTPClient`.
    * @param {ICache<Jwk[]>} [cache] - Cache instance for storing JWKS. Defaults to `InMemoryCache`.
    * @param {number} [cacheTtl=3600000] - Time-to-live for the cache in milliseconds. Defaults to 1 hour.
    * @throws {ClientError} If the provided JWKS URI is invalid.
@@ -49,7 +56,7 @@ export class JwksClient {
   constructor(
     private jwksUri: string,
     private logger: ILogger,
-    private httpClient: IHttpClient = new HTTPClient(logger),
+    private httpClient: IHttp = new Http(logger),
     private cache: ICache<Jwk[]> = new InMemoryCache<Jwk[]>(logger),
     private cacheTtl: number = 3600000, // 1 hour default
   ) {
@@ -67,7 +74,7 @@ export class JwksClient {
    * @throws {ClientError} If the `kid` is invalid or the key is not found.
    * @example
    * ```typescript
-   * const jwk = await jwksClient.getKey('myKid');
+   * const jwk = await Jwks.getKey('myKid');
    * console.log(jwk);
    * ```
    */

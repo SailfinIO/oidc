@@ -1,10 +1,10 @@
-// src/interfaces/ITokenClient.ts
+// src/interfaces/IToken.ts
 
 import { ITokenResponse } from './ITokenResponse';
 import { ITokenIntrospectionResponse } from './ITokenIntrospectionResponse';
 import { TokenTypeHint } from '../enums/TokenTypeHint';
 
-export interface ITokenClient {
+export interface IToken {
   /**
    * Sets the tokens based on the token response.
    * @param tokenResponse The response containing tokens.

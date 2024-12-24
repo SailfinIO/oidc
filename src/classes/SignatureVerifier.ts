@@ -9,13 +9,14 @@
 
 import { constants, verify } from 'crypto';
 import { ClientError } from '../errors/ClientError';
-import { JwksClient } from '../clients';
-import { Jwk, JwtHeader } from '../interfaces';
+import { IJwks, Jwk, JwtHeader } from '../interfaces';
 import { Algorithm } from '../enums';
-import { base64UrlDecode } from './urlUtils';
-import { ecDsaSignatureFromRaw } from './derEncoding';
-import { rsaJwkToPem } from './rsaKeyConverter';
-import { ecJwkToPem } from './ecKeyConverter';
+import {
+  base64UrlDecode,
+  ecDsaSignatureFromRaw,
+  rsaJwkToPem,
+  ecJwkToPem,
+} from '../utils';
 
 /**
  * Represents the hash algorithm and optional parameters for a given algorithm.
@@ -70,9 +71,9 @@ export class SignatureVerifier {
   /**
    * Creates an instance of `SignatureVerifier`.
    *
-   * @param {JwksClient} jwksClient - The client used to fetch JWKS keys.
+   * @param {IJwks} jwks - The client used to fetch JWKS keys.
    */
-  constructor(private jwksClient: JwksClient) {}
+  constructor(private jwks: IJwks) {}
 
   /**
    * Verifies the signature of a JWT.
@@ -90,7 +91,7 @@ export class SignatureVerifier {
       );
     }
 
-    const jwk = await this.jwksClient.getKey(kid);
+    const jwk = await this.jwks.getKey(kid);
     this.validateKeyForAlgorithm(jwk, alg);
     const pubKey = this.createPublicKeyFromJwk(jwk, alg);
 

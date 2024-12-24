@@ -1,19 +1,19 @@
-// src/interfaces/IDiscoveryClient.ts
+// src/interfaces/IIssuer.ts
 
-import { IDiscoveryConfig } from './IDiscoveryConfig';
+import { ClientMetadata } from './ClientMetadata';
 
 /**
- * Interface for DiscoveryClient.
+ * Interface for Issuer.
  * Defines the contract for fetching and managing discovery configurations.
  */
-export interface IDiscoveryClient {
+export interface IIssuer {
   /**
    * Retrieves the discovery configuration from the discovery URL.
    * Utilizes caching to minimize redundant network requests.
    *
    * @param forceRefresh - If true, bypasses the cache and fetches fresh data.
-   * @returns A promise that resolves to the discovery configuration.
+   * @returns A promise that resolves to the issuer's discovery configuration.
    * @throws ClientError if fetching or parsing the configuration fails.
    */
-  getDiscoveryConfig(forceRefresh?: boolean): Promise<IDiscoveryConfig>;
+  discoverClient(forceRefresh?: boolean): Promise<ClientMetadata>;
 }

@@ -1,21 +1,21 @@
 /**
  * @fileoverview
- * Defines the `IHttpClient` interface for making HTTP requests.
+ * Defines the `IHttp` interface for making HTTP requests.
  * This interface provides a contract for implementing an HTTP client with
  * methods for standard HTTP operations such as GET, POST, PUT, DELETE, etc.
  *
- * @module src/interfaces/IHttpClient
+ * @module src/interfaces/IHttp
  */
 
 /**
  * Represents a generic HTTP client interface for making HTTP requests.
  *
- * The `IHttpClient` interface provides methods corresponding to standard HTTP
+ * The `IHttp` interface provides methods corresponding to standard HTTP
  * methods. Each method returns a `Promise` resolving to the response body as a string.
  *
- * @interface IHttpClient
+ * @interface IHttp
  */
-export interface IHttpClient {
+export interface IHttp {
   /**
    * Sends a GET request to the specified URL.
    *

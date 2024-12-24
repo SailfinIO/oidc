@@ -1,32 +1,35 @@
-// src/clients/OIDCClient.ts
+// src/clients/Client.ts
 
-import { AuthClient } from './AuthClient';
-import { UserInfoClient } from './UserInfoClient';
-import { Logger, JwtValidator, generateRandomString } from '../utils';
+import { Auth } from './Auth';
+import { UserInfo } from './UserInfo';
+import { Logger, generateRandomString } from '../utils';
 import { GrantType, LogLevel, TokenTypeHint } from '../enums';
-import { DiscoveryClient } from './DiscoveryClient';
+import { Issuer } from './Issuer';
 import {
   IClientConfig,
   ILogger,
   ITokenIntrospectionResponse,
   ITokenResponse,
   IUserInfo,
-  IDiscoveryClient,
-  ITokenClient,
-  IHttpClient,
+  IUser,
+  IIssuer,
+  IToken,
+  IHttp,
+  IAuth,
 } from '../interfaces';
 import { ClientError } from '../errors';
-import { HTTPClient } from './HTTPClient';
-import { TokenClient } from './TokenClient';
+import { Http } from './Http';
+import { Token } from './Token';
+import { JwtValidator } from './JwtValidator';
 
-export class OIDCClient {
+export class Client {
   private readonly config: IClientConfig;
-  private readonly authClient: AuthClient;
-  private readonly tokenClient: ITokenClient;
+  private readonly auth: IAuth;
+  private readonly tokenClient: IToken;
   private readonly logger: ILogger;
-  private readonly httpClient: IHttpClient;
-  private userInfoClient: UserInfoClient;
-  private discoveryClient: IDiscoveryClient;
+  private readonly httpClient: IHttp;
+  private userInfoClient: IUserInfo;
+  private issuer: IIssuer;
 
   private initialized: boolean = false;
 
@@ -36,27 +39,24 @@ export class OIDCClient {
     this.config = config;
     const envLogLevel = process.env.OIDC_LOG_LEVEL as LogLevel;
     this.logger =
-      config.logger ||
+      config.logging?.logger ||
       new Logger(
-        OIDCClient.name,
-        config.logLevel || envLogLevel || LogLevel.INFO,
+        Client.name,
+        config.logging?.logLevel || envLogLevel || LogLevel.INFO,
         true,
       );
-    this.httpClient = new HTTPClient(this.logger);
-    this.discoveryClient = new DiscoveryClient(
-      this.config.discoveryUrl,
-      this.logger,
-    );
-    this.tokenClient = new TokenClient(
+    this.httpClient = new Http(this.logger);
+    this.issuer = new Issuer(this.config.discoveryUrl, this.logger);
+    this.tokenClient = new Token(
       this.logger,
       this.config,
-      this.discoveryClient,
+      this.issuer,
       this.httpClient,
     );
-    this.authClient = new AuthClient(
+    this.auth = new Auth(
       config,
       this.logger,
-      this.discoveryClient,
+      this.issuer,
       this.httpClient,
       this.tokenClient,
     );
@@ -84,10 +84,10 @@ export class OIDCClient {
 
   public async initialize(): Promise<void> {
     this.logger.debug('Initializing OIDC Client');
-    const discoveryConfig = await this.discoveryClient.getDiscoveryConfig();
-    this.userInfoClient = new UserInfoClient(
+    const client = await this.issuer.discoverClient();
+    this.userInfoClient = new UserInfo(
       this.tokenClient,
-      discoveryConfig,
+      client,
       this.httpClient,
       this.logger,
     );
@@ -126,7 +126,7 @@ export class OIDCClient {
     // Store state -> nonce mapping
     this.stateMap.set(state, nonce);
 
-    const { url } = await this.authClient.getAuthorizationUrl(state, nonce);
+    const { url } = await this.auth.getAuthorizationUrl(state, nonce);
     return { url };
   }
 
@@ -148,20 +148,17 @@ export class OIDCClient {
       );
     }
 
-    await this.authClient.exchangeCodeForToken(
-      code,
-      this.authClient.getCodeVerifier(),
-    );
+    await this.auth.exchangeCodeForToken(code, this.auth.getCodeVerifier());
 
     // After token is obtained and validated, remove the state entry
     this.stateMap.delete(returnedState);
     // After token is obtained:
     const tokens = this.tokenClient.getTokens();
-    const discoveryConfig = await this.discoveryClient.getDiscoveryConfig();
+    const client = await this.issuer.discoverClient();
     if (tokens.id_token) {
       const jwtValidator = new JwtValidator(
         this.logger as Logger,
-        discoveryConfig,
+        client,
         this.config.clientId,
       );
       await jwtValidator.validateIdToken(tokens.id_token, expectedNonce);
@@ -213,7 +210,7 @@ export class OIDCClient {
    * Retrieves user information from the UserInfo endpoint.
    * @returns User information.
    */
-  public async getUserInfo(): Promise<IUserInfo> {
+  public async getUserInfo(): Promise<IUser> {
     this.ensureInitialized();
     return this.userInfoClient.getUserInfo();
   }
@@ -255,7 +252,7 @@ export class OIDCClient {
     interval: number;
   }> {
     this.ensureInitialized();
-    return this.authClient.startDeviceAuthorization();
+    return this.auth.startDeviceAuthorization();
   }
 
   /**
@@ -270,7 +267,7 @@ export class OIDCClient {
     timeout?: number,
   ): Promise<void> {
     this.ensureInitialized();
-    return this.authClient.pollDeviceToken(device_code, interval, timeout);
+    return this.auth.pollDeviceToken(device_code, interval, timeout);
   }
 
   /**
@@ -306,7 +303,7 @@ export class OIDCClient {
    */
   public async logout(idTokenHint?: string): Promise<string> {
     this.ensureInitialized();
-    const logoutUrl = await this.authClient.getLogoutUrl(idTokenHint);
+    const logoutUrl = await this.auth.getLogoutUrl(idTokenHint);
     this.logger.info('Logout initiated', { logoutUrl });
     return logoutUrl;
   }

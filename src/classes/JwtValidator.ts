@@ -1,36 +1,36 @@
 import { ClientError } from '../errors/ClientError';
 import {
-  IDiscoveryConfig,
   ILogger,
+  IJwks,
   JwtHeader,
   JwtPayload,
+  ClientMetadata,
 } from '../interfaces';
-import { JwksClient } from '../clients';
+import { Jwks } from '.';
 import { ClaimsValidator } from './ClaimsValidator';
 import { SignatureVerifier } from './SignatureVerifier';
-import { base64UrlDecode } from './urlUtils';
+import { base64UrlDecode } from '../utils/urlUtils';
 
 export class JwtValidator {
-  private readonly jwksClient: JwksClient;
+  private readonly jwks: IJwks;
   private readonly logger: ILogger;
   private readonly claimsValidator: ClaimsValidator;
   private readonly signatureVerifier: SignatureVerifier;
 
   constructor(
     logger: ILogger,
-    discoveryConfig: IDiscoveryConfig,
+    client: ClientMetadata,
     clientId: string,
-    jwksClient?: JwksClient,
+    jwks?: IJwks,
     claimsValidator?: ClaimsValidator,
     signatureVerifier?: SignatureVerifier,
   ) {
     this.logger = logger;
-    this.jwksClient =
-      jwksClient || new JwksClient(discoveryConfig.jwks_uri, logger);
+    this.jwks = jwks || new Jwks(client.jwks_uri, logger);
     this.claimsValidator =
-      claimsValidator || new ClaimsValidator(discoveryConfig.issuer, clientId);
+      claimsValidator || new ClaimsValidator(client.issuer, clientId);
     this.signatureVerifier =
-      signatureVerifier || new SignatureVerifier(this.jwksClient);
+      signatureVerifier || new SignatureVerifier(this.jwks);
   }
 
   public async validateIdToken(

@@ -1,30 +1,24 @@
-// src/clients/DiscoveryClient.ts
+// src/clients/Issuer.ts
 
-import {
-  IDiscoveryConfig,
-  IHttpClient,
-  ICache,
-  IDiscoveryClient,
-  ILogger,
-} from '../interfaces';
+import { IHttp, ICache, IIssuer, ILogger, ClientMetadata } from '../interfaces';
 import { ClientError } from '../errors/ClientError';
-import { HTTPClient } from './HTTPClient';
+import { Http } from './Http';
 import { InMemoryCache } from '../cache/InMemoryCache';
 
-export class DiscoveryClient implements IDiscoveryClient {
+export class Issuer implements IIssuer {
   private readonly discoveryUrl: string;
   private readonly logger: ILogger;
-  private readonly httpClient: IHttpClient;
-  private readonly cache: ICache<IDiscoveryConfig>;
+  private readonly httpClient: IHttp;
+  private readonly cache: ICache<ClientMetadata>;
   private readonly cacheKey: string = 'discoveryConfig';
   private readonly cacheTtl: number;
-  private fetchingConfig: Promise<IDiscoveryConfig> | null = null;
+  private fetchingConfig: Promise<ClientMetadata> | null = null;
 
   constructor(
     discoveryUrl: string,
     logger: ILogger,
-    httpClient?: IHttpClient,
-    cache?: ICache<IDiscoveryConfig>,
+    httpClient?: IHttp,
+    cache?: ICache<ClientMetadata>,
     cacheTtl: number = 3600000, // 1 hour default
   ) {
     if (!discoveryUrl || typeof discoveryUrl !== 'string') {
@@ -36,9 +30,9 @@ export class DiscoveryClient implements IDiscoveryClient {
 
     this.discoveryUrl = discoveryUrl;
     this.logger = logger;
-    this.httpClient = httpClient ?? new HTTPClient(this.logger);
+    this.httpClient = httpClient ?? new Http(this.logger);
     this.cache =
-      cache ?? new InMemoryCache<IDiscoveryConfig>(this.logger, cacheTtl);
+      cache ?? new InMemoryCache<ClientMetadata>(this.logger, cacheTtl);
     this.cacheTtl = cacheTtl;
   }
 
@@ -48,9 +42,9 @@ export class DiscoveryClient implements IDiscoveryClient {
    * @returns The discovery configuration.
    * @throws ClientError if fetching fails.
    */
-  public async getDiscoveryConfig(
+  public async discoverClient(
     forceRefresh: boolean = false,
-  ): Promise<IDiscoveryConfig> {
+  ): Promise<ClientMetadata> {
     if (forceRefresh) {
       this.logger.debug('Force refresh enabled. Fetching discovery config.');
       return this.fetchAndCacheConfig();
@@ -70,7 +64,7 @@ export class DiscoveryClient implements IDiscoveryClient {
    * Ensures that only one fetch operation occurs at a time.
    * @returns The discovery configuration.
    */
-  private async fetchAndCacheConfig(): Promise<IDiscoveryConfig> {
+  private async fetchAndCacheConfig(): Promise<ClientMetadata> {
     if (this.fetchingConfig !== null) {
       this.logger.debug(
         'Fetch in progress. Awaiting existing fetch operation.',
@@ -78,7 +72,7 @@ export class DiscoveryClient implements IDiscoveryClient {
       return this.fetchingConfig;
     }
 
-    this.fetchingConfig = this.fetchDiscoveryConfig().finally(() => {
+    this.fetchingConfig = this.fetchDiscoveryMetadata().finally(() => {
       this.fetchingConfig = null;
     });
 
@@ -90,15 +84,15 @@ export class DiscoveryClient implements IDiscoveryClient {
    * @returns The fetched discovery configuration.
    * @throws ClientError if fetching or parsing fails.
    */
-  private async fetchDiscoveryConfig(): Promise<IDiscoveryConfig> {
+  private async fetchDiscoveryMetadata(): Promise<ClientMetadata> {
     this.logger.debug('Fetching discovery configuration.', {
       discoveryUrl: this.discoveryUrl,
     });
 
     try {
       const response = await this.httpClient.get(this.discoveryUrl);
-      const config: IDiscoveryConfig = JSON.parse(response);
-      this.validateDiscoveryConfig(config);
+      const config: ClientMetadata = JSON.parse(response);
+      this.validateDiscoveryMetadata(config);
 
       this.cache.set(this.cacheKey, config, this.cacheTtl);
       this.logger.info(
@@ -123,15 +117,17 @@ export class DiscoveryClient implements IDiscoveryClient {
    * @param config - The discovery configuration to validate.
    * @throws ClientError if the configuration is invalid.
    */
-  private validateDiscoveryConfig(config: IDiscoveryConfig): void {
-    if (!config.issuer || typeof config.issuer !== 'string') {
+  private validateDiscoveryMetadata(client: ClientMetadata): void {
+    const { issuer, jwks_uri, authorization_endpoint, token_endpoint } = client;
+
+    if (!issuer || typeof issuer !== 'string') {
       throw new ClientError(
         'Invalid discovery configuration: Missing or invalid issuer.',
         'INVALID_DISCOVERY_CONFIG',
       );
     }
 
-    if (!config.jwks_uri || typeof config.jwks_uri !== 'string') {
+    if (!jwks_uri || typeof jwks_uri !== 'string') {
       throw new ClientError(
         'Invalid discovery configuration: Missing or invalid jwks_uri.',
         'INVALID_DISCOVERY_CONFIG',
@@ -139,17 +135,14 @@ export class DiscoveryClient implements IDiscoveryClient {
     }
 
     // Additional validations
-    if (
-      !config.authorization_endpoint ||
-      typeof config.authorization_endpoint !== 'string'
-    ) {
+    if (!authorization_endpoint || typeof authorization_endpoint !== 'string') {
       throw new ClientError(
         'Invalid discovery configuration: Missing or invalid authorization_endpoint.',
         'INVALID_DISCOVERY_CONFIG',
       );
     }
 
-    if (!config.token_endpoint || typeof config.token_endpoint !== 'string') {
+    if (!token_endpoint || typeof token_endpoint !== 'string') {
       throw new ClientError(
         'Invalid discovery configuration: Missing or invalid token_endpoint.',
         'INVALID_DISCOVERY_CONFIG',
