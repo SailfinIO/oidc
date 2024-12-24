@@ -1,4 +1,56 @@
-## [0.0.4](https://github.com/SailfinIO/oidc/compare/v0.0.3...v0.0.4) (2024-12-22)
+## [0.0.5-beta.8](https://github.com/SailfinIO/oidc/compare/v0.0.5-beta.7...v0.0.5-beta.8) (2024-12-24)
+
+### Bug Fixes
+
+* code smells ([215ac21](https://github.com/SailfinIO/oidc/commit/215ac21e22452a199479730f9e4146b9ec91bee1))
+
+## [0.0.5-beta.7](https://github.com/SailfinIO/oidc/compare/v0.0.5-beta.6...v0.0.5-beta.7) (2024-12-24)
+
+### Bug Fixes
+
+* testing for client ([dc90e7d](https://github.com/SailfinIO/oidc/commit/dc90e7db2d337382046ede664206affbf1e6d8d9))
+
+## [0.0.5-beta.6](https://github.com/SailfinIO/oidc/compare/v0.0.5-beta.5...v0.0.5-beta.6) (2024-12-24)
+
+### Bug Fixes
+
+* code smells ([45214f5](https://github.com/SailfinIO/oidc/commit/45214f550dc4dec960815d6f9fff4591f47a0986))
+
+## [0.0.5-beta.5](https://github.com/SailfinIO/oidc/compare/v0.0.5-beta.4...v0.0.5-beta.5) (2024-12-24)
+
+### Bug Fixes
+
+* code smells ([98f705e](https://github.com/SailfinIO/oidc/commit/98f705e74f06b52397f7027bdfc146620726a204))
+
+## [0.0.5-beta.4](https://github.com/SailfinIO/oidc/compare/v0.0.5-beta.3...v0.0.5-beta.4) (2024-12-24)
+
+### Bug Fixes
+
+* more appropriate issuer discovery method ([a6e83ad](https://github.com/SailfinIO/oidc/commit/a6e83adabf7596dabfc6c1ba7ff5a1837781e7de))
+
+## [0.0.5-beta.3](https://github.com/SailfinIO/oidc/compare/v0.0.5-beta.2...v0.0.5-beta.3) (2024-12-24)
+
+### Bug Fixes
+
+* refactoring auth ([9250477](https://github.com/SailfinIO/oidc/commit/9250477953a37c108d1b06afecdf9c4a364a9638))
+
+## [0.0.5-beta.2](https://github.com/SailfinIO/oidc/compare/v0.0.5-beta.1...v0.0.5-beta.2) (2024-12-24)
+
+### Bug Fixes
+
+* naming and exports ([dd06ec6](https://github.com/SailfinIO/oidc/commit/dd06ec6f1dbdfa855bcda68379e85850b84adca0))
+
+## [0.0.5-beta.1](https://github.com/SailfinIO/oidc/compare/v0.0.4...v0.0.5-beta.1) (2024-12-23)
+
+### Bug Fixes
+
+* code coverage in auth client ([697ee37](https://github.com/SailfinIO/oidc/commit/697ee37ecb73df830a2b878b582b96c528dc8254))
+
+## [0.0.4-beta.2](https://github.com/SailfinIO/oidc/compare/v0.0.4-beta.1...v0.0.4-beta.2) (2024-12-23)
+
+### Bug Fixes
+
+* code coverage in auth client ([697ee37](https://github.com/SailfinIO/oidc/commit/697ee37ecb73df830a2b878b582b96c528dc8254))
 
 ### Bug Fixes
 
