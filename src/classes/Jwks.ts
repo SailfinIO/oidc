@@ -39,9 +39,10 @@ export class Jwks implements IJwks {
    * The cache key used to store the JWKS.
    *
    * @private
+   * @readonly
    * @type {string}
    */
-  private cacheKey: string = 'jwks';
+  private readonly cacheKey: string = 'jwks';
 
   /**
    * Creates an instance of Jwks.
@@ -54,11 +55,11 @@ export class Jwks implements IJwks {
    * @throws {ClientError} If the provided JWKS URI is invalid.
    */
   constructor(
-    private jwksUri: string,
-    private logger: ILogger,
-    private httpClient: IHttp = new Http(logger),
-    private cache: ICache<Jwk[]> = new InMemoryCache<Jwk[]>(logger),
-    private cacheTtl: number = 3600000, // 1 hour default
+    private readonly jwksUri: string,
+    private readonly logger: ILogger,
+    private readonly httpClient: IHttp = new Http(logger),
+    private readonly cache: ICache<Jwk[]> = new InMemoryCache<Jwk[]>(logger),
+    private readonly cacheTtl: number = 3600000, // 1 hour default
   ) {
     this.validateJwksUri();
   }

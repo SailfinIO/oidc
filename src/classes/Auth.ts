@@ -40,7 +40,6 @@ export class Auth implements IAuth {
   private readonly state: IState;
 
   private codeVerifier: string | null = null;
-  private clientMetadata: ClientMetadata | null = null;
 
   constructor(
     config: IClientConfig,
@@ -437,50 +436,7 @@ export class Auth implements IAuth {
         this.logger.info('Device authorized and tokens obtained');
         return;
       } catch (error: any) {
-        let errorBody: any = {};
-        if (error.context?.body) {
-          try {
-            errorBody = JSON.parse(error.context.body);
-          } catch (parseError) {
-            this.logger.warn('Failed to parse error response as JSON', {
-              originalError: parseError,
-            });
-            this.logger.warn('Error response from token endpoint', {
-              response: error.context.body,
-            });
-          }
-        }
-
-        switch (errorBody.error) {
-          case 'authorization_pending':
-            await sleep(interval * 1000);
-            break;
-          case 'slow_down':
-            interval += 5;
-            await sleep(interval * 1000);
-            break;
-          case 'expired_token':
-            const expiredTokenError = new ClientError(
-              'Device code expired',
-              'DEVICE_CODE_EXPIRED',
-            );
-            this.logger.error('Device code expired', {
-              error: expiredTokenError,
-            });
-            throw expiredTokenError;
-          default:
-            const pollingError = new ClientError(
-              'Device token polling failed',
-              'TOKEN_POLLING_ERROR',
-              {
-                originalError: error,
-              },
-            );
-            this.logger.error('Device token polling failed', {
-              originalError: error,
-            });
-            throw pollingError;
-        }
+        interval = await this.handlePollingError(error, interval);
       }
     }
   }
@@ -520,5 +476,51 @@ export class Auth implements IAuth {
 
     this.logger.debug('Logout URL generated', { logoutUrl });
     return logoutUrl;
+  }
+
+  private async handlePollingError(
+    error: any,
+    interval: number,
+  ): Promise<number> {
+    let errorBody: any = {};
+    if (error.context?.body) {
+      try {
+        errorBody = JSON.parse(error.context.body);
+      } catch (parseError) {
+        this.logger.warn('Failed to parse error response as JSON', {
+          originalError: parseError,
+        });
+        this.logger.warn('Error response from token endpoint', {
+          response: error.context.body,
+        });
+      }
+    }
+
+    switch (errorBody.error) {
+      case 'authorization_pending':
+        await sleep(interval * 1000);
+        break;
+      case 'slow_down':
+        interval += 5;
+        await sleep(interval * 1000);
+        break;
+      case 'expired_token':
+        this.logger.error('Device code expired', {
+          error: new ClientError('Device code expired', 'DEVICE_CODE_EXPIRED'),
+        });
+        throw new ClientError('Device code expired', 'DEVICE_CODE_EXPIRED');
+      default:
+        this.logger.error('Device token polling failed', {
+          originalError: error,
+        });
+        throw new ClientError(
+          'Device token polling failed',
+          'TOKEN_POLLING_ERROR',
+          {
+            originalError: error,
+          },
+        );
+    }
+    return interval;
   }
 }

@@ -284,6 +284,43 @@ describe('Auth', () => {
               },
             );
           });
+
+          it('should successfully obtain tokens when polling succeeds', async () => {
+            const device_code = 'device-code';
+            const tokenEndpoint = mockClientMetadata.token_endpoint;
+            const tokenResponse = {
+              access_token: 'access-token',
+              id_token: 'id-token',
+              token_type: 'Bearer',
+              expires_in: 3600,
+            };
+
+            mockHttpClient.post.mockResolvedValueOnce(
+              JSON.stringify(tokenResponse),
+            );
+
+            const pollPromise = auth.pollDeviceToken(device_code, 5, 10000);
+
+            // Fast-forward until all timers have been executed
+            jest.runAllTimers();
+
+            await pollPromise;
+
+            expect(mockHttpClient.post).toHaveBeenCalledTimes(1);
+            expect(mockHttpClient.post).toHaveBeenCalledWith(
+              tokenEndpoint,
+              expect.stringContaining(
+                `grant_type=${encodeURIComponent(GrantType.DeviceCode)}`,
+              ),
+              { 'Content-Type': 'application/x-www-form-urlencoded' },
+            );
+            expect(mockTokenClient.setTokens).toHaveBeenCalledWith(
+              tokenResponse,
+            );
+            expect(mockLogger.info).toHaveBeenCalledWith(
+              'Device authorized and tokens obtained',
+            );
+          });
         });
       });
 

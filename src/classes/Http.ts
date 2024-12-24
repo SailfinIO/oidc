@@ -39,17 +39,19 @@ export class Http implements IHttp {
    * Logger instance for logging HTTP request details and errors.
    *
    * @private
+   * @readonly
    * @type {ILogger}
    */
-  private logger: ILogger;
+  private readonly logger: ILogger;
 
   /**
    * Optional custom HTTP library for making requests.
    *
    * @private
+   * @readonly
    * @type {IHttpLibrary | undefined}
    */
-  private httpLib?: IHttpLibrary;
+  private readonly httpLib?: IHttpLibrary;
 
   /**
    * Creates an instance of Http.

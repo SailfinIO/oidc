@@ -23,25 +23,28 @@ export class ClaimsValidator implements IClaimsValidator {
    * The expected issuer of the JWT.
    *
    * @private
+   * @readonly
    * @type {string}
    */
-  private expectedIssuer: string;
+  private readonly expectedIssuer: string;
 
   /**
    * The expected audience of the JWT.
    *
    * @private
+   * @readonly
    * @type {string}
    */
-  private expectedAudience: string;
+  private readonly expectedAudience: string;
 
   /**
    * The maximum allowable future time in seconds for the `iat` claim.
    *
    * @private
+   * @readonly
    * @type {number}
    */
-  private maxFutureSec: number;
+  private readonly maxFutureSec: number;
 
   /**
    * Creates an instance of `ClaimsValidator`.

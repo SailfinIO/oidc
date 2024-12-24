@@ -11,10 +11,10 @@ import {
 import { ClientError } from '../errors/ClientError';
 
 export class UserInfo implements IUserInfo {
-  private tokenClient: IToken;
-  private client: ClientMetadata;
-  private httpClient: IHttp;
-  private logger: ILogger;
+  private readonly tokenClient: IToken;
+  private readonly client: ClientMetadata;
+  private readonly httpClient: IHttp;
+  private readonly logger: ILogger;
 
   /**
    * Creates an instance of UserInfo.

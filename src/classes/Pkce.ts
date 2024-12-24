@@ -32,9 +32,10 @@ export class Pkce implements IPkce {
    * Initializes a new instance of the `Pkce` class.
    *
    * @param {IClientConfig} config - The client configuration object.
+   * @readonly config - The client configuration object.
    * @throws {ClientError} If `pkce` is enabled but `pkceMethod` is not specified or invalid.
    */
-  constructor(private config: IClientConfig) {
+  constructor(private readonly config: IClientConfig) {
     if (this.config.pkce) {
       if (
         !this.config.pkceMethod ||

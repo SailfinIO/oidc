@@ -72,8 +72,9 @@ export class SignatureVerifier implements ISignatureVerifier {
    * Creates an instance of `SignatureVerifier`.
    *
    * @param {IJwks} jwks - The client used to fetch JWKS keys.
+   * @readonly
    */
-  constructor(private jwks: IJwks) {}
+  constructor(private readonly jwks: IJwks) {}
 
   /**
    * Verifies the signature of a JWT.

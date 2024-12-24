@@ -5,12 +5,12 @@ import { MutexError, ClientError } from '../errors';
  * A mutex (mutual exclusion) utility for controlling access to asynchronous resources.
  */
 export class Mutex implements IMutex {
-  private _queue: Resolver[] = [];
+  private readonly _queue: Resolver[] = [];
+  private readonly timer: ITimer;
   private _locked: boolean = false;
-  private timer: ITimer;
 
   constructor(
-    private logger?: ILogger,
+    private readonly logger?: ILogger,
     timer?: ITimer,
   ) {
     this.timer = timer ?? {
