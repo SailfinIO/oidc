@@ -1,3 +1,9 @@
+## [0.0.5-beta.3](https://github.com/SailfinIO/oidc/compare/v0.0.5-beta.2...v0.0.5-beta.3) (2024-12-24)
+
+### Bug Fixes
+
+* refactoring auth ([9250477](https://github.com/SailfinIO/oidc/commit/9250477953a37c108d1b06afecdf9c4a364a9638))
+
 ## [0.0.5-beta.2](https://github.com/SailfinIO/oidc/compare/v0.0.5-beta.1...v0.0.5-beta.2) (2024-12-24)
 
 ### Bug Fixes
