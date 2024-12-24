@@ -1,3 +1,9 @@
+## [0.0.5-beta.4](https://github.com/SailfinIO/oidc/compare/v0.0.5-beta.3...v0.0.5-beta.4) (2024-12-24)
+
+### Bug Fixes
+
+* more appropriate issuer discovery method ([a6e83ad](https://github.com/SailfinIO/oidc/commit/a6e83adabf7596dabfc6c1ba7ff5a1837781e7de))
+
 ## [0.0.5-beta.3](https://github.com/SailfinIO/oidc/compare/v0.0.5-beta.2...v0.0.5-beta.3) (2024-12-24)
 
 ### Bug Fixes
