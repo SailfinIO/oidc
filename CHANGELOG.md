@@ -1,3 +1,9 @@
+## [0.0.5-beta.2](https://github.com/SailfinIO/oidc/compare/v0.0.5-beta.1...v0.0.5-beta.2) (2024-12-24)
+
+### Bug Fixes
+
+* naming and exports ([dd06ec6](https://github.com/SailfinIO/oidc/commit/dd06ec6f1dbdfa855bcda68379e85850b84adca0))
+
 ## [0.0.5-beta.1](https://github.com/SailfinIO/oidc/compare/v0.0.4...v0.0.5-beta.1) (2024-12-23)
 
 ### Bug Fixes
