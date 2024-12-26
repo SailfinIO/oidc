@@ -1,8 +1,8 @@
-import { InMemoryCache } from './InMemoryCache';
+import { Cache } from './Cache';
 import { ClientError } from '../errors/ClientError';
 
-describe('InMemoryCache', () => {
-  let cache: InMemoryCache<string>;
+describe('Cache', () => {
+  let cache: Cache<string>;
   let mockLogger: any;
 
   beforeEach(() => {
@@ -10,7 +10,7 @@ describe('InMemoryCache', () => {
       debug: jest.fn(),
       error: jest.fn(),
     };
-    cache = new InMemoryCache<string>(mockLogger, 1000); // 1 second TTL for testing
+    cache = new Cache<string>(mockLogger, 1000); // 1 second TTL for testing
   });
 
   test('should set and get a value', () => {

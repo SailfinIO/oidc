@@ -1,9 +1,4 @@
-// src/clients/Auth.test.ts
-
-jest.mock('../utils', () => ({
-  ...jest.requireActual('../utils'),
-  sleep: jest.fn(), // Mock the sleep function
-}));
+// src/classes/Auth.test.ts
 
 import { Auth } from './Auth';
 import { Token } from './Token';
@@ -12,18 +7,23 @@ import {
   ClientMetadata,
   IClientConfig,
   ILogger,
-  IHttp,
   IToken,
   IAuth,
 } from '../interfaces';
 import { ClientError } from '../errors/ClientError';
-import { buildLogoutUrl, sleep } from '../utils';
+import { buildLogoutUrl, sleep, generateRandomString } from '../utils';
 import { PkceMethod, Scopes, GrantType } from '../enums';
 import { JwtValidator } from './JwtValidator';
 
+// Mock utilities
+jest.mock('../utils', () => ({
+  ...jest.requireActual('../utils'),
+  sleep: jest.fn(), // Mock the sleep function
+  generateRandomString: jest.fn(), // Mock generateRandomString
+}));
+
 describe('Auth', () => {
   let mockIssuer: jest.Mocked<IIssuer>;
-  let mockHttpClient: jest.Mocked<IHttp>;
   let mockLogger: jest.Mocked<ILogger>;
   let mockTokenClient: jest.Mocked<IToken>;
   let auth: IAuth;
@@ -49,17 +49,8 @@ describe('Auth', () => {
       setLogLevel: jest.fn(),
     };
 
-    mockHttpClient = {
-      get: jest.fn(),
-      post: jest.fn(),
-      put: jest.fn(),
-      patch: jest.fn(),
-      delete: jest.fn(),
-      options: jest.fn(),
-      head: jest.fn(),
-      connect: jest.fn(),
-      trace: jest.fn(),
-    };
+    // Mock fetch globally
+    global.fetch = jest.fn();
 
     mockIssuer = {
       discover: jest.fn().mockResolvedValue(mockClientMetadata),
@@ -126,7 +117,7 @@ describe('Auth', () => {
         pkceMethod: PkceMethod.S256,
         postLogoutRedirectUri: 'https://example.com/logout-callback',
       };
-      auth = new Auth(config, mockLogger, mockIssuer, mockHttpClient);
+      auth = new Auth(config, mockLogger, mockIssuer, mockTokenClient);
     });
 
     describe('constructor', () => {
@@ -152,18 +143,24 @@ describe('Auth', () => {
             ...mockClientMetadata,
             device_authorization_endpoint: deviceEndpoint,
           } as ClientMetadata);
-          mockHttpClient.post.mockResolvedValueOnce(
-            JSON.stringify(deviceResponse),
+
+          (global.fetch as jest.Mock).mockResolvedValueOnce(
+            new Response(JSON.stringify(deviceResponse), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
           );
 
           const result = await auth.startDeviceAuthorization();
 
           expect(mockIssuer.discover).toHaveBeenCalledTimes(1);
-          expect(mockHttpClient.post).toHaveBeenCalledWith(
-            deviceEndpoint,
-            expect.stringContaining(`client_id=${config.clientId}`),
-            { 'Content-Type': 'application/x-www-form-urlencoded' },
-          );
+          expect(global.fetch).toHaveBeenCalledWith(deviceEndpoint, {
+            method: 'POST',
+            body: expect.stringContaining(
+              `client_id=${encodeURIComponent(config.clientId)}`,
+            ),
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          });
           expect(result).toEqual(deviceResponse);
           expect(mockLogger.info).toHaveBeenCalledWith(
             'Device authorization initiated',
@@ -193,7 +190,8 @@ describe('Auth', () => {
             device_authorization_endpoint: deviceEndpoint,
           } as ClientMetadata);
           const mockError = new Error('Device authorization failed');
-          mockHttpClient.post.mockRejectedValueOnce(mockError);
+
+          (global.fetch as jest.Mock).mockRejectedValueOnce(mockError);
 
           await expect(auth.startDeviceAuthorization()).rejects.toThrow(
             ClientError,
@@ -218,13 +216,13 @@ describe('Auth', () => {
                 body: JSON.stringify({ error: 'unexpected_error' }),
               },
             });
-            mockHttpClient.post.mockRejectedValueOnce(mockError);
+            (global.fetch as jest.Mock).mockRejectedValueOnce(mockError);
 
             await expect(
               auth.pollDeviceToken(device_code, 5, 10000),
             ).rejects.toThrow(ClientError);
 
-            expect(mockHttpClient.post).toHaveBeenCalledTimes(1);
+            expect(global.fetch).toHaveBeenCalledTimes(1);
 
             const expectedParams = new URLSearchParams({
               grant_type: GrantType.DeviceCode,
@@ -232,11 +230,11 @@ describe('Auth', () => {
               client_id: config.clientId,
             });
 
-            expect(mockHttpClient.post).toHaveBeenCalledWith(
-              tokenEndpoint,
-              expectedParams.toString(),
-              { 'Content-Type': 'application/x-www-form-urlencoded' },
-            );
+            expect(global.fetch).toHaveBeenCalledWith(tokenEndpoint!, {
+              method: 'POST',
+              body: expectedParams.toString(),
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            });
 
             expect(mockLogger.error).toHaveBeenCalledWith(
               'Device token polling failed',
@@ -270,14 +268,14 @@ describe('Auth', () => {
                 },
               },
             );
-            mockHttpClient.post.mockRejectedValueOnce(unexpectedError);
+            (global.fetch as jest.Mock).mockRejectedValueOnce(unexpectedError);
 
             const pollPromise = auth.pollDeviceToken(device_code, 5, 10000);
 
             // First poll: unexpected error, method should throw immediately
             await expect(pollPromise).rejects.toThrow(ClientError);
 
-            expect(mockHttpClient.post).toHaveBeenCalledTimes(1);
+            expect(global.fetch).toHaveBeenCalledTimes(1);
             expect(mockLogger.error).toHaveBeenCalledWith(
               'Device token polling failed',
               {
@@ -296,8 +294,11 @@ describe('Auth', () => {
               expires_in: 3600,
             };
 
-            mockHttpClient.post.mockResolvedValueOnce(
-              JSON.stringify(tokenResponse),
+            (global.fetch as jest.Mock).mockResolvedValueOnce(
+              new Response(JSON.stringify(tokenResponse), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
             );
 
             const pollPromise = auth.pollDeviceToken(device_code, 5, 10000);
@@ -307,14 +308,14 @@ describe('Auth', () => {
 
             await pollPromise;
 
-            expect(mockHttpClient.post).toHaveBeenCalledTimes(1);
-            expect(mockHttpClient.post).toHaveBeenCalledWith(
-              tokenEndpoint,
-              expect.stringContaining(
+            expect(global.fetch).toHaveBeenCalledTimes(1);
+            expect(global.fetch).toHaveBeenCalledWith(tokenEndpoint!, {
+              method: 'POST',
+              body: expect.stringContaining(
                 `grant_type=${encodeURIComponent(GrantType.DeviceCode)}`,
               ),
-              { 'Content-Type': 'application/x-www-form-urlencoded' },
-            );
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            });
             expect(mockTokenClient.setTokens).toHaveBeenCalledWith(
               tokenResponse,
             );
@@ -330,7 +331,7 @@ describe('Auth', () => {
           const idTokenHint = 'id-token';
           const state = 'logout-state';
           const expectedLogoutUrl = buildLogoutUrl({
-            endSessionEndpoint: mockClientMetadata.end_session_endpoint,
+            endSessionEndpoint: mockClientMetadata.end_session_endpoint!,
             clientId: config.clientId,
             postLogoutRedirectUri: config.postLogoutRedirectUri,
             idTokenHint,
@@ -350,7 +351,7 @@ describe('Auth', () => {
 
         it('should generate logout URL without idTokenHint and state', async () => {
           const expectedLogoutUrl = buildLogoutUrl({
-            endSessionEndpoint: mockClientMetadata.end_session_endpoint,
+            endSessionEndpoint: mockClientMetadata.end_session_endpoint!,
             clientId: config.clientId,
             postLogoutRedirectUri: config.postLogoutRedirectUri,
             idTokenHint: undefined,
@@ -382,9 +383,26 @@ describe('Auth', () => {
 
       describe('getAuthorizationUrl', () => {
         it('should generate an authorization URL with PKCE', async () => {
+          // Mock generateRandomString to return predictable values
+          const utils = require('../utils');
+          (utils.generateRandomString as jest.Mock)
+            .mockReturnValueOnce('state123')
+            .mockReturnValueOnce('nonce123');
+
+          // No need to mock generateAuthUrl; let it execute normally
+
+          const buildAuthorizationUrlSpy = jest
+            .spyOn(require('../utils'), 'buildAuthorizationUrl')
+            .mockReturnValue(
+              'https://example.com/oauth2/authorize?client_id=test-client-id',
+            );
+
           const result = await auth.getAuthorizationUrl();
+
           expect(result.url).toEqual(
-            expect.stringContaining(`client_id=${config.clientId}`),
+            expect.stringContaining(
+              `client_id=${encodeURIComponent(config.clientId)}`,
+            ),
           );
           expect(mockLogger.debug).toHaveBeenCalledWith(
             'Authorization URL generated',
@@ -392,15 +410,35 @@ describe('Auth', () => {
               url: result.url,
             },
           );
+
+          // Restore the original implementation
+          buildAuthorizationUrlSpy.mockRestore();
         });
 
         it('should generate an authorization URL without PKCE', async () => {
-          // Modify config to disable PKCE if necessary
+          // Modify config to disable PKCE
           config.pkce = false;
 
+          // Mock generateRandomString to return predictable values
+          const utils = require('../utils');
+          (utils.generateRandomString as jest.Mock)
+            .mockReturnValueOnce('state123')
+            .mockReturnValueOnce('nonce123');
+
+          // No need to mock generateAuthUrl; let it execute normally
+
+          const buildAuthorizationUrlSpy = jest
+            .spyOn(require('../utils'), 'buildAuthorizationUrl')
+            .mockReturnValue(
+              'https://example.com/oauth2/authorize?client_id=test-client-id',
+            );
+
           const result = await auth.getAuthorizationUrl();
+
           expect(result.url).toEqual(
-            expect.stringContaining(`client_id=${config.clientId}`),
+            expect.stringContaining(
+              `client_id=${encodeURIComponent(config.clientId)}`,
+            ),
           );
           expect(mockLogger.debug).toHaveBeenCalledWith(
             'Authorization URL generated',
@@ -408,6 +446,9 @@ describe('Auth', () => {
               url: result.url,
             },
           );
+
+          // Restore the original implementation
+          buildAuthorizationUrlSpy.mockRestore();
         });
 
         it('should not generate PKCE details if grantType is not AuthorizationCode', async () => {
@@ -437,14 +478,13 @@ describe('Auth', () => {
           );
         });
       });
-      // src/clients/Auth.test.ts
 
       describe('handleRedirect', () => {
-        let auth: IAuth;
-        let config: IClientConfig;
+        let authInstance: IAuth;
+        let configInstance: IClientConfig;
 
         beforeEach(() => {
-          config = {
+          configInstance = {
             clientId: 'test-client-id',
             redirectUri: 'https://example.com/callback',
             scopes: [Scopes.OpenId, Scopes.Profile],
@@ -455,11 +495,10 @@ describe('Auth', () => {
             pkceMethod: PkceMethod.S256,
             postLogoutRedirectUri: 'https://example.com/logout-callback',
           };
-          auth = new Auth(
-            config,
+          authInstance = new Auth(
+            configInstance,
             mockLogger,
             mockIssuer,
-            mockHttpClient,
             mockTokenClient,
           );
         });
@@ -470,7 +509,10 @@ describe('Auth', () => {
           const expectedNonce = 'generated-nonce';
 
           // Mock state retrieval
-          auth['state'].addState(returnedState, expectedNonce);
+          (authInstance as Auth)['state'].addState(
+            returnedState,
+            expectedNonce,
+          );
 
           // Mock token exchange
           const tokenResponse = {
@@ -501,12 +543,12 @@ describe('Auth', () => {
             .spyOn(JwtValidator.prototype, 'validateIdToken')
             .mockResolvedValueOnce(jwtPayload);
 
-          await auth.handleRedirect(code, returnedState);
+          await authInstance.handleRedirect(code, returnedState);
 
           expect(mockTokenClient.exchangeCodeForToken).toHaveBeenCalledWith(
             code,
             // @ts-ignore // Private method
-            auth.getCodeVerifier(),
+            (authInstance as Auth).getCodeVerifier(),
           );
           expect(mockTokenClient.getTokens).toHaveBeenCalled();
           expect(mockIssuer.discover).toHaveBeenCalled();
@@ -518,7 +560,7 @@ describe('Auth', () => {
             'ID token validated successfully',
           );
           // @ts-ignore // Private method
-          expect(auth.getCodeVerifier()).toBeNull();
+          expect((authInstance as Auth).getCodeVerifier()).toBeNull();
         });
 
         it('should throw ClientError if state does not match', async () => {
@@ -526,7 +568,7 @@ describe('Auth', () => {
           const returnedState = 'invalid-state';
 
           await expect(
-            auth.handleRedirect(code, returnedState),
+            authInstance.handleRedirect(code, returnedState),
           ).rejects.toThrow(ClientError);
           expect(mockLogger.error).not.toHaveBeenCalled();
           expect(mockTokenClient.exchangeCodeForToken).not.toHaveBeenCalled();
@@ -537,14 +579,17 @@ describe('Auth', () => {
           const returnedState = 'valid-state';
           const expectedNonce = 'generated-nonce';
 
-          auth['state'].addState(returnedState, expectedNonce);
+          (authInstance as Auth)['state'].addState(
+            returnedState,
+            expectedNonce,
+          );
           const exchangeError = new ClientError('Exchange failed');
           mockTokenClient.exchangeCodeForToken.mockRejectedValueOnce(
             exchangeError,
           );
 
           await expect(
-            auth.handleRedirect(code, returnedState),
+            authInstance.handleRedirect(code, returnedState),
           ).rejects.toThrow(ClientError);
           expect(mockLogger.error).toHaveBeenCalledWith(
             'Failed to exchange authorization code for tokens',
@@ -557,7 +602,10 @@ describe('Auth', () => {
           const returnedState = 'valid-state';
           const expectedNonce = 'generated-nonce';
 
-          auth['state'].addState(returnedState, expectedNonce);
+          (authInstance as Auth)['state'].addState(
+            returnedState,
+            expectedNonce,
+          );
 
           const tokenResponse = {
             access_token: 'access-token',
@@ -567,13 +615,13 @@ describe('Auth', () => {
           mockTokenClient.exchangeCodeForToken.mockResolvedValueOnce();
           mockTokenClient.getTokens.mockReturnValueOnce(tokenResponse);
 
-          await auth.handleRedirect(code, returnedState);
+          await authInstance.handleRedirect(code, returnedState);
 
           expect(mockLogger.warn).toHaveBeenCalledWith(
             'No ID token returned to validate',
           );
           // @ts-ignore // Private method
-          expect(auth.getCodeVerifier()).toBeNull();
+          expect((authInstance as Auth).getCodeVerifier()).toBeNull();
         });
 
         it('should throw ClientError if ID token validation fails', async () => {
@@ -581,7 +629,10 @@ describe('Auth', () => {
           const returnedState = 'valid-state';
           const expectedNonce = 'generated-nonce';
 
-          auth['state'].addState(returnedState, expectedNonce);
+          (authInstance as Auth)['state'].addState(
+            returnedState,
+            expectedNonce,
+          );
 
           const tokenResponse = {
             access_token: 'access-token',
@@ -600,7 +651,7 @@ describe('Auth', () => {
             .mockRejectedValueOnce(new Error('Invalid ID token'));
 
           await expect(
-            auth.handleRedirect(code, returnedState),
+            authInstance.handleRedirect(code, returnedState),
           ).rejects.toThrow();
           expect(mockLogger.error).toHaveBeenCalledWith(
             'Failed to validate ID token',

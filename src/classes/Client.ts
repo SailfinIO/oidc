@@ -3,7 +3,7 @@
 import { Auth } from './Auth';
 import { UserInfo } from './UserInfo';
 import { Logger } from '../utils';
-import { GrantType, LogLevel, TokenTypeHint } from '../enums';
+import { GrantType, LogLevel, TokenTypeHint, Storage } from '../enums';
 import { Issuer } from './Issuer';
 import {
   IClientConfig,
@@ -14,12 +14,16 @@ import {
   IUser,
   IIssuer,
   IToken,
-  IHttp,
   IAuth,
+  ISession,
+  IStore,
+  IStoreContext,
+  ISessionData,
 } from '../interfaces';
 import { ClientError } from '../errors';
-import { Http } from './Http';
 import { Token } from './Token';
+import { Session } from './Session';
+import { Store } from './Store';
 import { defaultClientConfig } from '../config/defaultClientConfig';
 
 export class Client {
@@ -27,10 +31,11 @@ export class Client {
   private readonly auth: IAuth;
   private readonly tokenClient: IToken;
   private readonly logger: ILogger;
-  private readonly httpClient: IHttp;
   private readonly issuer: IIssuer;
   private userInfoClient!: IUserInfo;
   private initialized: boolean = false;
+  private session: ISession | null = null;
+  private store: IStore;
 
   constructor(userConfig: Partial<IClientConfig>) {
     // Merge userConfig with defaultClientConfig
@@ -49,21 +54,25 @@ export class Client {
         true,
       );
 
-    this.httpClient = new Http(this.logger);
-    this.issuer = new Issuer(this.config.discoveryUrl, this.logger);
-    this.tokenClient = new Token(
-      this.logger,
-      this.config,
-      this.issuer,
-      this.httpClient,
+    // Initialize the store using Store
+    this.store = Store.create(
+      this.config.storage?.mechanism || Storage.MEMORY,
+      this.config.storage?.options,
+      this.config.session?.store,
+      this.logger, // Pass logger to Store
     );
+
+    this.issuer = new Issuer(this.config.discoveryUrl, this.logger);
+    this.tokenClient = new Token(this.logger, this.config, this.issuer);
     this.auth = new Auth(
       this.config,
       this.logger,
       this.issuer,
-      this.httpClient,
       this.tokenClient,
     );
+
+    // Initialize session as null; it will be set after discovering issuer
+    this.session = null;
 
     this.validateConfig(this.config);
   }
@@ -71,12 +80,18 @@ export class Client {
   private async initializeInternal(): Promise<void> {
     try {
       this.logger.debug('Initializing OIDC Client');
-      const client = await this.issuer.discover();
+      const clientMetadata = await this.issuer.discover();
       this.userInfoClient = new UserInfo(
         this.tokenClient,
-        client,
-        this.httpClient,
+        clientMetadata,
         this.logger,
+      );
+      this.session = new Session(
+        this.config,
+        this.logger,
+        this.tokenClient,
+        this.userInfoClient,
+        this.store,
       );
       this.initialized = true;
       this.logger.info('OIDC Client initialized successfully');
@@ -145,25 +160,105 @@ export class Client {
   /**
    * Handles the redirect callback for authorization code flow.
    * Exchanges the authorization code for tokens and validates the state and nonce.
+   * Updates the session with tokens and user info.
    * @param code The authorization code received from the provider.
    * @param returnedState The state returned in the redirect to validate against CSRF.
+   * @param context The store context containing the request and response.
    */
   public async handleRedirect(
     code: string,
     returnedState: string,
+    context: IStoreContext, // Pass context here
   ): Promise<void> {
     await this.ensureInitialized();
     await this.auth.handleRedirect(code, returnedState);
+
+    // After handling redirect, tokens should be set in tokenClient
+    const tokens = this.tokenClient.getTokens();
+    if (!tokens) {
+      throw new ClientError(
+        'No tokens available after handling redirect.',
+        'NO_TOKENS',
+      );
+    }
+
+    // Fetch user info
+    let userInfo: IUser | null = null;
+    try {
+      userInfo = await this.userInfoClient.getUserInfo();
+    } catch (error) {
+      this.logger.warn('Failed to fetch user info after handling redirect', {
+        error,
+      });
+      // Decide whether to proceed without user info or throw an error
+      // Here, we'll proceed without user info
+    }
+
+    const sessionData: ISessionData = {
+      cookie: tokens,
+      passport: userInfo || undefined,
+    };
+
+    // Store session data
+    await this.store.set(sessionData, context);
+    this.logger.debug('Session data stored after redirect handling');
+
+    // Optionally start token refresh if enabled
+    if (this.config.session?.useSilentRenew && this.session) {
+      this.session.start(context);
+    }
   }
 
   /**
    * Handles the redirect callback for implicit flow.
-   * Extracts tokens from the URL fragment.
+   * Extracts tokens from the URL fragment and updates the session.
    * @param fragment The URL fragment containing tokens.
+   * @param context The store context containing the request and response.
    */
-  public async handleRedirectForImplicitFlow(fragment: string): Promise<void> {
+  public async handleRedirectForImplicitFlow(
+    fragment: string,
+    context: IStoreContext, // Pass context here
+  ): Promise<void> {
     await this.ensureInitialized();
     await this.auth.handleRedirectForImplicitFlow(fragment);
+
+    // After handling redirect, tokens should be set in tokenClient
+    const tokens = this.tokenClient.getTokens();
+    if (!tokens) {
+      throw new ClientError(
+        'No tokens available after handling redirect.',
+        'NO_TOKENS',
+      );
+    }
+
+    // Fetch user info
+    let userInfo: IUser | null = null;
+    try {
+      userInfo = await this.userInfoClient.getUserInfo();
+    } catch (error) {
+      this.logger.warn(
+        'Failed to fetch user info after handling implicit flow redirect',
+        { error },
+      );
+      // Decide whether to proceed without user info or throw an error
+      // Here, we'll proceed without user info
+    }
+
+    const sessionData: ISessionData = {
+      cookie: tokens,
+      passport: userInfo || undefined,
+    };
+
+    // Store session data
+    await this.store.set(sessionData, context);
+    this.logger.debug(
+      'Session data stored after implicit flow redirect handling',
+    );
+
+    // Optionally start token refresh if enabled
+    if (this.config.session?.useSilentRenew && this.session) {
+      this.session.start(context);
+    }
   }
 
   /**
@@ -220,14 +315,53 @@ export class Client {
    * @param device_code The device code obtained from device authorization.
    * @param interval Polling interval in seconds.
    * @param timeout Maximum time to wait in milliseconds.
+   * @param context The store context containing the request and response.
    */
   public async pollDeviceToken(
     device_code: string,
     interval: number = 5,
     timeout?: number,
+    context?: IStoreContext, // Pass context here
   ): Promise<void> {
     await this.ensureInitialized();
-    return this.auth.pollDeviceToken(device_code, interval, timeout);
+    await this.auth.pollDeviceToken(device_code, interval, timeout);
+
+    // After polling, tokens should be set in tokenClient
+    const tokens = this.tokenClient.getTokens();
+    if (!tokens) {
+      throw new ClientError(
+        'No tokens available after device token polling.',
+        'NO_TOKENS',
+      );
+    }
+
+    // Fetch user info
+    let userInfo: IUser | null = null;
+    try {
+      userInfo = await this.userInfoClient.getUserInfo();
+    } catch (error) {
+      this.logger.warn('Failed to fetch user info after device token polling', {
+        error,
+      });
+      // Decide whether to proceed without user info or throw an error
+      // Here, we'll proceed without user info
+    }
+
+    const sessionData: ISessionData = {
+      cookie: tokens,
+      passport: userInfo || undefined,
+    };
+
+    // Store session data
+    if (context) {
+      await this.store.set(sessionData, context);
+      this.logger.debug('Session data stored after device token polling');
+
+      // Optionally start token refresh if enabled
+      if (this.config.session?.useSilentRenew && this.session) {
+        this.session.start(context);
+      }
+    }
   }
 
   /**
@@ -249,11 +383,16 @@ export class Client {
   }
 
   /**
-   * Clears all stored tokens.
+   * Clears all stored tokens and stops the session.
+   * @param context The store context containing the request and response.
    */
-  public async clearTokens(): Promise<void> {
+  public async clearTokens(context: IStoreContext): Promise<void> {
     await this.ensureInitialized();
     this.tokenClient.clearTokens();
+    if (this.session) {
+      this.session.stop();
+      await this.store.destroy(this.session.sid, context);
+    }
   }
 
   /**

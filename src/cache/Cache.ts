@@ -4,7 +4,7 @@
  * This module implements the `ICache` interface and includes robust validation, logging,
  * and error handling for cache operations.
  *
- * @module src/cache/InMemoryCache
+ * @module src/cache/Cache
  */
 
 import { ICache, ILogger } from '../interfaces';
@@ -16,11 +16,10 @@ import { ClientError } from '../errors/ClientError';
  * @template T The type of values to be stored in the cache.
  * @implements {ICache<T>}
  */
-export class InMemoryCache<T> implements ICache<T> {
+export class Cache<T> implements ICache<T> {
   /**
    * The internal storage for the cache entries.
    *
-   * @private
    * @readonly
    * @type {Map<string, { value: T; expiresAt: number }>}
    */
@@ -30,7 +29,7 @@ export class InMemoryCache<T> implements ICache<T> {
   /**
    * The logger instance for logging operations and errors.
    *
-   * @private
+
    * @readonly
    * @type {ILogger}
    */
@@ -39,14 +38,13 @@ export class InMemoryCache<T> implements ICache<T> {
   /**
    * Default time-to-live for cache entries in milliseconds.
    *
-   * @private
    * @readonly
    * @type {number}
    */
   private readonly defaultTTL: number;
 
   /**
-   * Creates an instance of InMemoryCache.
+   * Creates an instance of Cache.
    *
    * @param {ILogger} logger - The logger instance for logging operations and errors.
    * @param {number} [defaultTTL=3600000] - Default time-to-live for cache entries in milliseconds.
@@ -64,7 +62,7 @@ export class InMemoryCache<T> implements ICache<T> {
    * @throws {ClientError} If the key is invalid.
    * @example
    * ```typescript
-   * const cache = new InMemoryCache<string>(logger);
+   * const cache = new Cache<string>(logger);
    * cache.set('key1', 'value1');
    * const value = cache.get('key1'); // "value1"
    * ```
@@ -97,7 +95,7 @@ export class InMemoryCache<T> implements ICache<T> {
    * @throws {ClientError} If the key or value is invalid, or if the TTL is not a positive number.
    * @example
    * ```typescript
-   * const cache = new InMemoryCache<number>(logger, 5000);
+   * const cache = new Cache<number>(logger, 5000);
    * cache.set('key1', 42);
    * ```
    */
@@ -169,7 +167,6 @@ export class InMemoryCache<T> implements ICache<T> {
   /**
    * Validates the cache key.
    *
-   * @private
    * @param {string} key - The key to validate.
    * @throws {ClientError} If the key is not a non-empty string.
    */
@@ -185,7 +182,6 @@ export class InMemoryCache<T> implements ICache<T> {
   /**
    * Validates the cache value.
    *
-   * @private
    * @param {T} value - The value to validate.
    * @throws {ClientError} If the value is `undefined` or `null`.
    */
@@ -203,7 +199,6 @@ export class InMemoryCache<T> implements ICache<T> {
   /**
    * Validates the TTL (time-to-live).
    *
-   * @private
    * @param {number} ttl - The TTL to validate.
    * @throws {ClientError} If the TTL is not a positive number.
    */
@@ -219,7 +214,6 @@ export class InMemoryCache<T> implements ICache<T> {
   /**
    * Checks if a given timestamp has expired.
    *
-   * @private
    * @param {number} expiresAt - The expiration timestamp.
    * @returns {boolean} True if expired, otherwise false.
    */
@@ -231,7 +225,6 @@ export class InMemoryCache<T> implements ICache<T> {
    * Gets the default TTL for cache entries.
    *
    * @readonly
-   * @public
    * @returns {number} The default TTL in milliseconds.
    * @example
    * ```typescript

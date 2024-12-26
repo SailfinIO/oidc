@@ -22,7 +22,6 @@ export class ClaimsValidator implements IClaimsValidator {
   /**
    * The expected issuer of the JWT.
    *
-   * @private
    * @readonly
    * @type {string}
    */
@@ -31,7 +30,6 @@ export class ClaimsValidator implements IClaimsValidator {
   /**
    * The expected audience of the JWT.
    *
-   * @private
    * @readonly
    * @type {string}
    */
@@ -40,7 +38,6 @@ export class ClaimsValidator implements IClaimsValidator {
   /**
    * The maximum allowable future time in seconds for the `iat` claim.
    *
-   * @private
    * @readonly
    * @type {number}
    */
@@ -88,7 +85,6 @@ export class ClaimsValidator implements IClaimsValidator {
   /**
    * Validates the `iss` (issuer) claim.
    *
-   * @private
    * @param {string | undefined} iss - The `iss` claim to validate.
    * @throws {ClientError} If the `iss` claim does not match the expected issuer.
    */
@@ -104,7 +100,6 @@ export class ClaimsValidator implements IClaimsValidator {
   /**
    * Validates the `aud` (audience) claim.
    *
-   * @private
    * @param {string | string[] | undefined} aud - The `aud` claim to validate.
    * @throws {ClientError} If the `aud` claim does not include the expected audience.
    */
@@ -121,7 +116,6 @@ export class ClaimsValidator implements IClaimsValidator {
   /**
    * Validates the `azp` (authorized party) claim for multiple audiences.
    *
-   * @private
    * @param {JwtPayload} payload - The JWT payload containing the `azp` claim.
    * @throws {ClientError} If the `azp` claim is invalid for multiple audiences.
    */
@@ -142,7 +136,7 @@ export class ClaimsValidator implements IClaimsValidator {
   /**
    * Validates the `exp`, `iat`, and `nbf` claims for expiration, issued-at, and not-before times.
    *
-   * @private
+
    * @param {JwtPayload} payload - The JWT payload to validate.
    * @throws {ClientError} If any of the timestamp claims are invalid.
    */
@@ -168,7 +162,6 @@ export class ClaimsValidator implements IClaimsValidator {
   /**
    * Validates the `nonce` claim.
    *
-   * @private
    * @param {JwtPayload} payload - The JWT payload containing the `nonce` claim.
    * @param {string | undefined} nonce - The expected nonce value.
    * @throws {ClientError} If the `nonce` claim does not match the expected value.

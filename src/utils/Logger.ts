@@ -2,14 +2,13 @@
 
 import { ILogger } from '../interfaces';
 import { LogLevel } from '../enums';
-import { ColorCodes, ResetCode } from './ColorCodes';
+import { COLOR_CODES, RESET_CODE } from '../constants/logger-constants';
 
 /**
  * A simple, customizable logger class for logging messages at various log levels.
  * Provides options for colored output and context-based logging.
  *
  * @remarks This class is intended for use in Node.js applications.
- * @public
  * @implements {ILogger}
  *
  * @module Logger
@@ -37,7 +36,9 @@ export class Logger implements ILogger {
     useColors: boolean = true,
   ) {
     this.context = context;
-    this.currentLogLevel = logLevel;
+    this.currentLogLevel = Object.values(LogLevel).includes(logLevel)
+      ? logLevel
+      : LogLevel.INFO;
     this.useColors = useColors;
   }
 
@@ -152,10 +153,10 @@ export class Logger implements ILogger {
     const timestamp = this.formatTimestamp();
     const pid = process.pid;
 
-    const white = this.useColors ? ColorCodes['white'] : '';
-    const yellow = this.useColors ? ColorCodes['yellow'] : '';
-    const reset = this.useColors ? ResetCode : '';
-    const color = this.useColors ? ColorCodes[level] || '' : '';
+    const white = this.useColors ? COLOR_CODES['white'] : '';
+    const yellow = this.useColors ? COLOR_CODES['yellow'] : '';
+    const reset = this.useColors ? RESET_CODE : '';
+    const color = this.useColors ? COLOR_CODES[level] || '' : '';
 
     let formattedMessage = `${white}${pid} - ${timestamp}${reset} `;
     formattedMessage += `${color}[${level.toUpperCase()}]${reset} `;

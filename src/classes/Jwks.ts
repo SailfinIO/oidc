@@ -6,17 +6,9 @@
  * @module src/classes/Jwks
  */
 
-import { InMemoryCache } from '../cache/InMemoryCache';
+import { Cache } from '../cache/Cache';
 import { ClientError } from '../errors/ClientError';
-import {
-  ILogger,
-  IHttp,
-  Jwk,
-  JwksResponse,
-  ICache,
-  IJwks,
-} from '../interfaces';
-import { Http } from './Http';
+import { ILogger, Jwk, JwksResponse, ICache, IJwks } from '../interfaces';
 
 /**
  * Represents a client for managing and retrieving JSON Web Keys (JWKs) from a JWKS URI.
@@ -30,7 +22,6 @@ export class Jwks implements IJwks {
   /**
    * Promise to manage concurrent JWKS fetches.
    *
-   * @private
    * @type {Promise<void> | null}
    */
   private fetchingJWKS: Promise<void> | null = null;
@@ -38,7 +29,6 @@ export class Jwks implements IJwks {
   /**
    * The cache key used to store the JWKS.
    *
-   * @private
    * @readonly
    * @type {string}
    */
@@ -49,16 +39,14 @@ export class Jwks implements IJwks {
    *
    * @param {string} jwksUri - The URI to fetch the JWKS from.
    * @param {ILogger} logger - Logger instance for logging operations and errors.
-   * @param {IHttp} [Http] - HTTP client for making requests. Defaults to `HTTPClient`.
-   * @param {ICache<Jwk[]>} [cache] - Cache instance for storing JWKS. Defaults to `InMemoryCache`.
+   * @param {ICache<Jwk[]>} [cache] - Cache instance for storing JWKS. Defaults to `Cache`.
    * @param {number} [cacheTtl=3600000] - Time-to-live for the cache in milliseconds. Defaults to 1 hour.
    * @throws {ClientError} If the provided JWKS URI is invalid.
    */
   constructor(
     private readonly jwksUri: string,
     private readonly logger: ILogger,
-    private readonly httpClient: IHttp = new Http(logger),
-    private readonly cache: ICache<Jwk[]> = new InMemoryCache<Jwk[]>(logger),
+    private readonly cache: ICache<Jwk[]> = new Cache<Jwk[]>(logger),
     private readonly cacheTtl: number = 3600000, // 1 hour default
   ) {
     this.validateJwksUri();
@@ -119,7 +107,6 @@ export class Jwks implements IJwks {
    *
    * If a fetch is already in progress, it returns the existing fetch promise.
    *
-   * @private
    * @returns {Promise<void>} Resolves when the JWKS has been fetched and cached.
    */
   private async ensureJWKS(): Promise<void> {
@@ -134,7 +121,6 @@ export class Jwks implements IJwks {
   /**
    * Finds a JWK by its Key ID (kid) within a JWKS array.
    *
-   * @private
    * @param {Jwk[]} jwks - The array of JWKs.
    * @param {string} kid - The Key ID to search for.
    * @returns {Jwk | undefined} The matching JWK or `undefined` if not found.
@@ -149,18 +135,17 @@ export class Jwks implements IJwks {
    * This method fetches the JWKS from the URI, validates its structure,
    * and stores it in the cache with the specified TTL.
    *
-   * @public
    * @returns {Promise<void>} Resolves when the cache is refreshed.
    * @throws {ClientError} If fetching or parsing fails.
    */
   public async refreshCache(): Promise<void> {
     try {
       this.logger.debug('Fetching JWKS from URI', { jwksUri: this.jwksUri });
-      const response = await this.httpClient.get(this.jwksUri);
+      const response = await fetch(this.jwksUri);
 
       let jwks: JwksResponse;
       try {
-        jwks = JSON.parse(response);
+        jwks = await response.json();
       } catch (parseError) {
         this.logger.error('Failed to parse JWKS response', { parseError });
         throw new ClientError(
@@ -182,7 +167,6 @@ export class Jwks implements IJwks {
   /**
    * Validates the JWKS URI to ensure it is a valid string.
    *
-   * @private
    * @throws {ClientError} If the JWKS URI is invalid.
    */
   private validateJwksUri(): void {
@@ -194,7 +178,6 @@ export class Jwks implements IJwks {
   /**
    * Validates the structure of the JWKS response.
    *
-   * @private
    * @param {JwksResponse} jwks - The JWKS response to validate.
    * @throws {ClientError} If the JWKS structure is invalid.
    */
@@ -215,7 +198,6 @@ export class Jwks implements IJwks {
    *
    * Logs the error and rethrows it as a `ClientError` with appropriate messaging.
    *
-   * @private
    * @param {unknown} error - The error to handle.
    * @throws {ClientError} Always throws a `ClientError` for consistent error handling.
    */

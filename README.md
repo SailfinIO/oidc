@@ -20,6 +20,7 @@ This library is built for enterprise-grade TypeScript and Node.js applications, 
 
 ## Table of Contents
 
+- [Design Philosophy](#design-philosophy)
 - [Features](#features)
 - [Installation](#installation)
 - [Usage](#usage)
@@ -37,6 +38,10 @@ This library is built for enterprise-grade TypeScript and Node.js applications, 
 - [Contributing](#contributing)
 - [Support](#support)
 - [License](#license)
+
+## Design Philosophy
+
+To ensure a lightweight and dependency-free experience, `@sailfin/oidc` incorporates several internally built utility functions. These utilities handle complex operations such as DER encoding, key conversions, and asynchronous control flows without relying on external packages, providing a seamless and efficient integration for your applications. These utilities are designed to be modular and can be used independently in other projects, although they are primarily intended for internal use within the library and are not exposed as part of the public API. Feel free to explore the `src/utils` directory to learn more about these utilities.
 
 ## Features
 
@@ -66,13 +71,14 @@ yarn add @sailfin/oidc
 
 ### Basic Setup
 
-Here's an example of initializing and using the `OIDCClient`:
+Here's an example of initializing and using the `@sailfin/oidc` client:
 
 ```typescript
 import { Client, Scopes } from '@sailfin/oidc';
 
 const oidcClient = new Client({
   clientId: 'your-client-id',
+  clientSecret: 'your-client-secret',
   redirectUri: 'https://your-app/callback',
   discoveryUrl: 'https://issuer.com/.well-known/openid-configuration',
   scopes: [Scopes.OpenId, Scopes.Profile, Scopes.Email],

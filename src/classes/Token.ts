@@ -6,7 +6,6 @@ import {
   ITokenIntrospectionResponse,
   IIssuer,
   ILogger,
-  IHttp,
   IToken,
 } from '../interfaces';
 import { ClientError } from '../errors/ClientError';
@@ -16,7 +15,6 @@ import { TokenTypeHint } from '../enums/TokenTypeHint';
 
 export class Token implements IToken {
   private readonly logger: ILogger;
-  private readonly httpClient: IHttp;
   private readonly config: IClientConfig;
   private readonly issuer: IIssuer;
 
@@ -25,15 +23,9 @@ export class Token implements IToken {
   private idToken: string | null = null;
   private expiresAt: number | null = null;
 
-  constructor(
-    logger: ILogger,
-    config: IClientConfig,
-    issuer: IIssuer,
-    httpClient: IHttp,
-  ) {
+  constructor(logger: ILogger, config: IClientConfig, issuer: IIssuer) {
     this.logger = logger;
     this.config = config;
-    this.httpClient = httpClient;
     this.issuer = issuer;
   }
 
@@ -235,8 +227,8 @@ export class Token implements IToken {
     const body = buildUrlEncodedBody(params);
 
     try {
-      const response = await this.httpClient.post(endpoint, body, headers);
-      return JSON.parse(response);
+      const response = await fetch(endpoint, { method: 'POST', body, headers });
+      return response.json();
     } catch (error) {
       this.logger.error('Token request failed', { endpoint, params, error });
       throw new ClientError('Token request failed', 'TOKEN_REQUEST_ERROR', {
@@ -263,8 +255,12 @@ export class Token implements IToken {
     const body = buildUrlEncodedBody(params);
 
     try {
-      const response = await this.httpClient.post(tokenEndpoint, body, headers);
-      const tokenResponse: ITokenResponse = JSON.parse(response);
+      const response = await fetch(tokenEndpoint, {
+        method: 'POST',
+        body,
+        headers,
+      });
+      const tokenResponse: ITokenResponse = await response.json();
       this.setTokens(tokenResponse);
       this.logger.info('Exchanged grant for tokens', {
         grantType: this.config.grantType,

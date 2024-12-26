@@ -113,7 +113,6 @@ export class SignatureVerifier implements ISignatureVerifier {
   /**
    * Extracts the signing input and signature buffer from a JWT.
    *
-   * @private
    * @param {string} idToken - The JWT to extract parts from.
    * @returns {Object} An object containing `signingInput` and `sigBuffer`.
    * @throws {ClientError} If the JWT format is invalid.
@@ -136,7 +135,6 @@ export class SignatureVerifier implements ISignatureVerifier {
   /**
    * Verifies the signature of the JWT based on the algorithm and key type.
    *
-   * @private
    * @param {Algorithm} alg - The algorithm used for signing.
    * @param {string} hashName - The hash algorithm name (e.g., 'sha256').
    * @param {string} signingInput - The input used to generate the signature.
@@ -175,7 +173,13 @@ export class SignatureVerifier implements ISignatureVerifier {
   /**
    * Verifies an RSA signature.
    *
-   * @private
+   * @param {string} hashName - The hash algorithm name (e.g., 'sha256').
+   * @param {string} signingInput - The input used to generate the signature.
+   * @param {string} pubKey - The public key used for verification.
+   * @param {Buffer} sigBuffer - The signature buffer.
+   * @param {Algorithm} alg - The algorithm used for signing.
+   * @param {{ saltLength?: number }} [options] - Optional parameters for verification.
+   * @throws {ClientError} If the signature verification fails.
    */
   private verifyRsa(
     hashName: string,
@@ -211,7 +215,12 @@ export class SignatureVerifier implements ISignatureVerifier {
   /**
    * Verifies an ECDSA signature.
    *
-   * @private
+   * @param {string} hashName - The hash algorithm name (e.g., 'sha256').
+   * @param {string} signingInput - The input used to generate the signature.
+   * @param {string} pubKey - The public key used for verification.
+   * @param {Buffer} sigBuffer - The signature buffer.
+   * @param {Algorithm} alg - The algorithm used for signing.
+   * @throws {ClientError} If the signature verification fails.
    */
   private verifyEc(
     hashName: string,
@@ -239,7 +248,9 @@ export class SignatureVerifier implements ISignatureVerifier {
   /**
    * Maps an algorithm to its corresponding hash function and options.
    *
-   * @private
+   * @param {Algorithm} alg - The algorithm to map.
+   * @returns {HashAlgorithm} The hash algorithm and options.
+   * @throws {ClientError} If the algorithm is unsupported.
    */
   private getHashAlgorithm(alg: Algorithm): HashAlgorithm {
     const entry = ALGORITHM_HASH_MAP[alg];
@@ -255,7 +266,9 @@ export class SignatureVerifier implements ISignatureVerifier {
   /**
    * Creates a public key from a JWK for the specified algorithm.
    *
-   * @private
+   * @param {Jwk} jwk - The JSON Web Key to convert.
+   * @returns {string} The public key in PEM format.
+   * @throws {ClientError} If the key type is unsupported.
    */
   private createPublicKeyFromJwk(jwk: Jwk): string {
     switch (jwk.kty) {
@@ -274,7 +287,13 @@ export class SignatureVerifier implements ISignatureVerifier {
   /**
    * Validates that a JWK is compatible with the specified algorithm.
    *
-   * @private
+   * @param {Jwk} jwk - The JSON Web Key to validate.
+   * @param {Algorithm} alg - The algorithm to validate against.
+   * @throws {ClientError} If the JWK is incompatible with the algorithm.
+   * @throws {ClientError} If the JWK algorithm does not match the JWT header alg.
+   * @throws {ClientError} If the curve is incorrect for EC algorithms.
+   * @throws {ClientError} If the JWK kty does not match the algorithm type.
+   * @throws {ClientError} If the algorithm is unsupported.
    */
   private validateKeyForAlgorithm(jwk: Jwk, alg: Algorithm): void {
     // Key type requirements for specific algorithm prefixes

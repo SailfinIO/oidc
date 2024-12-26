@@ -10,3 +10,4 @@ export * from './urlUtils';
 export * from './sleep';
 export * from './Mutex';
 export * from './parseFragment';
+export * from './cookie';

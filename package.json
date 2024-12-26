@@ -56,7 +56,6 @@
     "e2e-test": "jest --detectOpenHandles --forceExit --config jest.e2e.config.ts",
     "test:watch": "jest --watch --config jest.config.ts",
     "test:coverage": "jest --detectOpenHandles --forceExit --config jest.config.ts --coverage",
-    "start:dev": "nest start --watch",
     "lint": "eslint",
     "lint:fix": "eslint --fix",
     "format": "prettier --write \"src/**/*.ts\"",

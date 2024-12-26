@@ -23,7 +23,6 @@ export class ClientError extends Error {
   /**
    * A short string code identifying the type of error.
    *
-   * @public
    * @type {string}
    */
   public code: string;
@@ -31,7 +30,6 @@ export class ClientError extends Error {
   /**
    * Optional contextual information related to the error.
    *
-   * @public
    * @type {*}
    */
   public context?: any;

@@ -2,6 +2,7 @@
 
 import { Logger } from './Logger';
 import { LogLevel } from '../enums';
+import { COLOR_CODES } from '../constants/logger-constants';
 
 describe('Logger', () => {
   let logger: Logger;
@@ -64,7 +65,44 @@ describe('Logger', () => {
     return `${month}/${day}/${year}, ${hours}:${minutes}:${seconds} ${ampm}`;
   };
 
-  it('should log error messages when log level is INFO', () => {
+  describe('Logger Constructor', () => {
+    it('should initialize with default values', () => {
+      const logger = new Logger('DefaultContext');
+
+      // Assert defaults
+      expect(logger).toHaveProperty('context', 'DefaultContext');
+      expect(logger).toHaveProperty('currentLogLevel', LogLevel.INFO);
+      expect(logger).toHaveProperty('useColors', true);
+    });
+
+    it('should initialize with custom log level and useColors', () => {
+      const logger = new Logger('CustomContext', LogLevel.DEBUG, false);
+
+      // Assert custom values
+      expect(logger).toHaveProperty('context', 'CustomContext');
+      expect(logger).toHaveProperty('currentLogLevel', LogLevel.DEBUG);
+      expect(logger).toHaveProperty('useColors', false);
+    });
+
+    it('should handle an empty context string', () => {
+      const logger = new Logger('');
+
+      // Assert that context is an empty string
+      expect(logger).toHaveProperty('context', '');
+      expect(logger).toHaveProperty('currentLogLevel', LogLevel.INFO);
+      expect(logger).toHaveProperty('useColors', true);
+    });
+
+    it('should handle invalid log level gracefully', () => {
+      // @ts-ignore - Test bypasses TypeScript checks to simulate misuse
+      const logger = new Logger('InvalidLogLevelContext', 'INVALID');
+
+      // Assert default log level is used if invalid value is provided
+      expect(logger).toHaveProperty('currentLogLevel', LogLevel.INFO);
+    });
+  });
+
+  it('should log error messages when log level is ERROR', () => {
     logger.error('This is an error message');
 
     const expectedTimestamp = getFormattedTimestamp();
@@ -77,7 +115,7 @@ describe('Logger', () => {
     expect(logMessage).toContain(expectedTimestamp);
   });
 
-  it('should log warn messages when log level is INFO', () => {
+  it('should log warn messages when log level is WARN', () => {
     logger.warn('This is a warning message');
 
     const expectedTimestamp = getFormattedTimestamp();
@@ -206,5 +244,82 @@ describe('Logger', () => {
     expect(logMessage).toContain('This should be logged');
     expect(logMessage).toContain('TestContext');
     expect(logMessage).toContain(expectedTimestamp);
+  });
+
+  it('should handle string as additional data correctly', () => {
+    logger.info('This is a message', 'Additional string data');
+
+    const expectedTimestamp = getFormattedTimestamp();
+
+    expect(console.info).toHaveBeenCalledTimes(1);
+    const logMessage = consoleInfoSpy.mock.calls[0][0];
+    expect(logMessage).toContain('[INFO]');
+    expect(logMessage).toContain('This is a message');
+    expect(logMessage).toContain('Additional string data');
+    expect(logMessage).toContain('TestContext');
+    expect(logMessage).toContain(expectedTimestamp);
+  });
+
+  it('should handle non-stringifiable data gracefully', () => {
+    const nonStringifiableData = BigInt(12345678901234567890n); // BigInt cannot be stringified
+
+    logger.info('Non-stringifiable data test', nonStringifiableData);
+
+    const expectedTimestamp = getFormattedTimestamp();
+
+    expect(console.info).toHaveBeenCalledTimes(1);
+    const logMessage = consoleInfoSpy.mock.calls[0][0];
+    expect(logMessage).toContain('[INFO]');
+    expect(logMessage).toContain('Non-stringifiable data test');
+    expect(logMessage).toContain('TestContext');
+    expect(logMessage).toContain(expectedTimestamp);
+    expect(logMessage).toContain('Unable to stringify additional data');
+  });
+
+  it('should format message with colors when useColors is true', () => {
+    const testLogger = new Logger('TestContext', LogLevel.INFO, true);
+
+    const formattedMessage = testLogger['formatMessage'](
+      LogLevel.INFO,
+      'Test message',
+    );
+
+    expect(formattedMessage).toContain(COLOR_CODES['white']);
+    expect(formattedMessage).toContain(COLOR_CODES['yellow']);
+    expect(formattedMessage).toContain(COLOR_CODES['info']);
+    expect(formattedMessage).toContain('Test message');
+  });
+
+  it('should format message without colors when useColors is false', () => {
+    const testLogger = new Logger('TestContext', LogLevel.INFO, false);
+
+    const formattedMessage = testLogger['formatMessage'](
+      LogLevel.INFO,
+      'Test message',
+    );
+
+    expect(formattedMessage).not.toContain(COLOR_CODES['white']);
+    expect(formattedMessage).not.toContain(COLOR_CODES['yellow']);
+    expect(formattedMessage).not.toContain(COLOR_CODES['info']);
+    expect(formattedMessage).toContain('Test message');
+  });
+
+  it('should use empty string for color when log level is not in COLOR_CODES and useColors is true', () => {
+    const testLogger = new Logger('TestContext', LogLevel.INFO, true);
+
+    // Mock COLOR_CODES to exclude the 'INFO' log level
+    const originalColorCodes = { ...COLOR_CODES };
+    delete COLOR_CODES['info'];
+
+    const formattedMessage = testLogger['formatMessage'](
+      LogLevel.INFO,
+      'Test message without matching color',
+    );
+
+    // Restore original COLOR_CODES
+    Object.assign(COLOR_CODES, originalColorCodes);
+
+    expect(formattedMessage).not.toContain(originalColorCodes['info']);
+    expect(formattedMessage).toContain('Test message without matching color');
   });
 });

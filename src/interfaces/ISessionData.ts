@@ -1,12 +1,9 @@
 // src/interfaces/ISessionData.ts
 
+import { ITokenResponse } from './ITokenResponse';
+import { IUser } from './IUser';
+
 export interface ISessionData {
-  userId: string;
-  username?: string;
-  email?: string;
-  roles?: string[];
-  permissions?: string[];
-  accessToken?: string;
-  refreshToken?: string;
-  expiresAt?: number;
+  cookie: ITokenResponse;
+  passport?: IUser;
 }

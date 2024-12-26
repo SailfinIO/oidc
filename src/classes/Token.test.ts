@@ -4,19 +4,31 @@ import {
   ILogger,
   IClientConfig,
   IIssuer,
-  IHttp,
   ITokenResponse,
   ITokenIntrospectionResponse,
 } from '../interfaces';
 import { ClientError } from '../errors/ClientError';
 import { GrantType, Scopes, TokenTypeHint } from '../enums';
 
+global.fetch = jest.fn();
+
+// Helper to mock successful fetch responses
+const mockFetchSuccess = (data: any, status: number = 200) => ({
+  ok: status >= 200 && status < 300,
+  status,
+  json: jest.fn().mockResolvedValue(data),
+});
+
+// Helper to mock failed fetch responses
+const mockFetchFailure = (error: any) => {
+  throw error;
+};
+
 describe('TokenClient', () => {
   let tokenClient: IToken;
   let mockLogger: ILogger;
   let mockConfig: IClientConfig;
   let mockIssuer: IIssuer;
-  let mockHttpClient: IHttp;
 
   // Fixed timestamp for consistent testing (e.g., Jan 1, 2023 00:00:00 GMT)
   const fixedTimestamp = new Date('2023-01-01T00:00:00Z').getTime();
@@ -66,24 +78,13 @@ describe('TokenClient', () => {
         // Add other necessary IDiscoveryConfig properties
       }),
     };
-
-    mockHttpClient = {
-      get: jest.fn(),
-      post: jest.fn(),
-      delete: jest.fn(),
-      head: jest.fn(),
-      options: jest.fn(),
-      trace: jest.fn(),
-      connect: jest.fn(),
-      put: jest.fn(),
-      patch: jest.fn(),
-    };
-
-    tokenClient = new Token(mockLogger, mockConfig, mockIssuer, mockHttpClient);
+    (global.fetch as jest.Mock).mockReset();
+    tokenClient = new Token(mockLogger, mockConfig, mockIssuer);
   });
 
   afterEach(() => {
     jest.clearAllMocks();
+    (global.fetch as jest.Mock).mockReset();
   });
 
   /**
@@ -104,25 +105,29 @@ describe('TokenClient', () => {
         token_type: 'Bearer',
       });
 
-      const mockTokenResponse = {
+      const mockTokenResponse: ITokenResponse = {
         access_token: 'new-access-token',
         refresh_token: 'new-refresh-token',
         expires_in: 3600, // 1 hour
         token_type: 'Bearer',
       };
 
-      (mockHttpClient.post as jest.Mock).mockResolvedValue(
-        JSON.stringify(mockTokenResponse),
+      // Mock fetch to return the token response
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        mockFetchSuccess(mockTokenResponse),
       );
 
       // Act
       await tokenClient.refreshAccessToken();
 
       // Assert
-      expect(mockHttpClient.post).toHaveBeenCalledWith(
+      expect(global.fetch).toHaveBeenCalledWith(
         'https://example.com/oauth/token',
-        'grant_type=refresh_token&refresh_token=valid-refresh-token&client_id=test-client-id',
-        { 'Content-Type': 'application/x-www-form-urlencoded' },
+        {
+          method: 'POST',
+          body: 'grant_type=refresh_token&refresh_token=valid-refresh-token&client_id=test-client-id',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        },
       );
       expect(mockLogger.info).toHaveBeenCalledWith(
         'Access token refreshed successfully',
@@ -167,7 +172,7 @@ describe('TokenClient', () => {
         'Token request failed',
         'TOKEN_REQUEST_ERROR',
       );
-      (mockHttpClient.post as jest.Mock).mockRejectedValue(mockError);
+      (global.fetch as jest.Mock).mockRejectedValue(mockError);
 
       // Act & Assert
       await expect(tokenClient.refreshAccessToken()).rejects.toThrow(
@@ -270,7 +275,7 @@ describe('TokenClient', () => {
 
       const accessToken = await tokenClient.getAccessToken();
       expect(accessToken).toBe('valid-access-token');
-      expect(mockHttpClient.post).not.toHaveBeenCalled();
+      expect(global.fetch as jest.Mock).not.toHaveBeenCalled();
     });
 
     it('should refresh the access token if it is expired and refresh token is available', async () => {
@@ -285,25 +290,28 @@ describe('TokenClient', () => {
       // Advance time by 4000 * 1000 ms (4000 seconds = 1 hour 6 minutes 40 seconds)
       advanceTimeBy(4000 * 1000);
 
-      const mockTokenResponse = {
+      const mockTokenResponse: ITokenResponse = {
         access_token: 'new-access-token',
         refresh_token: 'new-refresh-token',
         expires_in: 3600,
         token_type: 'Bearer',
       };
 
-      (mockHttpClient.post as jest.Mock).mockResolvedValue(
-        JSON.stringify(mockTokenResponse),
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        mockFetchSuccess(mockTokenResponse),
       );
 
       // Act
       const accessToken = await tokenClient.getAccessToken();
 
       // Assert
-      expect(mockHttpClient.post).toHaveBeenCalledWith(
+      expect(global.fetch).toHaveBeenCalledWith(
         'https://example.com/oauth/token',
-        'grant_type=refresh_token&refresh_token=valid-refresh-token&client_id=test-client-id',
-        { 'Content-Type': 'application/x-www-form-urlencoded' },
+        {
+          method: 'POST',
+          body: 'grant_type=refresh_token&refresh_token=valid-refresh-token&client_id=test-client-id',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        },
       );
       expect(mockLogger.info).toHaveBeenCalledWith(
         'Access token refreshed successfully',
@@ -327,7 +335,7 @@ describe('TokenClient', () => {
 
       // Assert
       expect(accessToken).toBeNull();
-      expect(mockHttpClient.post).not.toHaveBeenCalled();
+      expect(global.fetch as jest.Mock).not.toHaveBeenCalled();
     });
   });
 
@@ -398,15 +406,19 @@ describe('TokenClient', () => {
         // other claims...
       };
 
-      (mockHttpClient.post as jest.Mock).mockResolvedValue(
-        JSON.stringify(mockIntrospectionResponse),
+      // Mock fetch to return the introspection response
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        mockFetchSuccess(mockIntrospectionResponse),
       );
 
       const result = await tokenClient.introspectToken(token);
-      expect(mockHttpClient.post).toHaveBeenCalledWith(
+      expect(global.fetch).toHaveBeenCalledWith(
         'https://example.com/oauth/introspect',
-        'token=active-token&client_id=test-client-id',
-        { 'Content-Type': 'application/x-www-form-urlencoded' },
+        {
+          method: 'POST',
+          body: 'token=active-token&client_id=test-client-id',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        },
       );
       expect(result).toEqual(mockIntrospectionResponse);
       expect(mockLogger.debug).toHaveBeenCalledWith(
@@ -421,11 +433,20 @@ describe('TokenClient', () => {
         active: false,
       };
 
-      (mockHttpClient.post as jest.Mock).mockResolvedValue(
-        JSON.stringify(mockIntrospectionResponse),
+      // Mock fetch to return the introspection response
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        mockFetchSuccess(mockIntrospectionResponse),
       );
 
       const result = await tokenClient.introspectToken(token);
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://example.com/oauth/introspect',
+        {
+          method: 'POST',
+          body: 'token=inactive-token&client_id=test-client-id',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        },
+      );
       expect(result).toEqual(mockIntrospectionResponse);
       expect(mockLogger.debug).toHaveBeenCalledWith(
         'Token introspected successfully',
@@ -455,7 +476,7 @@ describe('TokenClient', () => {
         'Token request failed',
         'TOKEN_REQUEST_ERROR',
       );
-      (mockHttpClient.post as jest.Mock).mockRejectedValue(mockError);
+      (global.fetch as jest.Mock).mockRejectedValue(mockError);
 
       await expect(tokenClient.introspectToken(token)).rejects.toThrow(
         'Token introspection failed',
@@ -481,14 +502,17 @@ describe('TokenClient', () => {
     it('should successfully revoke a token without a token type hint', async () => {
       const token = 'token-to-revoke';
 
-      (mockHttpClient.post as jest.Mock).mockResolvedValue('{}'); // Return valid JSON
+      (global.fetch as jest.Mock).mockResolvedValueOnce(mockFetchSuccess({}));
 
       await tokenClient.revokeToken(token);
 
-      expect(mockHttpClient.post).toHaveBeenCalledWith(
+      expect(global.fetch).toHaveBeenCalledWith(
         'https://example.com/oauth/revoke',
-        'token=token-to-revoke&client_id=test-client-id',
-        { 'Content-Type': 'application/x-www-form-urlencoded' },
+        {
+          method: 'POST',
+          body: 'token=token-to-revoke&client_id=test-client-id',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        },
       );
       expect(mockLogger.info).toHaveBeenCalledWith(
         'Token revoked successfully',
@@ -499,14 +523,17 @@ describe('TokenClient', () => {
       const token = 'token-to-revoke';
       const tokenTypeHint = TokenTypeHint.RefreshToken;
 
-      (mockHttpClient.post as jest.Mock).mockResolvedValue('{}'); // Return valid JSON
+      (global.fetch as jest.Mock).mockResolvedValueOnce(mockFetchSuccess({}));
 
       await tokenClient.revokeToken(token, tokenTypeHint);
 
-      expect(mockHttpClient.post).toHaveBeenCalledWith(
+      expect(global.fetch).toHaveBeenCalledWith(
         'https://example.com/oauth/revoke',
-        'token=token-to-revoke&client_id=test-client-id&token_type_hint=refresh_token',
-        { 'Content-Type': 'application/x-www-form-urlencoded' },
+        {
+          method: 'POST',
+          body: 'token=token-to-revoke&client_id=test-client-id&token_type_hint=refresh_token',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        },
       );
       expect(mockLogger.info).toHaveBeenCalledWith(
         'Token revoked successfully',
@@ -535,7 +562,7 @@ describe('TokenClient', () => {
         'Token request failed',
         'TOKEN_REQUEST_ERROR',
       );
-      (mockHttpClient.post as jest.Mock).mockRejectedValue(mockError);
+      (global.fetch as jest.Mock).mockRejectedValue(mockError);
 
       await expect(tokenClient.revokeToken(token)).rejects.toThrow(ClientError);
       expect(mockLogger.error).toHaveBeenCalledWith('Token request failed', {
@@ -560,7 +587,7 @@ describe('TokenClient', () => {
       });
 
       // Mock successful revocation
-      (mockHttpClient.post as jest.Mock).mockResolvedValue('{}');
+      (global.fetch as jest.Mock).mockResolvedValueOnce(mockFetchSuccess({}));
 
       await tokenClient.revokeToken('access-token');
 
@@ -579,7 +606,7 @@ describe('TokenClient', () => {
       });
 
       // Mock successful revocation
-      (mockHttpClient.post as jest.Mock).mockResolvedValue('{}');
+      (global.fetch as jest.Mock).mockResolvedValueOnce(mockFetchSuccess({}));
 
       await tokenClient.revokeToken('different-token');
 
@@ -603,18 +630,18 @@ describe('TokenClient', () => {
       };
       const mockResponse = { access_token: 'new-access-token' };
 
-      (mockHttpClient.post as jest.Mock).mockResolvedValue(
-        JSON.stringify(mockResponse),
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        mockFetchSuccess(mockResponse),
       );
 
       // @ts-ignore
       const response = await tokenClient.performTokenRequest(endpoint, params);
 
-      expect(mockHttpClient.post).toHaveBeenCalledWith(
-        endpoint,
-        'grant_type=refresh_token&refresh_token=refresh-token&client_id=test-client-id',
-        { 'Content-Type': 'application/x-www-form-urlencoded' },
-      );
+      expect(global.fetch).toHaveBeenCalledWith(endpoint, {
+        method: 'POST',
+        body: 'grant_type=refresh_token&refresh_token=refresh-token&client_id=test-client-id',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      });
       expect(response).toEqual(mockResponse);
     });
 
@@ -627,7 +654,7 @@ describe('TokenClient', () => {
       };
       const mockError = new Error('Network error');
 
-      (mockHttpClient.post as jest.Mock).mockRejectedValue(mockError);
+      (global.fetch as jest.Mock).mockRejectedValue(mockError);
 
       await expect(
         // @ts-ignore
@@ -687,7 +714,7 @@ describe('TokenClient', () => {
       // Arrange
       const code = 'auth-code';
       const codeVerifier = 'code-verifier';
-      const mockTokenResponse = {
+      const mockTokenResponse: ITokenResponse = {
         access_token: 'new-access-token',
         refresh_token: 'new-refresh-token',
         expires_in: 3600,
@@ -695,8 +722,9 @@ describe('TokenClient', () => {
       };
       mockConfig.grantType = GrantType.AuthorizationCode;
 
-      (mockHttpClient.post as jest.Mock).mockResolvedValue(
-        JSON.stringify(mockTokenResponse),
+      // Mock fetch to return the token response
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        mockFetchSuccess(mockTokenResponse),
       );
 
       // Act
@@ -704,7 +732,7 @@ describe('TokenClient', () => {
 
       // Build expected body using URLSearchParams
       const expectedBody = new URLSearchParams({
-        grant_type: 'authorization_code',
+        grant_type: GrantType.AuthorizationCode,
         client_id: 'test-client-id',
         redirect_uri: 'https://example.com/callback',
         code: code,
@@ -712,10 +740,13 @@ describe('TokenClient', () => {
       }).toString();
 
       // Assert
-      expect(mockHttpClient.post).toHaveBeenCalledWith(
+      expect(global.fetch).toHaveBeenCalledWith(
         'https://example.com/oauth/token',
-        expectedBody, // Use the encoded body
-        { 'Content-Type': 'application/x-www-form-urlencoded' },
+        {
+          method: 'POST',
+          body: expectedBody,
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        },
       );
       const tokens = tokenClient.getTokens();
       expect(tokens).toMatchObject({
@@ -741,7 +772,7 @@ describe('TokenClient', () => {
       mockConfig.grantType = GrantType.AuthorizationCode;
 
       // Mock the HTTP client's post method to reject with mockError
-      (mockHttpClient.post as jest.Mock).mockRejectedValue(mockError);
+      (global.fetch as jest.Mock).mockRejectedValue(mockError);
 
       // Act & Assert
       await expect(

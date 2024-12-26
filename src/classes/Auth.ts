@@ -14,7 +14,6 @@ import {
 import {
   ILogoutUrlParams,
   ITokenResponse,
-  IHttp,
   IIssuer,
   ILogger,
   IToken,
@@ -35,7 +34,6 @@ export class Auth implements IAuth {
   private readonly issuer: IIssuer;
   private readonly tokenClient: IToken;
   private readonly logger: ILogger;
-  private readonly httpClient: IHttp;
   private readonly pkceService: IPkce;
   private readonly state: IState;
 
@@ -45,17 +43,14 @@ export class Auth implements IAuth {
     config: IClientConfig,
     logger: ILogger,
     issuer: IIssuer,
-    httpClient: IHttp,
     tokenClient?: IToken,
     pkceService?: IPkce,
   ) {
     this.config = config;
     this.logger = logger;
-    this.httpClient = httpClient;
     this.issuer = issuer;
     this.tokenClient =
-      tokenClient ||
-      new Token(this.logger, this.config, this.issuer, this.httpClient);
+      tokenClient || new Token(this.logger, this.config, this.issuer);
     this.pkceService = pkceService || new Pkce(this.config);
     this.state = new State();
   }
@@ -372,12 +367,12 @@ export class Auth implements IAuth {
     const body = buildUrlEncodedBody(params);
 
     try {
-      const response = await this.httpClient.post(
-        deviceEndpoint,
+      const response = await fetch(deviceEndpoint, {
+        method: 'POST',
         body,
         headers,
-      );
-      const json = JSON.parse(response);
+      });
+      const json = await response.json();
       this.logger.info('Device authorization initiated');
       return {
         device_code: json.device_code,
@@ -444,12 +439,12 @@ export class Auth implements IAuth {
       const body = buildUrlEncodedBody(params);
 
       try {
-        const response = await this.httpClient.post(
-          tokenEndpoint,
+        const response = await fetch(tokenEndpoint, {
+          method: 'POST',
           body,
           headers,
-        );
-        const tokenResponse: ITokenResponse = JSON.parse(response);
+        });
+        const tokenResponse: ITokenResponse = await response.json();
         this.tokenClient.setTokens(tokenResponse);
         this.logger.info('Device authorized and tokens obtained');
         return;
