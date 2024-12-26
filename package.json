@@ -62,7 +62,7 @@
     "prepublishOnly": "npm run lint && npm run test && npm run build",
     "prepare": "npm run build",
     "clean": "rimraf dist",
-    "doc": "typedoc"
+    "docs": "typedoc"
   },
   "peerDependencies": {
     "typescript": ">=4.0.0"
