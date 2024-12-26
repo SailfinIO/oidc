@@ -1,3 +1,13 @@
+## [0.0.5-beta.9](https://github.com/SailfinIO/oidc/compare/v0.0.5-beta.8...v0.0.5-beta.9) (2024-12-26)
+
+### Bug Fixes
+
+* case-sensitive filename for Cookie.ts ([6a79239](https://github.com/SailfinIO/oidc/commit/6a79239bc5a99d286a074a41d828b39b6c001b3a))
+* failing tests around session management ([07d5320](https://github.com/SailfinIO/oidc/commit/07d5320bd63b6a4cff1331bc4a96ccc6cda2b73d))
+* remove unused session util ([e02a3f3](https://github.com/SailfinIO/oidc/commit/e02a3f36539c84c69ef211d9daaa8fcc40b5f0d9))
+* script for typedocs ([db0f0a5](https://github.com/SailfinIO/oidc/commit/db0f0a5dfaddeed694978fbdc4e35318f864e8d0))
+* session management and testing ([b04b434](https://github.com/SailfinIO/oidc/commit/b04b4340146efc5c4e74a94c9cde0ca50773d953))
+
 ## [0.0.5-beta.8](https://github.com/SailfinIO/oidc/compare/v0.0.5-beta.7...v0.0.5-beta.8) (2024-12-24)
 
 ### Bug Fixes
