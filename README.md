@@ -74,7 +74,7 @@ yarn add @sailfin/oidc
 Here's an example of initializing and using the `@sailfin/oidc` client:
 
 ```typescript
-import { Client, Scopes } from '@sailfin/oidc';
+import { Client, Scopes, GrantType, SameSite, Storage } from '@sailfin/oidc';
 
 const oidcClient = new Client({
   clientId: 'your-client-id',
@@ -82,15 +82,41 @@ const oidcClient = new Client({
   redirectUri: 'https://your-app/callback',
   discoveryUrl: 'https://issuer.com/.well-known/openid-configuration',
   scopes: [Scopes.OpenId, Scopes.Profile, Scopes.Email],
+  grantType: GrantType.AuthorizationCode,
+  logging: {
+    logLevel: 'info',
+  },
+  session: {
+    cookie: {
+      name: 'oidc-session',
+      secure: true,
+      httpOnly: true,
+      sameSite: SameSite.STRICT,
+      maxAge: 3600,
+    },
+    useSilentRenew: true,
+  },
+  storage: {
+    mechanism: Storage.MEMORY,
+    options: {
+      storage: { ttl: 3600 },
+    },
+  },
 });
 
 (async () => {
+  // Initialize the client
+  await oidcClient.getAuthorizationUrl();
+
   // Generate the authorization URL
   const { url, state } = await oidcClient.getAuthorizationUrl();
   console.log(`Visit this URL to authenticate: ${url}`);
 
   // Handle the redirect with the authorization code
-  await oidcClient.handleRedirect('auth-code', state);
+  await oidcClient.handleRedirect('auth-code', state, {
+    request: mockRequest,
+    response: mockResponse,
+  });
 
   // Fetch user info
   const userInfo = await oidcClient.getUserInfo();
