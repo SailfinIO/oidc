@@ -1,7 +1,7 @@
 // src/utils/session.ts
 
 import { IStore, ISessionData, IStoreContext } from '../interfaces';
-import { parse } from './cookie';
+import { parse } from './Cookie';
 
 export function session(store: IStore) {
   return async (req: Request, res: Response, next: Function) => {

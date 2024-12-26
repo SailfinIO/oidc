@@ -18,9 +18,9 @@ export interface ISession {
    * Stops the session and clears any active token refresh timers.
    *
    * This method ensures that no further token refresh operations are scheduled.
-   * @returns {void}
+   * @returns { Promise<void> }
    */
-  stop(): void;
+  stop(context: IStoreContext): Promise<void>;
 
   /**
    * The current session ID.

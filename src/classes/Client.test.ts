@@ -8,7 +8,12 @@ import { Token } from './Token';
 import { ClientError } from '../errors';
 import { GrantType, LogLevel, Scopes, TokenTypeHint, Storage } from '../enums';
 import { Issuer } from './Issuer';
-import { IStoreContext, IStore, ISessionData } from '../interfaces';
+import {
+  IStoreContext,
+  IStore,
+  ISessionData,
+  ISessionStore,
+} from '../interfaces';
 import { Store } from './Store';
 import * as utils from '../utils';
 import { Session } from './Session';
@@ -38,12 +43,13 @@ jest.mock('./Token');
   return cookies;
 });
 
-// Define a mock Token instance
+// Define a mock Token instance with correct snake_case properties
 const mockTokenInstance = {
   getTokens: jest.fn().mockReturnValue({
-    accessToken: 'access_token',
-    refreshToken: 'refresh_token',
+    access_token: 'access_token',
+    refresh_token: 'refresh_token',
     expires_in: 3600,
+    token_type: 'Bearer',
   }),
   introspectToken: jest.fn().mockResolvedValue({
     active: true,
@@ -120,31 +126,33 @@ const mockSessionInstance = {
 (Session as jest.Mock).mockImplementation(() => mockSessionInstance);
 
 // Implement an in-memory mock store
-const mockStoreData: Record<string, ISessionData> = {};
-
 const mockStore: IStore = {
-  set: jest
-    .fn()
-    .mockImplementation((data: ISessionData, context: IStoreContext) => {
-      // Simulate generating a session ID and storing session data
-      const sid = mockSessionInstance.sid; // Use the mocked sid
-      mockStoreData[sid] = data;
-      return Promise.resolve(sid);
-    }),
-  get: jest.fn().mockImplementation((sid: string) => {
-    return Promise.resolve(mockStoreData[sid] || null);
-  }),
-  destroy: jest
-    .fn()
-    .mockImplementation((sid: string, context: IStoreContext) => {
-      delete mockStoreData[sid];
-      return Promise.resolve();
-    }),
+  set: jest.fn().mockResolvedValue(undefined),
+  get: jest.fn().mockResolvedValue(null),
+  destroy: jest.fn().mockResolvedValue(undefined),
   touch: jest.fn().mockResolvedValue(undefined),
 };
 
-// Mock the Store.create static method to return mockStore
-(Store as any).create = jest.fn().mockReturnValue(mockStore);
+// Define a mock SessionStore instance
+const mockSessionStore: ISessionStore = {
+  set: jest.fn().mockResolvedValue('mock_sid'),
+  get: jest.fn().mockResolvedValue({
+    cookie: {
+      access_token: 'access_token',
+      refresh_token: 'refresh_token',
+      expires_in: 3600,
+    },
+    user: { id: 'user123', name: 'Test User' },
+  }),
+  destroy: jest.fn().mockResolvedValue(undefined),
+  touch: jest.fn().mockResolvedValue(undefined),
+};
+
+// Mock the Store.create static method to return both store and sessionStore
+(Store as any).create = jest.fn().mockReturnValue({
+  store: mockStore,
+  sessionStore: mockSessionStore,
+});
 
 // Define a mock Logger instance with setLogLevel and debug methods
 const mockLoggerInstance = {
@@ -158,11 +166,12 @@ const mockLoggerInstance = {
 // Configure the mocked Logger class to return the mockLoggerInstance
 (Logger as jest.Mock).mockImplementation(() => mockLoggerInstance);
 
-// Define a mock context to be used in tests
+// Define a mock context to be used in tests with 'cookie' property
 const mockContext: IStoreContext = {
   request: {
     headers: {
-      get: jest.fn().mockReturnValue('sid=mock_sid'), // Mock the 'cookie' header
+      get: jest.fn().mockReturnValue('sid=mock_sid'), // Mock the 'get' method
+      cookie: 'sid=mock_sid', // Directly set the 'cookie' property
     },
   } as unknown as Request, // Type assertion to satisfy TypeScript
   response: {
@@ -183,7 +192,7 @@ describe('Client', () => {
     session: {
       useSilentRenew: true,
       cookie: {
-        name: 'mock_sid',
+        name: 'sid',
         secret: 'cookie-secret',
       },
     },
@@ -230,15 +239,16 @@ describe('Client', () => {
       'state',
     );
 
-    // Verify that store.set was called with sessionData and context
-    expect(mockStore.set).toHaveBeenCalledWith(
+    // Verify that sessionStore.set was called with sessionData and context
+    expect(mockSessionStore.set).toHaveBeenCalledWith(
       {
         cookie: {
-          accessToken: 'access_token',
-          refreshToken: 'refresh_token',
+          access_token: 'access_token',
+          refresh_token: 'refresh_token',
           expires_in: 3600,
+          token_type: 'Bearer',
         },
-        passport: { id: 'user123', name: 'Test User' },
+        user: { id: 'user123', name: 'Test User' },
       },
       mockContext,
     );
@@ -252,15 +262,16 @@ describe('Client', () => {
       'fragment',
     );
 
-    // Verify that store.set was called with sessionData and context
-    expect(mockStore.set).toHaveBeenCalledWith(
+    // Verify that sessionStore.set was called with sessionData and context
+    expect(mockSessionStore.set).toHaveBeenCalledWith(
       {
         cookie: {
-          accessToken: 'access_token',
-          refreshToken: 'refresh_token',
+          access_token: 'access_token',
+          refresh_token: 'refresh_token',
           expires_in: 3600,
+          token_type: 'Bearer',
         },
-        passport: { id: 'user123', name: 'Test User' },
+        user: { id: 'user123', name: 'Test User' },
       },
       mockContext,
     );
@@ -310,15 +321,16 @@ describe('Client', () => {
       undefined,
     );
 
-    // Verify that store.set was called with sessionData and context
-    expect(mockStore.set).toHaveBeenCalledWith(
+    // Verify that sessionStore.set was called with sessionData and context
+    expect(mockSessionStore.set).toHaveBeenCalledWith(
       {
         cookie: {
-          accessToken: 'access_token',
-          refreshToken: 'refresh_token',
+          access_token: 'access_token',
+          refresh_token: 'refresh_token',
           expires_in: 3600,
+          token_type: 'Bearer',
         },
-        passport: { id: 'user123', name: 'Test User' },
+        user: { id: 'user123', name: 'Test User' },
       },
       mockContext,
     );
@@ -333,9 +345,10 @@ describe('Client', () => {
   it('should get tokens', async () => {
     const tokens = await client.getTokens();
     expect(tokens).toEqual({
-      accessToken: 'access_token',
-      refreshToken: 'refresh_token',
+      access_token: 'access_token',
+      refresh_token: 'refresh_token',
       expires_in: 3600,
+      token_type: 'Bearer',
     });
     expect(mockTokenInstance.getTokens).toHaveBeenCalled();
   });
@@ -343,7 +356,10 @@ describe('Client', () => {
   it('should clear tokens', async () => {
     await expect(client.clearTokens(mockContext)).resolves.toBeUndefined();
     expect(mockTokenInstance.clearTokens).toHaveBeenCalled();
-    expect(mockStore.destroy).toHaveBeenCalledWith('mock_sid', mockContext);
+    expect(mockSessionStore.destroy).toHaveBeenCalledWith(
+      'mock_sid',
+      mockContext,
+    );
     expect(mockSessionInstance.stop).toHaveBeenCalled();
   });
 
@@ -373,6 +389,12 @@ describe('Client', () => {
     const debugSpy = jest
       .spyOn(mockLoggerInstance, 'debug')
       .mockImplementation(() => {});
+
+    // Mock Store.create to return sessionStore even when storageType is MEMORY
+    (Store as any).create.mockReturnValue({
+      store: mockStore,
+      sessionStore: mockSessionStore,
+    });
 
     // Instantiate a new Client with configWithoutGrantType
     const clientWithoutGrantType = new Client(configWithoutGrantType);

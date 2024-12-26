@@ -2,7 +2,7 @@
 
 import { Auth } from './Auth';
 import { UserInfo } from './UserInfo';
-import { Logger } from '../utils';
+import { Logger, parse } from '../utils';
 import { GrantType, LogLevel, TokenTypeHint, Storage } from '../enums';
 import { Issuer } from './Issuer';
 import {
@@ -16,14 +16,14 @@ import {
   IToken,
   IAuth,
   ISession,
-  IStore,
-  IStoreContext,
   ISessionData,
+  IStoreContext,
+  ISessionStore,
 } from '../interfaces';
 import { ClientError } from '../errors';
 import { Token } from './Token';
 import { Session } from './Session';
-import { Store } from './Store';
+import { Store, StoreInstances } from './Store';
 import { defaultClientConfig } from '../config/defaultClientConfig';
 
 export class Client {
@@ -35,7 +35,8 @@ export class Client {
   private userInfoClient!: IUserInfo;
   private initialized: boolean = false;
   private session: ISession | null = null;
-  private store: IStore;
+
+  private sessionStore: ISessionStore | null;
 
   constructor(userConfig: Partial<IClientConfig>) {
     // Merge userConfig with defaultClientConfig
@@ -55,12 +56,13 @@ export class Client {
       );
 
     // Initialize the store using Store
-    this.store = Store.create(
+    const storeInstances: StoreInstances = Store.create(
       this.config.storage?.mechanism || Storage.MEMORY,
       this.config.storage?.options,
-      this.config.session?.store,
-      this.logger, // Pass logger to Store
+      this.logger,
     );
+
+    this.sessionStore = storeInstances.sessionStore;
 
     this.issuer = new Issuer(this.config.discoveryUrl, this.logger);
     this.tokenClient = new Token(this.logger, this.config, this.issuer);
@@ -91,7 +93,7 @@ export class Client {
         this.logger,
         this.tokenClient,
         this.userInfoClient,
-        this.store,
+        this.sessionStore,
       );
       this.initialized = true;
       this.logger.info('OIDC Client initialized successfully');
@@ -196,12 +198,21 @@ export class Client {
 
     const sessionData: ISessionData = {
       cookie: tokens,
-      passport: userInfo || undefined,
+      user: userInfo || undefined,
     };
 
-    // Store session data
-    await this.store.set(sessionData, context);
-    this.logger.debug('Session data stored after redirect handling');
+    if (this.sessionStore) {
+      // Store session data and receive `sid`
+      const sid = await this.sessionStore.set(sessionData, context);
+      this.logger.debug('Session data stored after redirect handling', { sid });
+    } else {
+      // Fallback to using IStore directly (if applicable)
+      // This block can be customized based on your design
+      throw new ClientError(
+        'Session store is not configured.',
+        'SESSION_STORE_ERROR',
+      );
+    }
 
     // Optionally start token refresh if enabled
     if (this.config.session?.useSilentRenew && this.session) {
@@ -240,20 +251,28 @@ export class Client {
         'Failed to fetch user info after handling implicit flow redirect',
         { error },
       );
-      // Decide whether to proceed without user info or throw an error
-      // Here, we'll proceed without user info
+      // Proceed without user info
     }
 
     const sessionData: ISessionData = {
       cookie: tokens,
-      passport: userInfo || undefined,
+      user: userInfo || undefined,
     };
 
-    // Store session data
-    await this.store.set(sessionData, context);
-    this.logger.debug(
-      'Session data stored after implicit flow redirect handling',
-    );
+    if (this.sessionStore) {
+      // Store session data and receive `sid`
+      const sid = await this.sessionStore.set(sessionData, context);
+      this.logger.debug(
+        'Session data stored after implicit flow redirect handling',
+        { sid },
+      );
+    } else {
+      // Fallback to using IStore directly (if applicable)
+      throw new ClientError(
+        'Session store is not configured.',
+        'SESSION_STORE_ERROR',
+      );
+    }
 
     // Optionally start token refresh if enabled
     if (this.config.session?.useSilentRenew && this.session) {
@@ -343,19 +362,20 @@ export class Client {
       this.logger.warn('Failed to fetch user info after device token polling', {
         error,
       });
-      // Decide whether to proceed without user info or throw an error
-      // Here, we'll proceed without user info
+      // Proceed without user info
     }
 
     const sessionData: ISessionData = {
       cookie: tokens,
-      passport: userInfo || undefined,
+      user: userInfo || undefined,
     };
 
-    // Store session data
-    if (context) {
-      await this.store.set(sessionData, context);
-      this.logger.debug('Session data stored after device token polling');
+    if (context && this.sessionStore) {
+      // Store session data and receive `sid`
+      const sid = await this.sessionStore.set(sessionData, context);
+      this.logger.debug('Session data stored after device token polling', {
+        sid,
+      });
 
       // Optionally start token refresh if enabled
       if (this.config.session?.useSilentRenew && this.session) {
@@ -390,8 +410,20 @@ export class Client {
     await this.ensureInitialized();
     this.tokenClient.clearTokens();
     if (this.session) {
-      this.session.stop();
-      await this.store.destroy(this.session.sid, context);
+      await this.session.stop(context);
+      // Retrieve `sid` from cookies to destroy the session
+      if (context.request && context.response) {
+        const cookieHeader = context.request.headers['cookie'];
+        let sid: string | null = null;
+        if (cookieHeader && typeof cookieHeader === 'string') {
+          const cookies = parse(cookieHeader);
+          sid = cookies[this.config.session?.cookie?.name || 'sid'];
+        }
+        if (sid && this.sessionStore) {
+          await this.sessionStore.destroy(sid, context);
+          this.logger.debug('Session cleared and destroyed', { sid });
+        }
+      }
     }
   }
 

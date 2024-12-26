@@ -15,6 +15,8 @@ import {
 } from '../enums';
 import { ILogger } from './ILogger';
 import { IStore } from './IStore';
+import { ISessionStore } from './ISessionStore';
+import { StoreOptions } from './StoreOptions';
 
 export interface IClientConfig {
   clientId: string; // Client ID
@@ -46,9 +48,9 @@ export interface IClientConfig {
   session?: {
     /**
      * Session Store Configuration
-     * Users can provide a custom store or configure predefined stores.
+     * Users can provide a custom session store or configure predefined session stores.
      */
-    store?: IStore; // Allow users to inject their own store
+    store?: ISessionStore; // Allow users to inject their own session store
 
     /**
      * Session Cookie Configuration
@@ -56,12 +58,12 @@ export interface IClientConfig {
      */
     cookie?: {
       name?: string; // Cookie name (e.g., 'sid')
-      secret: string; // Secret for signing cookies if needed
+      secret?: string; // Secret for signing cookies if needed
       secure?: boolean; // Ensures the browser only sends the cookie over HTTPS
       httpOnly?: boolean; // Prevents JavaScript access to the cookie
       sameSite?: SameSite; // CSRF protection
       path?: string; // Cookie path
-      maxAge?: number; // Cookie expiration in milliseconds
+      maxAge?: number; // Cookie expiration in seconds
       domain?: string; // Cookie domain
     };
 
@@ -75,7 +77,8 @@ export interface IClientConfig {
      * Determines the type of storage to use (e.g., MEMORY, COOKIE).
      */
     mechanism?: Storage;
-    options?: any; // Specific options based on the mechanism
+    options?: StoreOptions; // Specific options based on the mechanism
+    store?: IStore; // Optional custom IStore for data storage
   };
 
   /** Logger Configuration */

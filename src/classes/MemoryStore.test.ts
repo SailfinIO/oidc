@@ -1,5 +1,5 @@
 import { MemoryStore } from './MemoryStore';
-import { IStore, ISessionData, IMutex, ILogger } from '../interfaces';
+import { IStore, ISessionData, IMutex, ILogger, IUser } from '../interfaces';
 import { Cache } from '../cache/Cache';
 import { Mutex } from '../utils/Mutex';
 import { randomUUID } from 'crypto';
@@ -12,7 +12,15 @@ describe('MemoryStore', () => {
   let logger: ILogger;
   let cacheMock: jest.Mocked<Cache<ISessionData>>;
   let mutexMock: jest.Mocked<Mutex>;
-  let memoryStore: MemoryStore;
+  let memoryStore: IStore;
+
+  const mockUser: IUser = { sub: 'user123' };
+  const mockCookie = {
+    access_token: 'mockAccessToken',
+    refresh_token: 'mockRefreshToken',
+    expires_in: 3600,
+    token_type: 'Bearer',
+  };
 
   beforeEach(() => {
     logger = {
@@ -39,27 +47,25 @@ describe('MemoryStore', () => {
   });
 
   describe('set', () => {
-    it('should create a session and return the session ID', async () => {
-      const data: ISessionData = { userId: 'user123' };
+    it('should create a session and log the creation', async () => {
+      const data: ISessionData = { cookie: mockCookie, user: mockUser };
       const sid = 'unique-session-id';
       (randomUUID as jest.Mock).mockReturnValue(sid);
       mutexMock.runExclusive.mockImplementation(
-        async (fn: () => Promise<string>) => fn(),
+        async (fn: () => Promise<void>) => fn(),
       );
 
-      const result = await memoryStore.set(data);
+      await memoryStore.set(sid, data);
 
-      expect(randomUUID).toHaveBeenCalled();
       expect(cacheMock.set).toHaveBeenCalledWith(sid, data);
       expect(logger.debug).toHaveBeenCalledWith('Session created', { sid });
-      expect(result).toBe(sid);
     });
   });
 
   describe('get', () => {
     it('should retrieve a session by ID', async () => {
       const sid = 'existing-session-id';
-      const sessionData: ISessionData = { userId: 'user123' };
+      const sessionData: ISessionData = { cookie: mockCookie, user: mockUser };
       cacheMock.get.mockReturnValue(sessionData);
       mutexMock.runExclusive.mockImplementation(
         async (fn: () => Promise<ISessionData | null>) => fn(),
@@ -110,7 +116,7 @@ describe('MemoryStore', () => {
   describe('touch', () => {
     it("should update a session's TTL", async () => {
       const sid = 'session-to-touch';
-      const sessionData: ISessionData = { passport: { sub: 'user123' } };
+      const sessionData: ISessionData = { cookie: mockCookie, user: mockUser };
       mutexMock.runExclusive.mockImplementation(
         async (fn: () => Promise<void>) => fn(),
       );

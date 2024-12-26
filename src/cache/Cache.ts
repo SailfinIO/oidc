@@ -41,17 +41,17 @@ export class Cache<T> implements ICache<T> {
    * @readonly
    * @type {number}
    */
-  private readonly defaultTTL: number;
+  private readonly _ttl: number;
 
   /**
    * Creates an instance of Cache.
    *
    * @param {ILogger} logger - The logger instance for logging operations and errors.
-   * @param {number} [defaultTTL=3600000] - Default time-to-live for cache entries in milliseconds.
+   * @param {number} [ttl=3600000] - Default time-to-live for cache entries in milliseconds.
    */
-  constructor(logger: ILogger, defaultTTL: number = 3600000) {
+  constructor(logger: ILogger, ttl: number = 3600000) {
     this.logger = logger;
-    this.defaultTTL = defaultTTL;
+    this._ttl = ttl;
   }
 
   /**
@@ -102,7 +102,7 @@ export class Cache<T> implements ICache<T> {
   public set(key: string, value: T, ttl?: number): void {
     this.validateKey(key);
     this.validateValue(value);
-    const effectiveTTL = ttl ?? this.defaultTTL;
+    const effectiveTTL = ttl ?? this.ttl;
     this.validateTTL(effectiveTTL);
 
     const expiresAt = Date.now() + effectiveTTL;
@@ -228,10 +228,10 @@ export class Cache<T> implements ICache<T> {
    * @returns {number} The default TTL in milliseconds.
    * @example
    * ```typescript
-   * const ttl = cache.DefaultTTL; // 3600000
+   * const ttl = cache.ttl; // 3600000
    * ```
    */
-  public get DefaultTTL(): number {
-    return this.defaultTTL;
+  public get ttl(): number {
+    return this._ttl;
   }
 }

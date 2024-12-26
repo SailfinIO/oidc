@@ -7,8 +7,8 @@ import {
   IToken,
   ISession,
   IUserInfo,
-  IStore,
   ISessionData,
+  ISessionStore,
 } from '../interfaces';
 
 jest.useFakeTimers();
@@ -20,7 +20,7 @@ describe('Session', () => {
   let logger: ILogger;
   let tokenClient: IToken;
   let userInfoClient: IUserInfo;
-  let store: IStore;
+  let sessionStore: ISessionStore;
   let session: ISession;
 
   beforeEach(() => {
@@ -52,7 +52,7 @@ describe('Session', () => {
       getUserInfo: jest.fn(),
     };
     // Mock IStore
-    store = {
+    sessionStore = {
       get: jest.fn(),
       set: jest.fn(),
       touch: jest.fn(),
@@ -64,7 +64,7 @@ describe('Session', () => {
       logger,
       tokenClient,
       userInfoClient,
-      store,
+      sessionStore,
     );
   });
 
@@ -82,10 +82,10 @@ describe('Session', () => {
           token_type: 'Bearer',
           expires_in: 120, // in seconds
         },
-        passport: { sub: 'user123' },
+        user: { sub: 'user123' },
       };
       // Mock store.get to return existing session data
-      (store.get as jest.Mock).mockResolvedValue(mockSessionData);
+      (sessionStore.get as jest.Mock).mockResolvedValue(mockSessionData);
 
       // Mock tokenClient.getTokens to return tokens
       (tokenClient.getTokens as jest.Mock).mockReturnValue(
@@ -109,7 +109,7 @@ describe('Session', () => {
       await session.start(context);
 
       // Assert
-      expect(store.get).toHaveBeenCalledWith('mock-sid', context);
+      expect(sessionStore.get).toHaveBeenCalledWith('mock-sid', context);
       expect(logger.debug).toHaveBeenCalledWith('Existing session found', {
         sid: 'mock-sid',
       });
@@ -128,8 +128,8 @@ describe('Session', () => {
       };
       const mockUser: any = { sub: 'user456', name: 'Jane Doe' };
 
-      // Mock store.get to return null, indicating no existing session
-      (store.get as jest.Mock).mockResolvedValue(null);
+      // Mock sessionStore.get to return null, indicating no existing session
+      (sessionStore.get as jest.Mock).mockResolvedValue(null);
 
       // Mock tokenClient.getTokens to return tokens
       (tokenClient.getTokens as jest.Mock).mockReturnValue(mockTokens);
@@ -137,8 +137,8 @@ describe('Session', () => {
       // Mock userInfoClient.getUserInfo to return user info
       (userInfoClient.getUserInfo as jest.Mock).mockResolvedValue(mockUser);
 
-      // Mock store.set to return a new sid
-      (store.set as jest.Mock).mockResolvedValue('new-mock-sid');
+      // Mock sessionStore.set to return a new sid
+      (sessionStore.set as jest.Mock).mockResolvedValue('new-mock-sid');
 
       // Mock request and response objects with empty cookie
       const mockRequest = new Request('http://localhost', {
@@ -160,11 +160,11 @@ describe('Session', () => {
       await session.start(context);
 
       // Assert
-      expect(store.get).not.toHaveBeenCalled(); // No existing session
-      expect(store.set).toHaveBeenCalledWith(
+      expect(sessionStore.get).not.toHaveBeenCalled(); // No existing session
+      expect(sessionStore.set).toHaveBeenCalledWith(
         {
           cookie: mockTokens,
-          passport: mockUser,
+          user: mockUser,
         },
         context,
       );
@@ -179,8 +179,8 @@ describe('Session', () => {
 
     it('should throw an error if no tokens are available to create a session', async () => {
       // Arrange
-      // Mock store.get to return null, indicating no existing session
-      (store.get as jest.Mock).mockResolvedValue(null);
+      // Mock sessionStore.get to return null, indicating no existing session
+      (sessionStore.get as jest.Mock).mockResolvedValue(null);
 
       // Mock tokenClient.getTokens to return null
       (tokenClient.getTokens as jest.Mock).mockReturnValue(null);
@@ -215,8 +215,8 @@ describe('Session', () => {
         expires_in: 120, // in seconds
       };
 
-      // Mock store.get to return null, indicating no existing session
-      (store.get as jest.Mock).mockResolvedValue(null);
+      // Mock sessionStore.get to return null, indicating no existing session
+      (sessionStore.get as jest.Mock).mockResolvedValue(null);
 
       // Mock tokenClient.getTokens to return tokens
       (tokenClient.getTokens as jest.Mock).mockReturnValue(mockTokens);
@@ -227,8 +227,8 @@ describe('Session', () => {
         userInfoError,
       );
 
-      // Mock store.set to return a new sid
-      (store.set as jest.Mock).mockResolvedValue('new-mock-sid');
+      // Mock sessionStore.set to return a new sid
+      (sessionStore.set as jest.Mock).mockResolvedValue('new-mock-sid');
 
       // Mock request and response objects
       const mockRequest = new Request('http://localhost', {
@@ -249,10 +249,10 @@ describe('Session', () => {
       await session.start(context);
 
       // Assert
-      expect(store.set).toHaveBeenCalledWith(
+      expect(sessionStore.set).toHaveBeenCalledWith(
         {
           cookie: mockTokens,
-          passport: undefined,
+          user: undefined,
         },
         context,
       );
@@ -277,14 +277,15 @@ describe('Session', () => {
       };
       const mockUser: any = { sub: 'user123' };
 
-      // Mock store.get to return existing session data
       const mockSessionData: ISessionData = {
         cookie: mockTokens,
-        passport: mockUser,
+        user: mockUser,
       };
-      (store.get as jest.Mock).mockResolvedValue(mockSessionData);
 
-      // Mock tokenClient.getTokens to return tokens
+      // Mock sessionStore.get to return existing session data
+      (sessionStore.get as jest.Mock).mockResolvedValue(mockSessionData);
+
+      // Mock tokenClient.getTokens to return the tokens
       (tokenClient.getTokens as jest.Mock).mockReturnValue(
         mockSessionData.cookie,
       );
@@ -292,10 +293,12 @@ describe('Session', () => {
       // Mock userInfoClient.getUserInfo to return user info
       (userInfoClient.getUserInfo as jest.Mock).mockResolvedValue(mockUser);
 
-      // Mock store.set to return a new sid
-      (store.set as jest.Mock).mockResolvedValue('mock-sid');
+      // Mock sessionStore.set to return a valid session ID
+      (sessionStore.set as jest.Mock).mockResolvedValue('mock-sid');
 
-      // Mock request and response objects
+      // Mock sessionStore.destroy to handle destroying the session
+      (sessionStore.destroy as jest.Mock).mockResolvedValue(undefined);
+
       const mockRequest = new Request('http://localhost', {
         headers: {
           cookie: 'sid=mock-sid',
@@ -310,20 +313,38 @@ describe('Session', () => {
 
       const context = { request: mockRequest, response: mockResponse };
 
-      // Act
+      // Act: Start the session first
       await session.start(context);
-      session.stop();
 
-      // Assert
+      // Act: Stop the session
+      await session.stop(context);
+
+      // Assert: Check that the session timer was cleared and the session was destroyed
       expect(clearTimeout).toHaveBeenCalled();
       expect(logger.debug).toHaveBeenCalledWith('Session timer cleared');
-      expect(logger.debug).toHaveBeenCalledWith('Session stopped');
+      expect(logger.debug).toHaveBeenCalledWith('Session destroyed', {
+        sid: 'mock-sid',
+      });
+      expect(sessionStore.destroy).toHaveBeenCalledWith('mock-sid', context);
       expect(session.sid).toBeNull();
     });
 
     it('should do nothing if there is no session timer', () => {
+      const mockRequest = new Request('http://localhost', {
+        headers: {
+          cookie: 'sid=mock-sid',
+        },
+      });
+
+      const mockResponse = {
+        headers: {
+          append: jest.fn(),
+        },
+      } as unknown as Response;
+
+      const context = { request: mockRequest, response: mockResponse };
       // Act
-      session.stop();
+      session.stop(context);
 
       // Assert
       expect(clearTimeout).not.toHaveBeenCalled();
@@ -347,12 +368,12 @@ describe('Session', () => {
       };
       const mockUser: any = { sub: 'user123', name: 'John Doe' };
 
-      // Mock store.get to return existing session data
+      // Mock sessionStore.get to return existing session data
       const mockSessionData: ISessionData = {
         cookie: initialTokens,
-        passport: mockUser,
+        user: mockUser,
       };
-      (store.get as jest.Mock).mockResolvedValue(mockSessionData);
+      (sessionStore.get as jest.Mock).mockResolvedValue(mockSessionData);
 
       // Mock tokenClient.getTokens to return initialTokens first, then refreshedTokens
       (tokenClient.getTokens as jest.Mock)
@@ -363,16 +384,16 @@ describe('Session', () => {
       // Mock userInfoClient.getUserInfo to return user info
       (userInfoClient.getUserInfo as jest.Mock).mockResolvedValue(mockUser);
 
-      // Mock store.set to return a new sid
-      (store.set as jest.Mock).mockResolvedValue('mock-sid');
+      // Mock sessionStore.set to return a new sid
+      (sessionStore.set as jest.Mock).mockResolvedValue('mock-sid');
 
       // Mock tokenClient.refreshAccessToken to resolve successfully
       (tokenClient.refreshAccessToken as jest.Mock).mockResolvedValue(
         undefined,
       );
 
-      // Mock store.touch to simulate updating session
-      (store.touch as jest.Mock).mockResolvedValue(undefined);
+      // Mock sessionStore.touch to simulate updating session
+      (sessionStore.touch as jest.Mock).mockResolvedValue(undefined);
 
       // Mock request and response objects
       const mockRequest = new Request('http://localhost', {
@@ -397,11 +418,11 @@ describe('Session', () => {
       // Assert
       expect(tokenClient.refreshAccessToken).toHaveBeenCalled();
       expect(tokenClient.getTokens).toHaveBeenCalledTimes(3); // Updated from 2 to 3
-      expect(store.touch).toHaveBeenCalledWith(
+      expect(sessionStore.touch).toHaveBeenCalledWith(
         'mock-sid',
         {
           cookie: refreshedTokens,
-          passport: mockUser,
+          user: mockUser,
         },
         context,
       );
@@ -421,12 +442,12 @@ describe('Session', () => {
       const mockUser: any = { sub: 'user123' };
       const refreshError = new Error('Refresh failed');
 
-      // Mock store.get to return existing session data
+      // Mock sessionStore.get to return existing session data
       const mockSessionData: ISessionData = {
         cookie: mockTokens,
-        passport: mockUser,
+        user: mockUser,
       };
-      (store.get as jest.Mock).mockResolvedValue(mockSessionData);
+      (sessionStore.get as jest.Mock).mockResolvedValue(mockSessionData);
 
       // Mock tokenClient.getTokens to return tokens
       (tokenClient.getTokens as jest.Mock).mockReturnValue(
@@ -436,8 +457,8 @@ describe('Session', () => {
       // Mock userInfoClient.getUserInfo to return user info
       (userInfoClient.getUserInfo as jest.Mock).mockResolvedValue(mockUser);
 
-      // Mock store.set to return a new sid
-      (store.set as jest.Mock).mockResolvedValue('mock-sid');
+      // Mock sessionStore.set to return a new sid
+      (sessionStore.set as jest.Mock).mockResolvedValue('mock-sid');
 
       // Mock tokenClient.refreshAccessToken to reject
       (tokenClient.refreshAccessToken as jest.Mock).mockRejectedValue(
@@ -491,8 +512,8 @@ describe('Session', () => {
       // Mock userInfoClient.getUserInfo to return user info
       (userInfoClient.getUserInfo as jest.Mock).mockResolvedValue(mockUser);
 
-      // Mock store.set to return a new sid
-      (store.set as jest.Mock).mockResolvedValue('mock-sid');
+      // Mock sessionStore.set to return a new sid
+      (sessionStore.set as jest.Mock).mockResolvedValue('mock-sid');
 
       // Mock request and response objects
       const mockRequest = new Request('http://localhost', {
@@ -526,16 +547,16 @@ describe('Session', () => {
       // Arrange
       const getTokenError = new Error('Get token failed');
 
-      // Mock store.get to return existing session data
+      // Mock sessionStore.get to return existing session data
       const mockSessionData: ISessionData = {
         cookie: {
           access_token: 'valid-token',
           token_type: 'Bearer',
           expires_in: 120, // in seconds
         },
-        passport: { sub: 'user123' },
+        user: { sub: 'user123' },
       };
-      (store.get as jest.Mock).mockResolvedValue(mockSessionData);
+      (sessionStore.get as jest.Mock).mockResolvedValue(mockSessionData);
 
       // Mock tokenClient.getTokens
       (tokenClient.getTokens as jest.Mock)
@@ -547,8 +568,8 @@ describe('Session', () => {
         sub: 'user123',
       });
 
-      // Mock store.set to return a new sid (not used in this path)
-      (store.set as jest.Mock).mockResolvedValue('mock-sid');
+      // Mock sessionStore.set to return a new sid (not used in this path)
+      (sessionStore.set as jest.Mock).mockResolvedValue('mock-sid');
 
       // Mock request and response objects
       const mockRequest = new Request('http://localhost', {
@@ -607,8 +628,8 @@ describe('Session', () => {
         sub: 'user123',
       });
 
-      // Mock store.set to return a new sid
-      (store.set as jest.Mock).mockResolvedValue('mock-sid');
+      // Mock sessionStore.set to return a new sid
+      (sessionStore.set as jest.Mock).mockResolvedValue('mock-sid');
 
       // Mock request and response objects
       const mockRequest = new Request('http://localhost', {
@@ -660,8 +681,8 @@ describe('Session', () => {
       // Mock userInfoClient.getUserInfo to return user info
       (userInfoClient.getUserInfo as jest.Mock).mockResolvedValue(mockUser);
 
-      // Mock store.set to return a new sid
-      (store.set as jest.Mock).mockResolvedValue('mock-sid');
+      // Mock sessionStore.set to return a new sid
+      (sessionStore.set as jest.Mock).mockResolvedValue('mock-sid');
 
       // Mock request and response objects
       const mockRequest = new Request('http://localhost', {

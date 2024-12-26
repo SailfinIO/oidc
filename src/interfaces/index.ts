@@ -30,3 +30,4 @@ export * from './ISession';
 export * from './ParseOptions';
 export * from './CookieOptions';
 export * from './StoreOptions';
+export * from './ISessionStore';

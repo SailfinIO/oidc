@@ -1,43 +1,56 @@
 // src/classes/Store.ts
 
-import { ILogger, IStore, StoreOptions } from '../interfaces';
+import { ILogger } from '../interfaces/ILogger';
+import { IStore } from '../interfaces/IStore';
+import { ISessionStore } from '../interfaces/ISessionStore';
 import { MemoryStore } from './MemoryStore';
 import { CookieStore } from './CookieStore';
 import { Storage } from '../enums';
+import { StoreOptions } from '../interfaces';
+
+export interface StoreInstances {
+  store: IStore;
+  sessionStore: ISessionStore | null;
+}
 
 export class Store {
   /**
-   * Creates a store based on the specified storage mechanism.
-   * If a custom store is provided, it returns that store instead.
+   * Creates store instances based on the specified storage mechanism.
+   * Returns both `IStore` and `ISessionStore` if applicable.
    *
    * @param storageType The type of storage mechanism.
    * @param options Configuration options for the store.
-   * @param customStore Optional custom store implementation.
    * @param logger Optional logger.
-   * @returns An instance of IStore.
+   * @returns An object containing both `IStore` and `ISessionStore` instances.
    */
   public static create(
     storageType: Storage,
     options?: StoreOptions,
-    customStore?: IStore,
     logger?: ILogger,
-  ): IStore {
-    if (customStore) {
-      return customStore;
-    }
+  ): StoreInstances {
+    let store: IStore;
+    let sessionStore: ISessionStore | null = null;
 
     switch (storageType) {
       case Storage.COOKIE:
-        // Create a MemoryStore or another server-side store
-        const serverSideStore = new MemoryStore(logger, options?.defaultTTL);
-        return new CookieStore(
-          options?.cookieName,
-          options?.cookieOptions,
-          serverSideStore,
+        // Create an internal IStore for CookieStore to use
+        const internalStore =
+          options?.session?.store ||
+          new MemoryStore(logger, options?.storage?.ttl);
+        sessionStore = new CookieStore(
+          options?.session?.cookie?.name,
+          options?.session?.cookie?.options,
+          internalStore,
         );
+        store = internalStore;
+        break;
       case Storage.MEMORY:
+        store = new MemoryStore(logger, options?.storage?.ttl);
+        break;
       default:
-        return new MemoryStore(logger, options?.defaultTTL);
+        throw new Error(`Unsupported storage type: ${storageType}`);
     }
+
+    return { store, sessionStore };
   }
 }

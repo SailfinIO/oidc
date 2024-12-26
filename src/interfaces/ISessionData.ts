@@ -5,5 +5,5 @@ import { IUser } from './IUser';
 
 export interface ISessionData {
   cookie: ITokenResponse;
-  passport?: IUser;
+  user?: IUser;
 }

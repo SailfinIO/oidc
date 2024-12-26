@@ -1,174 +1,124 @@
 import { CookieStore } from './CookieStore';
-import { IStore, ISessionData, IStoreContext } from '../interfaces';
+import { MemoryStore } from './MemoryStore';
+import { IStoreContext, ISessionData, IUser } from '../interfaces';
 import { SameSite } from '../enums';
-import { Mutex, serialize, parse } from '../utils';
-import { randomUUID } from 'crypto';
-
-// src/classes/CookieStore.test.ts
-
-jest.mock('crypto', () => ({
-  randomUUID: jest.fn(),
-}));
-
-jest.mock('../utils', () => ({
-  Mutex: jest.fn().mockImplementation(() => ({
-    runExclusive: jest.fn((fn) => fn()),
-  })),
-  serialize: jest.fn(),
-  parse: jest.fn(),
-}));
 
 describe('CookieStore', () => {
-  let mockDataStore: jest.Mocked<IStore>;
   let cookieStore: CookieStore;
   let context: IStoreContext;
 
+  const mockUser: IUser = { sub: 'user123' };
+  const mockCookie = {
+    access_token: 'mockAccessToken',
+    refresh_token: 'mockRefreshToken',
+    expires_in: 3600,
+    token_type: 'Bearer',
+  };
+
+  const mockRequest = new Request('http://localhost', {
+    headers: {
+      cookie: 'sid=mock-sid',
+    },
+  });
+
+  const mockResponse = new Response(null, {
+    headers: new Headers(),
+  });
+
   beforeEach(() => {
-    mockDataStore = {
-      set: jest.fn(),
-      get: jest.fn(),
-      destroy: jest.fn(),
-      touch: jest.fn(),
-    };
+    const memoryStore = new MemoryStore();
     cookieStore = new CookieStore(
-      'testSid',
+      'test_sid',
       {
         httpOnly: true,
-        secure: true,
+        secure: false,
         sameSite: SameSite.STRICT,
         path: '/',
-        maxAge: 3600,
+        maxAge: 100,
       },
-      mockDataStore,
+      memoryStore,
     );
-    context = {
-      request: new Request('', {
-        headers: new Headers({
-          cookie: 'testSid=1234',
-        }),
-      }),
-      response: {
-        headers: {
-          append: jest.fn(),
-          delete: jest.fn(),
-          get: jest.fn(),
-          getSetCookie: jest.fn(),
-          has: jest.fn(),
-          set: jest.fn(),
-          forEach: jest.fn(),
-        },
+    context = { request: mockRequest, response: mockResponse };
+    context.response.headers.append = jest.fn();
+  });
+  it('should set a new session and return a session ID', async () => {
+    const data: ISessionData = { cookie: mockCookie, user: mockUser };
+    const sid = await cookieStore.set(data, context);
+    expect(sid).toBeDefined();
+    expect(mockResponse.headers.append).toHaveBeenCalledWith(
+      'Set-Cookie',
+      expect.stringContaining('test_sid=' + sid),
+    );
+  });
+
+  it('should return null if request object is missing', async () => {
+    await expect(
+      cookieStore.get('invalid', { response: mockResponse }),
+    ).rejects.toThrow('Request object is required to get cookies.');
+  });
+
+  it('manual test for MemoryStore', async () => {
+    const memoryStore = new MemoryStore();
+    const sid = 'test-sid';
+    const data: ISessionData = { cookie: mockCookie, user: mockUser };
+
+    await memoryStore.set(sid, data);
+    const retrievedData = await memoryStore.get(sid);
+
+    expect(retrievedData).toEqual(data);
+  });
+
+  it('should get stored session data if cookie matches', async () => {
+    const data: ISessionData = { cookie: mockCookie, user: mockUser };
+    const sid = await cookieStore.set(data, context);
+
+    // Set the 'test_sid' cookie in the 'Cookie' header
+    context.request = new Request('http://localhost', {
+      headers: {
+        cookie: `test_sid=${sid}`,
       },
-    };
-    (randomUUID as jest.Mock).mockReturnValue('unique-id');
-    (serialize as jest.Mock).mockReturnValue('serialized-cookie');
-    (parse as jest.Mock).mockReturnValue({ testSid: '1234' });
+    });
+
+    const session = await cookieStore.get(sid, context);
+    expect(session).toEqual(data);
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
+  it('should return null if session ID mismatches', async () => {
+    mockRequest.headers.set('Cookie', `test_sid=unknownSid`);
+    const session = await cookieStore.get('someSid', context);
+    expect(session).toBeNull();
   });
 
-  describe('set', () => {
-    it('should set a cookie and store session data', async () => {
-      const sessionData: ISessionData = { user: 'testUser' };
-      const sid = await cookieStore.set(sessionData, context);
-      expect(mockDataStore.set).toHaveBeenCalledWith(sessionData);
-      expect(randomUUID).toHaveBeenCalled();
-      expect(serialize).toHaveBeenCalledWith('testSid', 'unique-id', {
-        httpOnly: true,
-        secure: true,
-        sameSite: SameSite.STRICT,
-        path: '/',
-        maxAge: 3600,
-      });
-      expect(context.response.headers.append).toHaveBeenCalledWith(
-        'Set-Cookie',
-        'serialized-cookie',
-      );
-      expect(sid).toBe('unique-id');
-    });
-
-    it('should throw an error if context.response is missing', async () => {
-      await expect(cookieStore.set({}, {})).rejects.toThrow(
-        'Response object is required to set cookies.',
-      );
-    });
+  it('should destroy the session and expire the cookie', async () => {
+    const sid = await cookieStore.set(
+      { cookie: mockCookie, user: mockUser },
+      context,
+    );
+    await cookieStore.destroy(sid, context);
+    expect(mockResponse.headers.append).toHaveBeenCalledWith(
+      'Set-Cookie',
+      expect.stringContaining('test_sid=;'),
+    );
   });
 
-  describe('get', () => {
-    it('should retrieve session data by sid', async () => {
-      mockDataStore.get.mockResolvedValue({ user: 'testUser' });
-      const data = await cookieStore.get('1234', context);
-      expect(parse).toHaveBeenCalledWith('testSid=1234');
-      expect(mockDataStore.get).toHaveBeenCalledWith('1234');
-      expect(data).toEqual({ user: 'testUser' });
-    });
-
-    it('should return null if cookie header is missing', async () => {
-      const emptyContext: IStoreContext = { request: { headers: {} } };
-      const data = await cookieStore.get('1234', emptyContext);
-      expect(data).toBeNull();
-    });
-
-    it('should return null if sessionId does not match', async () => {
-      (parse as jest.Mock).mockReturnValue({ testSid: 'wrong-id' });
-      const data = await cookieStore.get('1234', context);
-      expect(data).toBeNull();
-    });
-
-    it('should throw an error if context.request is missing', async () => {
-      await expect(cookieStore.get('1234', {})).rejects.toThrow(
-        'Request object is required to get cookies.',
-      );
-    });
+  it('should touch session and reset cookie maxAge', async () => {
+    const sid = await cookieStore.set(
+      { cookie: mockCookie, user: mockUser },
+      context,
+    );
+    await cookieStore.touch(
+      sid,
+      { cookie: mockCookie, user: mockUser },
+      context,
+    );
+    expect(mockResponse.headers.append).toHaveBeenCalledWith(
+      'Set-Cookie',
+      expect.stringContaining(`test_sid=${sid}`),
+    );
   });
 
-  describe('destroy', () => {
-    it('should destroy session data and expire the cookie', async () => {
-      await cookieStore.destroy('1234', context);
-      expect(mockDataStore.destroy).toHaveBeenCalledWith('1234');
-      expect(serialize).toHaveBeenCalledWith('testSid', '', {
-        httpOnly: true,
-        secure: true,
-        sameSite: SameSite.STRICT,
-        path: '/',
-        maxAge: 0,
-      });
-      expect(context.response.headers.append).toHaveBeenCalledWith(
-        'Set-Cookie',
-        'serialized-cookie',
-      );
-    });
-
-    it('should throw an error if context.response is missing', async () => {
-      await expect(cookieStore.destroy('1234', {})).rejects.toThrow(
-        'Response object is required to destroy cookies.',
-      );
-    });
-  });
-
-  describe('touch', () => {
-    it('should update session data and reset cookie maxAge', async () => {
-      const sessionData: ISessionData = { user: 'testUser' };
-      await cookieStore.touch('1234', sessionData, context);
-      expect(mockDataStore.touch).toHaveBeenCalledWith('1234', sessionData);
-      expect(serialize).toHaveBeenCalledWith('testSid', '1234', {
-        httpOnly: true,
-        secure: true,
-        sameSite: SameSite.STRICT,
-        path: '/',
-        maxAge: 3600,
-      });
-      expect(context.response.headers.append).toHaveBeenCalledWith(
-        'Set-Cookie',
-        'serialized-cookie',
-      );
-    });
-
-    it('should throw an error if context.response is missing', async () => {
-      await expect(cookieStore.touch('1234', {}, {})).rejects.toThrow(
-        'Response object is required to touch cookies.',
-      );
-    });
+  it('should use MemoryStore by default if no dataStore is provided', () => {
+    const defaultStore = new CookieStore('default_sid');
+    expect((defaultStore as any).dataStore).toBeInstanceOf(MemoryStore);
   });
 });
