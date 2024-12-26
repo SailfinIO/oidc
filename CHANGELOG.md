@@ -1,3 +1,9 @@
+## [0.0.5-beta.10](https://github.com/SailfinIO/oidc/compare/v0.0.5-beta.9...v0.0.5-beta.10) (2024-12-26)
+
+### Bug Fixes
+
+* code smells and workflow branch deploy ([648201d](https://github.com/SailfinIO/oidc/commit/648201de08a8be1c50d4a64ced2e14b31b555e07))
+
 ## [0.0.5-beta.9](https://github.com/SailfinIO/oidc/compare/v0.0.5-beta.8...v0.0.5-beta.9) (2024-12-26)
 
 ### Bug Fixes
