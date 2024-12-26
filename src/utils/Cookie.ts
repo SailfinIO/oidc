@@ -324,12 +324,13 @@ export class Cookie {
         case 'priority':
           attributeOptions.priority = attrValue.toLowerCase() as Priority;
           break;
-        case 'samesite':
+        case 'samesite': {
           const sameSiteValue = attrValue.toLowerCase();
           if (['lax', 'strict', 'none'].includes(sameSiteValue)) {
             attributeOptions.sameSite = sameSiteValue as SameSite;
           }
           break;
+        }
         default:
           break;
       }

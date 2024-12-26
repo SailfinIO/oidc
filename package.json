@@ -48,7 +48,9 @@
     "identity token management",
     "identity token federation",
     "typescript",
-    "nodejs"
+    "nodejs",
+    "session",
+    "session management"
   ],
   "scripts": {
     "build": "npm run clean && tsc -b tsconfig.build.json",

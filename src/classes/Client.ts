@@ -32,11 +32,10 @@ export class Client {
   private readonly tokenClient: IToken;
   private readonly logger: ILogger;
   private readonly issuer: IIssuer;
+  private readonly sessionStore: ISessionStore | null;
   private userInfoClient!: IUserInfo;
   private initialized: boolean = false;
   private session: ISession | null = null;
-
-  private sessionStore: ISessionStore | null;
 
   constructor(userConfig: Partial<IClientConfig>) {
     // Merge userConfig with defaultClientConfig

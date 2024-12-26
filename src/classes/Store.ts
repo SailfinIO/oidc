@@ -32,7 +32,7 @@ export class Store {
     let sessionStore: ISessionStore | null = null;
 
     switch (storageType) {
-      case Storage.COOKIE:
+      case Storage.COOKIE: {
         // Create an internal IStore for CookieStore to use
         const internalStore =
           options?.session?.store ||
@@ -44,11 +44,14 @@ export class Store {
         );
         store = internalStore;
         break;
-      case Storage.MEMORY:
+      }
+      case Storage.MEMORY: {
         store = new MemoryStore(logger, options?.storage?.ttl);
         break;
-      default:
+      }
+      default: {
         throw new Error(`Unsupported storage type: ${storageType}`);
+      }
     }
 
     return { store, sessionStore };
