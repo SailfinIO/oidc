@@ -105,6 +105,28 @@ describe('Jwks', () => {
       await expect(client.getKey('')).rejects.toThrow('kid must be provided');
       expect(logger.error).not.toHaveBeenCalled();
     });
+    it('should throw ClientError if JWKS cache is empty after refresh', async () => {
+      // Simulate the cache being empty after refreshCache is called
+      (cache.get as jest.Mock)
+        .mockReturnValueOnce(undefined) // Initial cache miss
+        .mockReturnValueOnce(undefined); // Cache still empty after refresh
+
+      // Mock fetch to simulate a successful fetch
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        mockFetchSuccess(sampleJWKS),
+      );
+
+      await expect(client.getKey('key1')).rejects.toMatchObject({
+        message: 'JWKS cache is empty after refresh',
+        code: 'JWKS_FETCH_ERROR',
+      });
+
+      expect(global.fetch).toHaveBeenCalledWith(jwksUri);
+      expect(logger.error).not.toHaveBeenCalled();
+      expect(logger.debug).toHaveBeenCalledWith('Fetching JWKS from URI', {
+        jwksUri,
+      });
+    });
 
     it('should return key if found in cache', async () => {
       (cache.get as jest.Mock).mockReturnValue([jwk]);
