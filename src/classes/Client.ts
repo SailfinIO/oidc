@@ -162,9 +162,7 @@ export class Client {
     await this.ensureInitialized();
     await this.auth.handleRedirect(code, returnedState);
 
-    if (this.config.session?.useSilentRenew && this.session) {
-      await this.session.start(context);
-    } else if (this.session) {
+    if (this.session) {
       await this.session.start(context);
     }
   }
@@ -176,9 +174,7 @@ export class Client {
     await this.ensureInitialized();
     await this.auth.handleRedirectForImplicitFlow(fragment);
 
-    if (this.config.session?.useSilentRenew && this.session) {
-      await this.session.start(context);
-    } else if (this.session) {
+    if (this.session) {
       await this.session.start(context);
     }
   }

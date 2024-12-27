@@ -10,7 +10,7 @@ export class SessionStore implements ISessionStore {
 
   constructor(
     private readonly logger?: ILogger,
-    ttl?: number | 360000,
+    ttl?: number,
   ) {
     this.logger = logger ?? {
       debug: console.debug.bind(console),
