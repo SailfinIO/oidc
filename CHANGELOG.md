@@ -3,6 +3,17 @@
 ### Bug Fixes
 
 * docs deployment and readme usage error ([914f9ae](https://github.com/SailfinIO/oidc/commit/914f9ae517386dde8c62309794909d64d1a31917))
+## [0.0.6](https://github.com/SailfinIO/oidc/compare/v0.0.5...v0.0.6) (2024-12-27)
+
+### Bug Fixes
+
+* case-sensitive filename for Cookie.ts ([6a79239](https://github.com/SailfinIO/oidc/commit/6a79239bc5a99d286a074a41d828b39b6c001b3a))
+* code smells and workflow branch deploy ([648201d](https://github.com/SailfinIO/oidc/commit/648201de08a8be1c50d4a64ced2e14b31b555e07))
+* failing tests around session management ([07d5320](https://github.com/SailfinIO/oidc/commit/07d5320bd63b6a4cff1331bc4a96ccc6cda2b73d))
+* remove unused session util ([e02a3f3](https://github.com/SailfinIO/oidc/commit/e02a3f36539c84c69ef211d9daaa8fcc40b5f0d9))
+* script for typedocs ([db0f0a5](https://github.com/SailfinIO/oidc/commit/db0f0a5dfaddeed694978fbdc4e35318f864e8d0))
+* session management and testing ([b04b434](https://github.com/SailfinIO/oidc/commit/b04b4340146efc5c4e74a94c9cde0ca50773d953))
+* split out cookie utilities ([cb6d742](https://github.com/SailfinIO/oidc/commit/cb6d74277eafbe32750900920c63821e0cebc248))
 
 ## [0.0.6-beta.1](https://github.com/SailfinIO/oidc/compare/v0.0.5...v0.0.6-beta.1) (2024-12-27)
 
