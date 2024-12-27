@@ -24,7 +24,7 @@ export interface JwksResponse {
    * An array of JSON Web Keys.
    *
    * @type {Jwk[]}
-   * @required
+   * @example [{ kty: 'RSA', kid: 'key-id-123', ... }]
    */
   keys: Jwk[];
 }

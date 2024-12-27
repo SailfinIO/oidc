@@ -29,7 +29,6 @@ export interface ParseOptions {
    * appropriately.
    *
    * @type {(str: string) => string | undefined}
-   * @optional
    * @default decodeURIComponent
    *
    * @example

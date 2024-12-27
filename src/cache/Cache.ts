@@ -13,7 +13,7 @@ import { ClientError } from '../errors/ClientError';
 /**
  * Represents an in-memory cache with basic CRUD operations and TTL (time-to-live) support.
  *
- * @template T The type of values to be stored in the cache.
+ * @template {T}Cache The type of values to be stored in the cache.
  * @implements {ICache<T>}
  */
 export class Cache<T> implements ICache<T> {

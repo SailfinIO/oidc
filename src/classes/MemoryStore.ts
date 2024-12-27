@@ -29,8 +29,7 @@ export class MemoryStore implements IStore {
    * Stores session data with the provided SID.
    * @param sid - The session ID.
    * @param data - The session data to store.
-   * @param context - Optional store context.
-   * @returns A promise that resolves when the data is set.
+   * @returns {Promise<void>} A promise that resolves when the data is set.
    */
   public async set(sid: string, data: ISessionData): Promise<void> {
     return this.mutex.runExclusive(async () => {
@@ -42,8 +41,7 @@ export class MemoryStore implements IStore {
   /**
    * Retrieves session data based on the SID.
    * @param sid - The session ID.
-   * @param context - Optional store context.
-   * @returns The session data or null if not found.
+   * @returns {Promise<ISessionData | null> } The session data or null if not found.
    */
   public async get(sid: string): Promise<ISessionData | null> {
     return this.mutex.runExclusive(() => {
@@ -56,8 +54,7 @@ export class MemoryStore implements IStore {
   /**
    * Destroys the session associated with the SID.
    * @param sid - The session ID.
-   * @param context - Optional store context.
-   * @returns A promise that resolves when the session is destroyed.
+   * @returns {Promise<void>} A promise that resolves when the session is destroyed.
    */
   public async destroy(sid: string): Promise<void> {
     return this.mutex.runExclusive(() => {
@@ -70,8 +67,7 @@ export class MemoryStore implements IStore {
    * Updates the session's expiration without altering the data.
    * @param sid - The session ID.
    * @param session - The current session data.
-   * @param context - Optional store context.
-   * @returns A promise that resolves when the session is touched.
+   * @returns {Promise<void>} A promise that resolves when the session is touched.
    */
   public async touch(sid: string, session: ISessionData): Promise<void> {
     return this.mutex.runExclusive(() => {

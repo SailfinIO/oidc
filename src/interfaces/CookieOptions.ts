@@ -26,7 +26,6 @@ export interface CookieOptions {
    * It should mirror the decoding function used during parsing to ensure consistency.
    *
    * @type {(str: string) => string}
-   * @optional
    * @default encodeURIComponent
    *
    * @example
@@ -45,7 +44,6 @@ export interface CookieOptions {
    * However, some clients may not honor this behavior, so it is advisable to keep them in sync.
    *
    * @type {number}
-   * @optional
    *
    * @example
    * const options: CookieOptions = {
@@ -62,7 +60,6 @@ export interface CookieOptions {
    * `maxAge` takes precedence.
    *
    * @type {Date}
-   * @optional
    *
    * @example
    * const options: CookieOptions = {
@@ -77,7 +74,6 @@ export interface CookieOptions {
    * If not set, the cookie applies only to the current domain.
    *
    * @type {string}
-   * @optional
    *
    * @example
    * const options: CookieOptions = {
@@ -92,7 +88,6 @@ export interface CookieOptions {
    * If not set, the default path is determined as per the [cookie storage model specification](https://tools.ietf.org/html/rfc6265#section-5.1.4).
    *
    * @type {string}
-   * @optional
    *
    * @example
    * const options: CookieOptions = {
@@ -107,7 +102,6 @@ export interface CookieOptions {
    * When set to `true`, the cookie will not be accessible via client-side JavaScript (e.g., `document.cookie`).
    *
    * @type {boolean}
-   * @optional
    * @default false
    *
    * @example
@@ -123,7 +117,6 @@ export interface CookieOptions {
    * When set to `true`, the cookie will only be sent over HTTPS connections.
    *
    * @type {boolean}
-   * @optional
    * @default false
    *
    * @example
@@ -140,7 +133,6 @@ export interface CookieOptions {
    * This is a proposed attribute that may not be fully supported in all clients yet.
    *
    * @type {boolean}
-   * @optional
    *
    * @example
    * const options: CookieOptions = {
@@ -158,7 +150,6 @@ export interface CookieOptions {
    * - `'high'`: High priority.
    *
    * @type {Priority}
-   * @optional
    *
    * @example
    * const options: CookieOptions = {
@@ -176,7 +167,6 @@ export interface CookieOptions {
    * - `'none'`: Explicitly allows cross-site cookies (requires `Secure` to be `true`).
    *
    * @type {boolean | SameSite}
-   * @optional
    *
    * @example
    * const options: CookieOptions = {
