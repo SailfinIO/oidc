@@ -124,12 +124,6 @@ jobs:
       - name: Checkout the code
         uses: actions/checkout@v4
 
-      - name: Download TypeDoc Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: docs
-          path: docs
-
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
