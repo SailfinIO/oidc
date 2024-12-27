@@ -1,13 +1,13 @@
 // src/utils/COLOR_CODES.ts
 
-import { LabelSelector } from '../types';
+import { KeyValueMap } from '../types';
 import { LogLevel } from '../enums';
 
 /**
  * ANSI color codes for log levels, used to style console log output.
  * Each log level is associated with a specific color for improved readability.
  */
-export const COLOR_CODES: LabelSelector = {
+export const COLOR_CODES: KeyValueMap = {
   /**
    * Red color code for error messages, indicating critical issues.
    */

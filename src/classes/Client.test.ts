@@ -8,12 +8,7 @@ import { Token } from './Token';
 import { ClientError } from '../errors';
 import { GrantType, LogLevel, Scopes, TokenTypeHint, Storage } from '../enums';
 import { Issuer } from './Issuer';
-import {
-  IStoreContext,
-  IStore,
-  ISessionData,
-  ISessionStore,
-} from '../interfaces';
+import { IStoreContext, IStore, ISessionStore } from '../interfaces';
 import { Store } from './Store';
 import * as utils from '../utils';
 import { Session } from './Session';
@@ -219,6 +214,73 @@ describe('Client', () => {
 
   it('should throw error if required config is missing', () => {
     expect(() => new Client({ clientId: 'test' } as any)).toThrow(ClientError);
+  });
+
+  it('should log an error and throw ClientError if initialization fails', async () => {
+    // Mock the Issuer's discover method to throw an error
+    const discoveryError = new Error('Discovery failed');
+    mockIssuerInstance.discover.mockRejectedValueOnce(discoveryError);
+
+    // Expect the client to throw an error during initialization
+    await expect(client.getAuthorizationUrl()).rejects.toThrow(
+      'Initialization failed',
+    );
+
+    // Verify that the logger.error was called with the appropriate message and error
+    expect(mockLoggerInstance.error).toHaveBeenCalledWith(
+      'Failed to initialize OIDC Client',
+      { error: discoveryError },
+    );
+  });
+
+  describe('Client configuration validation', () => {
+    it('should throw ClientError if clientId is missing', () => {
+      const configWithoutClientId = {
+        redirectUri: 'https://example.com/callback',
+        scopes: ['openid', 'profile'],
+        discoveryUrl: 'https://example.com/.well-known/openid-configuration',
+      };
+
+      expect(() => new Client(configWithoutClientId as any)).toThrow(
+        new ClientError('clientId is required', 'CONFIG_ERROR'),
+      );
+    });
+
+    it('should throw ClientError if redirectUri is missing', () => {
+      const configWithoutRedirectUri = {
+        clientId: 'test-client-id',
+        scopes: ['openid', 'profile'],
+        discoveryUrl: 'https://example.com/.well-known/openid-configuration',
+      };
+
+      expect(() => new Client(configWithoutRedirectUri as any)).toThrow(
+        new ClientError('redirectUri is required', 'CONFIG_ERROR'),
+      );
+    });
+
+    it('should throw ClientError if scopes are missing', () => {
+      const configWithoutScopes = {
+        clientId: 'test-client-id',
+        redirectUri: 'https://example.com/callback',
+        discoveryUrl: 'https://example.com/.well-known/openid-configuration',
+      };
+
+      expect(() => new Client(configWithoutScopes as any)).toThrow(
+        new ClientError('At least one scope is required', 'CONFIG_ERROR'),
+      );
+    });
+
+    it('should throw ClientError if discoveryUrl is missing', () => {
+      const configWithoutDiscoveryUrl = {
+        clientId: 'test-client-id',
+        redirectUri: 'https://example.com/callback',
+        scopes: ['openid', 'profile'],
+      };
+
+      expect(() => new Client(configWithoutDiscoveryUrl as any)).toThrow(
+        new ClientError('discoveryUrl is required', 'CONFIG_ERROR'),
+      );
+    });
   });
 
   it('should get authorization URL', async () => {

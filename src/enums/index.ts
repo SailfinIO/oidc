@@ -15,3 +15,4 @@ export * from './Display';
 export * from './UILocales';
 export * from './Priority';
 export * from './SameSite';
+export * from './CookieAttribute';

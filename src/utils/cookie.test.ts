@@ -1,10 +1,23 @@
 import { Cookie, parse, serialize } from './Cookie';
 import { Priority, SameSite } from '../enums';
+import { CookieError } from '../errors';
 
 describe('parse', () => {
   it('should return an empty object for empty header', () => {
     const result = parse('');
     expect(result).toEqual({});
+  });
+
+  it('should correctly parse cookie values containing multiple equals signs', () => {
+    const header = 'token=a=b=c; sessionId=abc123';
+    const result = parse(header);
+    expect(result).toEqual({ token: 'a=b=c', sessionId: 'abc123' });
+  });
+
+  it('should parse cookies with empty values', () => {
+    const header = 'emptyCookie=; sessionId=abc123';
+    const result = parse(header);
+    expect(result).toEqual({ emptyCookie: '', sessionId: 'abc123' });
   });
 
   it('should parse a single cookie', () => {
@@ -79,9 +92,42 @@ describe('serialize', () => {
   it('should throw error for non-integer maxAge', () => {
     // @ts-ignore Testing runtime behavior with invalid input
     expect(() => serialize('sessionId', 'abc123', { maxAge: '3600' })).toThrow(
-      'Invalid maxAge: 3600',
+      'Invalid Max-Age: 3600',
     );
   });
+
+  it('should serialize with SameSite=None', () => {
+    const result = serialize('sessionId', 'abc123', {
+      sameSite: SameSite.NONE,
+    });
+    expect(result).toBe('sessionId=abc123; SameSite=None');
+  });
+
+  it('should serialize with Priority in lowercase', () => {
+    const result = serialize('sessionId', 'abc123', {
+      priority: 'low' as Priority,
+    });
+    expect(result).toBe('sessionId=abc123; Priority=Low');
+  });
+
+  it('should throw error when Expires is not a Date object', () => {
+    expect(() =>
+      // @ts-ignore Testing runtime behavior with invalid input
+      serialize('sessionId', 'abc123', { expires: 'not-a-date' }),
+    ).toThrow('Invalid Expires: not-a-date');
+  });
+
+  it('should not serialize Partitioned when set to false', () => {
+    const result = serialize('sessionId', 'abc123', { partitioned: false });
+    expect(result).toBe('sessionId=abc123');
+  });
+
+  it('should ignore unknown attributes without affecting serialization', () => {
+    // @ts-ignore Testing runtime behavior with unknown attribute
+    const result = serialize('sessionId', 'abc123', { unknownAttr: 'value' });
+    expect(result).toBe('sessionId=abc123');
+  });
+
   it('should serialize with the Partitioned attribute', () => {
     const result = serialize('sessionId', 'abc123', { partitioned: true });
     expect(result).toBe('sessionId=abc123; Partitioned');
@@ -97,7 +143,7 @@ describe('serialize', () => {
     expect(() =>
       // @ts-ignore Testing runtime behavior with invalid input
       serialize('sessionId', 'abc123', { expires: 'invalid date' }),
-    ).toThrow('Invalid expires: invalid date');
+    ).toThrow('Invalid Expires: invalid date');
   });
 
   it('should encode cookie value', () => {
@@ -167,14 +213,14 @@ describe('serialize', () => {
     expect(() =>
       // @ts-ignore
       serialize('sessionId', 'abc123', { priority: 'invalid' }),
-    ).toThrow('Invalid priority: invalid');
+    ).toThrow('Invalid Priority: invalid');
   });
 
   it('should throw error for invalid sameSite', () => {
     expect(() =>
       // @ts-ignore
       serialize('sessionId', 'abc123', { sameSite: 'invalid' }),
-    ).toThrow('Invalid sameSite: invalid');
+    ).toThrow('Invalid SameSite: invalid');
   });
 
   it('should handle multiple attributes', () => {
@@ -203,12 +249,76 @@ describe('Cookie Class', () => {
     expect(cookie.options?.httpOnly).toBe(true);
   });
 
+  it('should throw an error when parsing a string with no valid cookies', () => {
+    const invalidCookieString = 'invalidSegment; anotherInvalidSegment';
+    expect(() => Cookie.parse(invalidCookieString)).toThrow(
+      'Failed to parse cookie string: No valid cookies found.',
+    );
+  });
+
+  it('should parse only the first valid cookie when multiple are present', () => {
+    const cookieString = 'sessionId=abc123; userId=789xyz';
+    const parsed = Cookie.parse(cookieString);
+    expect(parsed.name).toBe('sessionId');
+    expect(parsed.value).toBe('abc123');
+    expect(parsed.options).toEqual({});
+  });
+
+  it('should throw an error when Expires attribute is invalid in Cookie.parse', () => {
+    const cookieString = 'sessionId=abc123; Expires=invalid-date';
+    expect(() => Cookie.parse(cookieString)).toThrow(
+      'Invalid Expires value: invalid-date',
+    );
+  });
+
+  it('should throw an error when setting an invalid path using setOptions', () => {
+    const cookie = new Cookie('session', 'abc123');
+    expect(() => cookie.setOptions({ path: 'invalid;path' })).toThrow(
+      'Invalid path: invalid;path',
+    );
+  });
+
+  it('should serialize cookie with Priority=High and SameSite=Strict', () => {
+    const cookie = new Cookie('test', 'value', {
+      priority: Priority.HIGH,
+      sameSite: SameSite.STRICT,
+    });
+    expect(cookie.serialize()).toBe(
+      'test=value; Priority=High; SameSite=Strict',
+    );
+  });
+
+  it('should throw error for invalid priority value in serialize', () => {
+    expect(() =>
+      // @ts-ignore Testing runtime behavior with invalid input
+      serialize('sessionId', 'abc123', { priority: 'invalid' }),
+    ).toThrow('Invalid Priority: invalid');
+  });
+
+  it('should throw error for invalid SameSite value in serialize', () => {
+    expect(() =>
+      // @ts-ignore Testing runtime behavior with invalid input
+      serialize('sessionId', 'abc123', { sameSite: 'invalid' }),
+    ).toThrow('Invalid SameSite: invalid');
+  });
+
+  it('should correctly skip leading and trailing whitespaces in parse', () => {
+    const header = '   sessionId=abc123   ;   userId=789xyz   ';
+    const result = parse(header);
+    expect(result).toEqual({ sessionId: 'abc123', userId: '789xyz' });
+  });
+
+  it('should not include unnecessary whitespaces in serialized cookie', () => {
+    const result = serialize('sessionId', 'abc123', { path: '/home ' });
+    expect(result).toBe('sessionId=abc123; Path=/home');
+  });
+
   it('should throw an error for invalid cookie name', () => {
-    expect(() => new Cookie('invalid name', 'value')).toThrow(TypeError);
+    expect(() => new Cookie('invalid name', 'value')).toThrow(CookieError);
   });
 
   it('should throw an error for invalid cookie value', () => {
-    expect(() => new Cookie('name', 'invalid;value')).toThrow(TypeError);
+    expect(() => new Cookie('name', 'invalid;value')).toThrow(CookieError);
   });
 
   it('should serialize correctly', () => {
@@ -255,7 +365,7 @@ describe('Cookie Class', () => {
 
   it('should throw an error when setting an invalid value using setValue', () => {
     const cookie = new Cookie('token', 'validValue');
-    expect(() => cookie.setValue('invalid;value')).toThrow(TypeError);
+    expect(() => cookie.setValue('invalid;value')).toThrow(CookieError);
   });
 
   it('should update the cookie options with setOptions', () => {

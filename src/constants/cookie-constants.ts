@@ -68,7 +68,7 @@ export const DOMAIN_VALUE_REG_EXP =
 /**
  * Regular expression to validate path values as per RFC 6265 Section 4.1.1.
  *
- * The path value must exclude control characters (`CTLs`) and semicolons (`;`).
+ * The path value must exclude control characters (`CTLs`), spaces, and semicolons (`;`).
  * This regular expression ensures compliance by only allowing characters defined
  * in the US-ASCII range, excluding forbidden characters.
  *
@@ -80,6 +80,7 @@ export const DOMAIN_VALUE_REG_EXP =
  *
  * @example
  * PATH_VALUE_REG_EXP.test("/valid/path"); // true
+ * PATH_VALUE_REG_EXP.test("invalid path"); // false
  * PATH_VALUE_REG_EXP.test("invalid;path"); // false
  */
-export const PATH_VALUE_REG_EXP = /^[\u0020-\u003A\u003D-\u007E]*$/;
+export const PATH_VALUE_REG_EXP = /^[\u0021-\u003A\u003D-\u007E]*$/;

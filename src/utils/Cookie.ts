@@ -1,38 +1,60 @@
-import { Priority, SameSite } from '../enums';
-import {
-  COOKIE_NAME_REG_EXP,
-  COOKIE_VALUE_REG_EXP,
-  DOMAIN_VALUE_REG_EXP,
-  PATH_VALUE_REG_EXP,
-} from '../constants/cookie-constants';
+/**
+ * @fileoverview
+ * Defines the `Cookie` class for parsing and serializing HTTP cookies.
+ * This class provides methods to parse cookie headers and serialize cookie objects
+ * into strings suitable for the `Set-Cookie` HTTP header.
+ *
+ * @module src/utils/Cookie
+ */
+
+import { Priority, SameSite, CookieAttribute } from '../enums';
 import { ParseOptions, CookieOptions } from '../interfaces';
+import { NullObject } from './NullObject';
+import {
+  validateCookieName,
+  validateCookieValue,
+  validateDomain,
+  validatePath,
+} from './validators';
+import { isDate } from './typeGuards';
+import { capitalize } from './helpers';
+import { CookieError } from '../errors/CookieError';
 
-class NullObject implements Record<string, string | undefined> {
-  [key: string]: string | undefined;
-
-  constructor() {
-    Object.setPrototypeOf(this, null);
-  }
-}
-
-enum CharCode {
-  Space = 0x20,
-  Tab = 0x09,
+/**
+ * Represents a collection of parsed cookies.
+ *
+ * The `ParsedCookies` interface defines a mapping from cookie names to their values.
+ */
+interface ParsedCookies {
+  [name: string]: string;
 }
 
 /**
- * Parse a cookie header string into an object with cookie names as keys and their values.
+ * Defines the structure of attribute handlers for serialization.
+ *
+ * Each handler is a function that takes the attribute value and modifies the
+ * serialized cookie string accordingly.
+ */
+type AttributeHandler = (value: any) => void;
+
+/**
+ * Parses a cookie header string into a `ParsedCookies` object.
+ *
+ * @param {string} cookieHeader - The raw `Cookie` header string.
+ * @param {ParseOptions} [options] - Optional parsing options.
+ * @returns {ParsedCookies} An object mapping cookie names to their values.
+ * @throws {CookieError} Throws an error if parsing fails.
  */
 export const parse = (
   cookieHeader: string,
   options?: ParseOptions,
-): Record<string, string | undefined> => {
-  const cookies: Record<string, string | undefined> = new NullObject();
+): ParsedCookies => {
+  const cookies: ParsedCookies = new NullObject() as ParsedCookies;
   const headerLength = cookieHeader.length;
 
   if (headerLength < 2) return cookies;
 
-  const decodeValue = options?.decode || decode;
+  const decodeValue = options?.decode || decodeURIComponent;
   let currentIndex = 0;
 
   do {
@@ -48,33 +70,36 @@ export const parse = (
       continue;
     }
 
-    const keyStartIndex = skipWhitespaceStart(
+    const keyStartIndex = skipWhitespace(
       cookieHeader,
       currentIndex,
       equalsIndex,
+      true,
     );
-    const keyEndIndex = skipWhitespaceEnd(
+    const keyEndIndex = skipWhitespace(
       cookieHeader,
       equalsIndex,
       keyStartIndex,
+      false,
     );
     const cookieName = cookieHeader.slice(keyStartIndex, keyEndIndex);
 
     if (cookies[cookieName] === undefined) {
-      const valueStartIndex = skipWhitespaceStart(
+      const valueStartIndex = skipWhitespace(
         cookieHeader,
         equalsIndex + 1,
         segmentEndIndex,
+        true,
       );
-      const valueEndIndex = skipWhitespaceEnd(
+      const valueEndIndex = skipWhitespace(
         cookieHeader,
         segmentEndIndex,
         valueStartIndex,
+        false,
       );
 
-      const cookieValue = decodeValue(
-        cookieHeader.slice(valueStartIndex, valueEndIndex),
-      );
+      const rawValue = cookieHeader.slice(valueStartIndex, valueEndIndex);
+      const cookieValue = decodeValue(rawValue);
       cookies[cookieName] = cookieValue;
     }
 
@@ -84,120 +109,88 @@ export const parse = (
   return cookies;
 };
 
-const skipWhitespaceStart = (
-  input: string,
-  startIndex: number,
-  maxIndex: number,
-): number => {
-  while (startIndex < maxIndex) {
-    const charCode = input.charCodeAt(startIndex);
-    if (charCode !== CharCode.Space && charCode !== CharCode.Tab)
-      return startIndex;
-    startIndex++;
-  }
-  return maxIndex;
-};
-
-const skipWhitespaceEnd = (
-  input: string,
-  endIndex: number,
-  minIndex: number,
-): number => {
-  while (endIndex > minIndex) {
-    const charCode = input.charCodeAt(--endIndex);
-    if (charCode !== CharCode.Space && charCode !== CharCode.Tab)
-      return endIndex + 1;
-  }
-  return minIndex;
-};
-
 /**
- * Serialize a name-value pair into a cookie string with optional attributes.
+ * Serializes a cookie name, value, and options into a `Set-Cookie` header string.
+ *
+ * @param {string} cookieName - The name of the cookie.
+ * @param {string} cookieValue - The value of the cookie.
+ * @param {CookieOptions} [options] - Optional serialization options.
+ * @returns {string} The serialized `Set-Cookie` header string.
+ * @throws {CookieError} Throws an error if serialization fails.
  */
 export const serialize = (
   cookieName: string,
   cookieValue: string,
-  options?: CookieOptions,
+  options: CookieOptions = {},
 ): string => {
-  const encodeValue = options?.encode || encodeURIComponent;
+  const encodeValue = options.encode || encodeURIComponent;
 
-  if (!COOKIE_NAME_REG_EXP.test(cookieName)) {
-    throw new TypeError(`Invalid cookie name: ${cookieName}`);
-  }
-
+  validateCookieName(cookieName);
   const encodedValue = encodeValue(cookieValue);
-
-  if (!COOKIE_VALUE_REG_EXP.test(encodedValue)) {
-    throw new TypeError(`Invalid cookie value: ${cookieValue}`);
-  }
+  validateCookieValue(encodedValue);
 
   let cookieString = `${cookieName}=${encodedValue}`;
-  if (!options) return cookieString;
 
-  const attributeHandlers: Record<string, Function> = {
-    maxAge: (value: number) => {
+  const attributeHandlers: Record<CookieAttribute, AttributeHandler> = {
+    [CookieAttribute.MaxAge]: (value) => {
       if (!Number.isInteger(value)) {
-        throw new TypeError(`Invalid maxAge: ${value}`);
+        throw new CookieError(`Invalid Max-Age: ${value}`);
       }
       cookieString += `; Max-Age=${value}`;
     },
-    domain: (value: string) => {
-      if (!DOMAIN_VALUE_REG_EXP.test(value)) {
-        throw new TypeError(`Invalid domain: ${value}`);
-      }
-      cookieString += `; Domain=${value}`;
+    [CookieAttribute.Domain]: (value: string) => {
+      const trimmedValue = value.trim();
+      validateDomain(trimmedValue);
+      cookieString += `; Domain=${trimmedValue}`;
     },
-    path: (value: string) => {
-      if (!PATH_VALUE_REG_EXP.test(value)) {
-        throw new TypeError(`Invalid path: ${value}`);
-      }
-      cookieString += `; Path=${value}`;
+    [CookieAttribute.Path]: (value: string) => {
+      const trimmedValue = value.trim();
+      validatePath(trimmedValue);
+      cookieString += `; Path=${trimmedValue}`;
     },
-    expires: (value: Date) => {
-      if (!isDate(value) || !Number.isFinite(value.valueOf())) {
-        throw new TypeError(`Invalid expires: ${value}`);
-      }
-      cookieString += `; Expires=${value.toUTCString()}`;
-    },
-    httpOnly: () => {
-      if (options.httpOnly) {
-        cookieString += '; HttpOnly';
-      }
-    },
-    secure: () => {
-      if (options.secure) {
-        cookieString += '; Secure';
-      }
-    },
-    partitioned: () => {
-      if (options.partitioned) {
-        cookieString += '; Partitioned';
-      }
-    },
-    priority: (value: string) => {
-      const normalizedPriority =
-        typeof value === 'string' ? value.toLowerCase() : undefined;
-      if (
-        normalizedPriority === Priority.LOW ||
-        normalizedPriority === Priority.MEDIUM ||
-        normalizedPriority === Priority.HIGH
-      ) {
-        cookieString += `; Priority=${normalizedPriority.charAt(0).toUpperCase() + normalizedPriority.slice(1)}`;
+    [CookieAttribute.Expires]: (value: Date) => {
+      if (isDate(value)) {
+        cookieString += `; Expires=${value.toUTCString()}`;
       } else {
-        throw new TypeError(`Invalid priority: ${value}`);
+        throw new CookieError(`Invalid Expires: ${value}`);
       }
     },
-    sameSite: (value: SameSite) => {
-      if (!Object.values(SameSite).includes(value)) {
-        throw new TypeError(`Invalid sameSite: ${value}`);
+    [CookieAttribute.HttpOnly]: () => {
+      if (options.httpOnly) cookieString += '; HttpOnly';
+    },
+    [CookieAttribute.Secure]: () => {
+      if (options.secure) cookieString += '; Secure';
+    },
+    [CookieAttribute.Partitioned]: () => {
+      if (options.partitioned) cookieString += '; Partitioned';
+    },
+    [CookieAttribute.Priority]: (value: Priority) => {
+      const normalizedPriority = value.toLowerCase();
+      if (
+        [Priority.LOW, Priority.MEDIUM, Priority.HIGH].includes(
+          normalizedPriority as Priority,
+        )
+      ) {
+        const capitalizedPriority = capitalize(normalizedPriority);
+        cookieString += `; Priority=${capitalizedPriority}`;
+      } else {
+        throw new CookieError(`Invalid Priority: ${value}`);
       }
-      cookieString += `; SameSite=${value.charAt(0).toUpperCase() + value.slice(1)}`;
+    },
+    [CookieAttribute.SameSite]: (value: SameSite) => {
+      if (Object.values(SameSite).includes(value)) {
+        const capitalizedSameSite = capitalize(value);
+        cookieString += `; SameSite=${capitalizedSameSite}`;
+      } else {
+        throw new CookieError(`Invalid SameSite: ${value}`);
+      }
     },
   };
 
   Object.keys(options).forEach((optionKey) => {
-    if (attributeHandlers[optionKey]) {
-      attributeHandlers[optionKey](options[optionKey]);
+    const attributeKey = optionKey as CookieAttribute;
+    if (attributeHandlers[attributeKey]) {
+      attributeHandlers[attributeKey](options[attributeKey]);
     }
   });
 
@@ -205,134 +198,176 @@ export const serialize = (
 };
 
 /**
- * URL-decode a string value. Returns the original string if no encoding exists.
+ * Skips whitespace characters in the input string.
+ *
+ * @param {string} input - The input string to process.
+ * @param {number} index - The starting index.
+ * @param {number} limit - The limit index.
+ * @param {boolean} forward - Direction to move (true for forward, false for backward).
+ * @returns {number} The new index after skipping whitespace.
  */
-const decode = (value: string): string => {
-  if (!value.includes('%')) return value;
+const skipWhitespace = (
+  input: string,
+  index: number,
+  limit: number,
+  forward: boolean,
+): number => {
+  const CharCode = {
+    Space: 0x20,
+    Tab: 0x09,
+  };
 
-  try {
-    return decodeURIComponent(value);
-  } catch (error) {
-    return value;
+  while (forward ? index < limit : index > limit) {
+    const charCode = input.charCodeAt(forward ? index : --index);
+    if (charCode !== CharCode.Space && charCode !== CharCode.Tab) {
+      return forward ? index : index + 1;
+    }
+    if (forward) index++;
   }
+  return limit;
 };
 
 /**
- * Check if a value is a valid Date object.
- */
-const isDate = (value: any): value is Date => {
-  return value instanceof Date;
-};
-
-/**
- * Represents a single HTTP cookie with its attributes.
+ * Represents a single HTTP cookie with name, value, and optional attributes.
+ *
+ * The `Cookie` class provides methods to serialize the cookie into a string suitable
+ * for the `Set-Cookie` HTTP header and to parse a raw cookie string into a `Cookie` instance.
+ *
+ * @class
  */
 export class Cookie {
-  name: string;
-  value: string;
-  options?: CookieOptions;
+  private readonly _name: string;
+  private _value: string;
+  private _options: CookieOptions;
 
   /**
-   * Creates a new Cookie instance.
+   * Creates an instance of `Cookie`.
    *
-   * @param name - The name of the cookie.
-   * @param value - The value of the cookie.
-   * @param options - Optional attributes for the cookie.
-   *
-   * @throws {TypeError} If the cookie name or value is invalid.
-   *
-   * @example
-   * const cookie = new Cookie('sessionId', 'abc123', { httpOnly: true, secure: true });
+   * @param {string} name - The name of the cookie.
+   * @param {string} value - The value of the cookie.
+   * @param {CookieOptions} [options={}] - Optional cookie attributes.
+   * @throws {CookieError} Throws an error if the name or value is invalid.
    */
-  constructor(name: string, value: string, options?: CookieOptions) {
-    if (!COOKIE_NAME_REG_EXP.test(name)) {
-      throw new TypeError(`Invalid cookie name: ${name}`);
-    }
-    if (!COOKIE_VALUE_REG_EXP.test(value)) {
-      throw new TypeError(`Invalid cookie value: ${value}`);
-    }
+  constructor(name: string, value: string, options: CookieOptions = {}) {
+    validateCookieName(name);
+    validateCookieValue(value);
 
-    this.name = name;
-    this.value = value;
-    this.options = options;
+    this._name = name;
+    this._value = value;
+    this._options = options;
   }
 
   /**
-   * Serializes the cookie into a string suitable for the `Set-Cookie` HTTP header.
+   * Serializes the cookie into a string suitable for the `Set-Cookie` header.
    *
-   * @returns The serialized cookie string.
-   *
-   * @example
-   * const serialized = cookie.serialize();
-   * // Output: "sessionId=abc123; HttpOnly; Secure"
+   * @returns {string} The serialized `Set-Cookie` string.
    */
-  serialize(): string {
-    return serialize(this.name, this.value, this.options);
+  public serialize(): string {
+    return serialize(this._name, this._value, this._options);
   }
 
   /**
-   * Parses a cookie string and returns a corresponding Cookie instance.
+   * Parses a raw cookie string into a `Cookie` instance.
    *
-   * @param cookieString - The raw `Set-Cookie` string.
-   * @param options - Optional attributes for parsing.
-   *
-   * @returns A new Cookie instance or `null` if parsing fails.
-   *
-   * @example
-   * const parsedCookie = Cookie.parse('sessionId=abc123; HttpOnly; Secure');
+   * @param {string} cookieString - The raw cookie string to parse.
+   * @param {ParseOptions} [options] - Optional parsing options.
+   * @returns {Cookie} The parsed `Cookie` instance.
+   * @throws {CookieError} Throws an error if parsing fails.
    */
-  static parse(cookieString: string, options?: ParseOptions): Cookie | null {
+  static parse(cookieString: string, options?: ParseOptions): Cookie {
     const parsed = parse(cookieString, options);
-    const name = Object.keys(parsed)[0];
+    const names = Object.keys(parsed);
+
+    if (names.length === 0) {
+      throw new CookieError(
+        'Failed to parse cookie string: No valid cookies found.',
+      );
+    }
+
+    const name = names[0];
     const value = parsed[name];
 
     if (!name || value === undefined) {
-      return null;
+      throw new CookieError(
+        'Failed to parse cookie string: Missing name or value.',
+      );
     }
 
-    // Extract options from the cookie string
     const attributeOptions: CookieOptions = {};
-
     const attributes = cookieString
       .split(';')
       .slice(1)
       .map((attr) => attr.trim());
+
+    const attributeParsers: Record<string, (value?: string) => void> = {
+      'max-age': (value) => {
+        if (value !== undefined) {
+          const parsedValue = Number(value);
+          if (Number.isNaN(parsedValue)) {
+            throw new CookieError(`Invalid Max-Age value: ${value}`);
+          }
+          attributeOptions.maxAge = parsedValue;
+        }
+      },
+      domain: (value) => {
+        if (value) {
+          validateDomain(value);
+          attributeOptions.domain = value;
+        }
+      },
+      path: (value) => {
+        if (value) {
+          validatePath(value);
+          attributeOptions.path = value;
+        }
+      },
+      expires: (value) => {
+        if (value) {
+          const date = new Date(value);
+          if (isNaN(date.getTime())) {
+            throw new CookieError(`Invalid Expires value: ${value}`);
+          }
+          attributeOptions.expires = date;
+        }
+      },
+      httponly: () => {
+        attributeOptions.httpOnly = true;
+      },
+      secure: () => {
+        attributeOptions.secure = true;
+      },
+      partitioned: () => {
+        attributeOptions.partitioned = true;
+      },
+      priority: (value) => {
+        if (value) {
+          const lowerValue = value.toLowerCase() as Priority;
+          if (
+            [Priority.LOW, Priority.MEDIUM, Priority.HIGH].includes(lowerValue)
+          ) {
+            attributeOptions.priority = lowerValue;
+          } else {
+            throw new CookieError(`Invalid Priority value: ${value}`);
+          }
+        }
+      },
+      samesite: (value) => {
+        if (value) {
+          const lowerValue = value.toLowerCase() as SameSite;
+          if (Object.values(SameSite).includes(lowerValue)) {
+            attributeOptions.sameSite = lowerValue;
+          } else {
+            throw new CookieError(`Invalid SameSite value: ${value}`);
+          }
+        }
+      },
+    };
+
     attributes.forEach((attr) => {
       const [attrName, attrValue] = attr.split('=');
-      switch (attrName.toLowerCase()) {
-        case 'max-age':
-          attributeOptions.maxAge = Number(attrValue);
-          break;
-        case 'domain':
-          attributeOptions.domain = attrValue;
-          break;
-        case 'path':
-          attributeOptions.path = attrValue;
-          break;
-        case 'expires':
-          attributeOptions.expires = new Date(attrValue);
-          break;
-        case 'httponly':
-          attributeOptions.httpOnly = true;
-          break;
-        case 'secure':
-          attributeOptions.secure = true;
-          break;
-        case 'partitioned':
-          attributeOptions.partitioned = true;
-          break;
-        case 'priority':
-          attributeOptions.priority = attrValue.toLowerCase() as Priority;
-          break;
-        case 'samesite': {
-          const sameSiteValue = attrValue.toLowerCase();
-          if (['lax', 'strict', 'none'].includes(sameSiteValue)) {
-            attributeOptions.sameSite = sameSiteValue as SameSite;
-          }
-          break;
-        }
-        default:
-          break;
+      const handler = attributeParsers[attrName.toLowerCase()];
+      if (handler) {
+        handler(attrValue);
       }
     });
 
@@ -340,48 +375,74 @@ export class Cookie {
   }
 
   /**
-   * Converts the Cookie instance to a plain object.
+   * Converts the `Cookie` instance to a JSON representation.
    *
-   * @returns An object representation of the cookie.
-   *
-   * @example
-   * const cookieObj = cookie.toJSON();
-   * // Output: { name: 'sessionId', value: 'abc123', options: { httpOnly: true, secure: true } }
+   * @returns {{ name: string; value: string; options?: CookieOptions }} The JSON representation.
    */
-  toJSON(): { name: string; value: string; options?: CookieOptions } {
+  public toJSON(): {
+    name: string;
+    value: string;
+    options?: CookieOptions;
+  } {
     return {
-      name: this.name,
-      value: this.value,
-      options: this.options,
+      name: this._name,
+      value: this._value,
+      options: this._options,
     };
   }
 
   /**
    * Updates the value of the cookie.
    *
-   * @param newValue - The new value to set.
-   *
-   * @throws {TypeError} If the new value is invalid.
-   *
-   * @example
-   * cookie.setValue('newValue123');
+   * @param {string} newValue - The new value to set.
+   * @throws {CookieError} Throws an error if the new value is invalid.
    */
-  setValue(newValue: string): void {
-    if (!COOKIE_VALUE_REG_EXP.test(newValue)) {
-      throw new TypeError(`Invalid cookie value: ${newValue}`);
-    }
-    this.value = newValue;
+  public setValue(newValue: string): void {
+    validateCookieValue(newValue);
+    this._value = newValue;
   }
 
   /**
-   * Updates the options of the cookie.
+   * Updates the options (attributes) of the cookie.
    *
-   * @param newOptions - The new options to set.
-   *
-   * @example
-   * cookie.setOptions({ secure: false });
+   * @param {CookieOptions} newOptions - The new options to set.
+   * @throws {CookieError} Throws an error if any new option is invalid.
    */
-  setOptions(newOptions: CookieOptions): void {
-    this.options = { ...this.options, ...newOptions };
+  public setOptions(newOptions: CookieOptions): void {
+    if (newOptions.domain) {
+      validateDomain(newOptions.domain);
+    }
+    if (newOptions.path) {
+      validatePath(newOptions.path);
+    }
+
+    this._options = { ...this._options, ...newOptions };
+  }
+
+  /**
+   * Retrieves the name of the cookie.
+   *
+   * @returns {string} The cookie name.
+   */
+  public get name(): string {
+    return this._name;
+  }
+
+  /**
+   * Retrieves the value of the cookie.
+   *
+   * @returns {string} The cookie value.
+   */
+  public get value(): string {
+    return this._value;
+  }
+
+  /**
+   * Retrieves the options (attributes) of the cookie.
+   *
+   * @returns {CookieOptions} The cookie options.
+   */
+  public get options(): CookieOptions {
+    return this._options;
   }
 }

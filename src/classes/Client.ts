@@ -108,16 +108,20 @@ export class Client {
     const requiredFields: Array<keyof IClientConfig> = [
       'clientId',
       'redirectUri',
-      'scopes',
       'discoveryUrl',
     ];
+
     requiredFields.forEach((field) => {
       if (!config[field]) {
         throw new ClientError(`${field} is required`, 'CONFIG_ERROR');
       }
     });
-  }
 
+    // Custom check for 'scopes'
+    if (!config.scopes?.length) {
+      throw new ClientError('At least one scope is required', 'CONFIG_ERROR');
+    }
+  }
   private validateConfig(config: IClientConfig): void {
     if (!config.clientId)
       throw new ClientError('clientId is required', 'CONFIG_ERROR');

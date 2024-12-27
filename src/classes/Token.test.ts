@@ -142,6 +142,54 @@ describe('TokenClient', () => {
       expect(tokens?.expires_in).toBe(3600);
     });
 
+    it('should include client_secret in the token request if provided', async () => {
+      // Arrange
+      mockConfig.clientSecret = 'test-client-secret'; // Add clientSecret to mockConfig
+
+      tokenClient.setTokens({
+        access_token: 'old-access-token',
+        refresh_token: 'valid-refresh-token',
+        expires_in: 3600, // 1 hour
+        token_type: 'Bearer',
+      });
+
+      const mockTokenResponse: ITokenResponse = {
+        access_token: 'new-access-token',
+        refresh_token: 'new-refresh-token',
+        expires_in: 3600, // 1 hour
+        token_type: 'Bearer',
+      };
+
+      // Mock fetch to return the token response
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        mockFetchSuccess(mockTokenResponse),
+      );
+
+      // Act
+      await tokenClient.refreshAccessToken();
+
+      // Assert
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://example.com/oauth/token',
+        {
+          method: 'POST',
+          body: 'grant_type=refresh_token&refresh_token=valid-refresh-token&client_id=test-client-id&client_secret=test-client-secret',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        },
+      );
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Access token refreshed successfully',
+      );
+
+      const tokens = tokenClient.getTokens();
+      expect(tokens).toMatchObject({
+        access_token: 'new-access-token',
+        refresh_token: 'new-refresh-token',
+        token_type: 'Bearer',
+      });
+      expect(tokens?.expires_in).toBe(3600);
+    });
+
     it('should throw an error if no refresh token is available', async () => {
       // Arrange
       tokenClient.setTokens({
@@ -807,6 +855,96 @@ describe('TokenClient', () => {
         redirect_uri: 'https://example.com/callback',
         code: 'auth-code',
         code_verifier: 'code-verifier',
+      });
+    });
+
+    it('should build correct parameters for Device Code grant type', () => {
+      // Arrange
+      const code = 'device-code';
+      mockConfig.grantType = GrantType.DeviceCode;
+
+      // Act
+      // @ts-ignore - testing private method
+      const params = tokenClient.buildTokenRequestParams(code);
+
+      // Assert
+      expect(params).toEqual({
+        grant_type: GrantType.DeviceCode,
+        client_id: 'test-client-id',
+        redirect_uri: 'https://example.com/callback',
+        device_code: 'device-code',
+      });
+    });
+
+    it('should build correct parameters for JWT Bearer grant type', () => {
+      // Arrange
+      const code = 'jwt-token';
+      mockConfig.grantType = GrantType.JWTBearer;
+
+      // Act
+      // @ts-ignore - testing private method
+      const params = tokenClient.buildTokenRequestParams(code);
+
+      // Assert
+      expect(params).toEqual({
+        grant_type: GrantType.JWTBearer,
+        client_id: 'test-client-id',
+        redirect_uri: 'https://example.com/callback',
+        assertion: 'jwt-token',
+        scope: 'openid profile', // Based on mockConfig.scopes
+      });
+    });
+
+    it('should build correct parameters for SAML2 Bearer grant type', () => {
+      // Arrange
+      const code = 'saml-token';
+      mockConfig.grantType = GrantType.SAML2Bearer;
+
+      // Act
+      // @ts-ignore - testing private method
+      const params = tokenClient.buildTokenRequestParams(code);
+
+      // Assert
+      expect(params).toEqual({
+        grant_type: GrantType.SAML2Bearer,
+        client_id: 'test-client-id',
+        redirect_uri: 'https://example.com/callback',
+        assertion: 'saml-token',
+        scope: 'openid profile', // Based on mockConfig.scopes
+      });
+    });
+
+    it('should handle Client Credentials grant type without errors', () => {
+      // Arrange
+      const code = 'client-credentials-code';
+      mockConfig.grantType = GrantType.ClientCredentials;
+
+      // Act
+      // @ts-ignore - testing private method
+      const params = tokenClient.buildTokenRequestParams(code);
+
+      // Assert
+      expect(params).toEqual({
+        grant_type: GrantType.ClientCredentials,
+        client_id: 'test-client-id',
+        redirect_uri: 'https://example.com/callback',
+      });
+    });
+
+    it('should handle Custom grant type without errors', () => {
+      // Arrange
+      const code = 'custom-grant-code';
+      mockConfig.grantType = GrantType.Custom;
+
+      // Act
+      // @ts-ignore - testing private method
+      const params = tokenClient.buildTokenRequestParams(code);
+
+      // Assert
+      expect(params).toEqual({
+        grant_type: GrantType.Custom,
+        client_id: 'test-client-id',
+        redirect_uri: 'https://example.com/callback',
       });
     });
 
