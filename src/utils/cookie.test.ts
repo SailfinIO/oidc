@@ -14,10 +14,80 @@ describe('parse', () => {
     expect(result).toEqual({ token: 'a=b=c', sessionId: 'abc123' });
   });
 
+  it('should parse valid Max-Age attribute', () => {
+    const cookieString = 'sessionId=abc123; Max-Age=3600';
+    const parsed = Cookie.parse(cookieString);
+    expect(parsed.name).toBe('sessionId');
+    expect(parsed.value).toBe('abc123');
+    expect(parsed.options?.maxAge).toBe(3600);
+  });
+
+  it('should throw error for non-numeric Max-Age value', () => {
+    const cookieString = 'sessionId=abc123; Max-Age=invalid';
+    expect(() => Cookie.parse(cookieString)).toThrow(
+      'Invalid Max-Age value: invalid',
+    );
+  });
+
+  it('should parse cookie without Max-Age attribute', () => {
+    const cookieString = 'sessionId=abc123';
+    const parsed = Cookie.parse(cookieString);
+    expect(parsed.name).toBe('sessionId');
+    expect(parsed.value).toBe('abc123');
+    expect(parsed.options?.maxAge).toBeUndefined();
+  });
+
   it('should parse cookies with empty values', () => {
     const header = 'emptyCookie=; sessionId=abc123';
     const result = parse(header);
     expect(result).toEqual({ emptyCookie: '', sessionId: 'abc123' });
+  });
+
+  it('should parse valid Domain attribute', () => {
+    const cookieString = 'sessionId=abc123; Domain=example.com';
+    const parsed = Cookie.parse(cookieString);
+    expect(parsed.options?.domain).toBe('example.com');
+  });
+
+  it('should throw error for invalid Domain value', () => {
+    const cookieString = 'sessionId=abc123; Domain=invalid domain';
+    expect(() => Cookie.parse(cookieString)).toThrow(
+      'Invalid domain: invalid domain',
+    );
+  });
+  it('should parse cookie without Domain attribute', () => {
+    const cookieString = 'sessionId=abc123';
+    const parsed = Cookie.parse(cookieString);
+    expect(parsed.options?.domain).toBeUndefined();
+  });
+
+  it('should parse valid Path attribute', () => {
+    const cookieString = 'sessionId=abc123; Path=/home';
+    const parsed = Cookie.parse(cookieString);
+    expect(parsed.options?.path).toBe('/home');
+  });
+
+  it('should parse cookie without Path attribute', () => {
+    const cookieString = 'sessionId=abc123';
+    const parsed = Cookie.parse(cookieString);
+    expect(parsed.options?.path).toBeUndefined();
+  });
+
+  it('should parse multiple attributes including Max-Age, Domain, and Path', () => {
+    const cookieString =
+      'sessionId=abc123; Max-Age=3600; Domain=example.com; Path=/home';
+    const parsed = Cookie.parse(cookieString);
+    expect(parsed.name).toBe('sessionId');
+    expect(parsed.value).toBe('abc123');
+    expect(parsed.options?.maxAge).toBe(3600);
+    expect(parsed.options?.domain).toBe('example.com');
+    expect(parsed.options?.path).toBe('/home');
+  });
+
+  it('should handle duplicate Max-Age attributes by taking the last one', () => {
+    const cookieString = 'sessionId=abc123; Max-Age=3600; Max-Age=7200';
+    const parsed = Cookie.parse(cookieString);
+    expect(parsed.options?.maxAge).toBe(7200);
   });
 
   it('should parse a single cookie', () => {
@@ -74,6 +144,66 @@ describe('parse', () => {
     const header = 'sessionId=abc123';
     const result = parse(header);
     expect(Object.getPrototypeOf(result)).toBeNull();
+  });
+
+  it('should parse the Partitioned attribute correctly', () => {
+    const cookieString = 'sessionId=abc123; Partitioned';
+    const parsed = Cookie.parse(cookieString);
+    expect(parsed.name).toBe('sessionId');
+    expect(parsed.value).toBe('abc123');
+    expect(parsed.options?.partitioned).toBe(true);
+  });
+
+  it('should handle absence of the Partitioned attribute', () => {
+    const cookieString = 'sessionId=abc123';
+    const parsed = Cookie.parse(cookieString);
+    expect(parsed.options?.partitioned).toBeUndefined();
+  });
+
+  it('should throw error for invalid Priority value in parse', () => {
+    const cookieString = 'sessionId=abc123; Priority=urgent';
+    expect(() => Cookie.parse(cookieString)).toThrow(
+      'Invalid Priority value: urgent',
+    );
+  });
+
+  it('should parse Priority=LOW correctly', () => {
+    const cookieString = 'sessionId=abc123; Priority=LOW';
+    const parsed = Cookie.parse(cookieString);
+    expect(parsed.options?.priority).toBe(Priority.LOW);
+  });
+
+  it('should parse Priority=Medium correctly', () => {
+    const cookieString = 'sessionId=abc123; Priority=Medium';
+    const parsed = Cookie.parse(cookieString);
+    expect(parsed.options?.priority).toBe(Priority.MEDIUM);
+  });
+
+  it('should parse Priority=high correctly', () => {
+    const cookieString = 'sessionId=abc123; Priority=high';
+    const parsed = Cookie.parse(cookieString);
+    expect(parsed.options?.priority).toBe(Priority.HIGH);
+  });
+
+  it('should parse multiple attributes including Partitioned and Priority', () => {
+    const cookieString = 'sessionId=abc123; Partitioned; Priority=Medium';
+    const parsed = Cookie.parse(cookieString);
+    expect(parsed.name).toBe('sessionId');
+    expect(parsed.value).toBe('abc123');
+    expect(parsed.options?.partitioned).toBe(true);
+    expect(parsed.options?.priority).toBe(Priority.MEDIUM);
+  });
+
+  it('should handle duplicate Partitioned attributes by setting it to true', () => {
+    const cookieString = 'sessionId=abc123; Partitioned; Partitioned';
+    const parsed = Cookie.parse(cookieString);
+    expect(parsed.options?.partitioned).toBe(true);
+  });
+
+  it('should handle duplicate Priority attributes by taking the last one', () => {
+    const cookieString = 'sessionId=abc123; Priority=Low; Priority=High';
+    const parsed = Cookie.parse(cookieString);
+    expect(parsed.options?.priority).toBe(Priority.HIGH);
   });
 });
 
@@ -239,6 +369,44 @@ describe('serialize', () => {
       'sessionId=abc123; Max-Age=3600; Domain=example.com; Path=/home; Expires=Sun, 01 Jan 2023 00:00:00 GMT; HttpOnly; Secure; Priority=Medium; SameSite=Lax',
     );
   });
+
+  it('should serialize with the Partitioned attribute set to true', () => {
+    const result = serialize('sessionId', 'abc123', { partitioned: true });
+    expect(result).toBe('sessionId=abc123; Partitioned');
+  });
+
+  it('should not serialize the Partitioned attribute when set to false', () => {
+    const result = serialize('sessionId', 'abc123', { partitioned: false });
+    expect(result).toBe('sessionId=abc123');
+  });
+
+  it('should serialize Priority=low correctly', () => {
+    const result = serialize('sessionId', 'abc123', {
+      priority: 'low' as Priority,
+    });
+    expect(result).toBe('sessionId=abc123; Priority=Low');
+  });
+
+  it('should serialize Priority=MEDIUM correctly', () => {
+    const result = serialize('sessionId', 'abc123', {
+      priority: 'MEDIUM' as Priority,
+    });
+    expect(result).toBe('sessionId=abc123; Priority=Medium');
+  });
+
+  it('should serialize Priority=High correctly', () => {
+    const result = serialize('sessionId', 'abc123', {
+      priority: 'High' as Priority,
+    });
+    expect(result).toBe('sessionId=abc123; Priority=High');
+  });
+
+  it('should throw error when serializing with invalid Priority value', () => {
+    expect(() =>
+      // @ts-ignore Testing runtime behavior with invalid input
+      serialize('sessionId', 'abc123', { priority: 'urgent' }),
+    ).toThrow('Invalid Priority: urgent');
+  });
 });
 
 describe('Cookie Class', () => {
@@ -389,5 +557,47 @@ describe('Cookie Class', () => {
       secure: true,
       path: '/home',
     });
+  });
+  it('should parse and set the Partitioned attribute correctly in Cookie instance', () => {
+    const cookieString = 'sessionId=abc123; Partitioned';
+    const parsed = Cookie.parse(cookieString);
+    expect(parsed.options?.partitioned).toBe(true);
+  });
+
+  it('should parse and set the Priority attribute correctly in Cookie instance', () => {
+    const cookieString = 'sessionId=abc123; Priority=medium';
+    const parsed = Cookie.parse(cookieString);
+    expect(parsed.options?.priority).toBe(Priority.MEDIUM);
+  });
+
+  it('should throw an error when parsing a cookie with invalid Priority attribute', () => {
+    const cookieString = 'sessionId=abc123; Priority=invalid';
+    expect(() => Cookie.parse(cookieString)).toThrow(
+      'Invalid Priority value: invalid',
+    );
+  });
+
+  it('should serialize a Cookie instance with Partitioned and Priority attributes', () => {
+    const cookie = new Cookie('sessionId', 'abc123', {
+      partitioned: true,
+      priority: Priority.HIGH,
+    });
+    expect(cookie.serialize()).toBe(
+      'sessionId=abc123; Partitioned; Priority=High',
+    );
+  });
+
+  it('should update Partitioned attribute using setOptions', () => {
+    const cookie = new Cookie('sessionId', 'abc123');
+    cookie.setOptions({ partitioned: true });
+    expect(cookie.options?.partitioned).toBe(true);
+    expect(cookie.serialize()).toBe('sessionId=abc123; Partitioned');
+  });
+
+  it('should update Priority attribute using setOptions', () => {
+    const cookie = new Cookie('sessionId', 'abc123');
+    cookie.setOptions({ priority: Priority.LOW });
+    expect(cookie.options?.priority).toBe(Priority.LOW);
+    expect(cookie.serialize()).toBe('sessionId=abc123; Priority=Low');
   });
 });

@@ -38,6 +38,7 @@ export class Auth implements IAuth {
   private readonly state: IState;
 
   private codeVerifier: string | null = null;
+  private clientMetadata: Promise<ClientMetadata> | null = null;
 
   constructor(
     config: IClientConfig,
@@ -53,6 +54,13 @@ export class Auth implements IAuth {
       tokenClient || new Token(this.logger, this.config, this.issuer);
     this.pkceService = pkceService || new Pkce(this.config);
     this.state = new State();
+  }
+
+  private async getClientMetadata(): Promise<ClientMetadata> {
+    if (!this.clientMetadata) {
+      this.clientMetadata = this.issuer.discover();
+    }
+    return this.clientMetadata;
   }
 
   /**
@@ -222,7 +230,7 @@ export class Auth implements IAuth {
     try {
       // Validate ID token if present
       const tokens = this.tokenClient.getTokens();
-      const client = await this.issuer.discover();
+      const client = await this.getClientMetadata();
       if (tokens?.id_token) {
         const jwtValidator = new JwtValidator(
           this.logger as Logger,
@@ -297,7 +305,7 @@ export class Auth implements IAuth {
 
     // Optionally handle ID token validation
     if (id_token) {
-      const client = await this.issuer.discover();
+      const client = await this.getClientMetadata();
       const jwtValidator = new JwtValidator(
         this.logger as Logger,
         client,

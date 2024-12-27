@@ -9,41 +9,81 @@ import {
   ILogger,
   IToken,
   IAuth,
+  IPkce,
 } from '../interfaces';
 import { ClientError } from '../errors/ClientError';
-import { buildLogoutUrl, sleep, parseFragment } from '../utils';
+import {
+  buildLogoutUrl,
+  sleep,
+  parseFragment,
+  generateRandomString,
+} from '../utils';
 import { PkceMethod, Scopes, GrantType } from '../enums';
 import { JwtValidator } from './JwtValidator';
-
 // Mock utilities
 jest.mock('../utils', () => ({
   ...jest.requireActual('../utils'),
-  sleep: jest.fn(), // Mock the sleep function
-  generateRandomString: jest.fn(), // Mock generateRandomString
-  parseFragment: jest.fn(), // Mock parseFragment
-  buildAuthorizationUrl: jest.fn(),
+  sleep: jest.fn(),
+  generateRandomString: jest.fn(),
+  parseFragment: jest.fn(),
+  // buildAuthorizationUrl: jest.fn(),
   buildLogoutUrl: jest.fn(),
 }));
 
-describe('Auth', () => {
-  let mockIssuer: jest.Mocked<IIssuer>;
-  let mockLogger: jest.Mocked<ILogger>;
-  let mockTokenClient: jest.Mocked<IToken>;
-  let auth: IAuth;
-  let config: IClientConfig;
+let mockIssuer: jest.Mocked<IIssuer>;
+let mockLogger: jest.Mocked<ILogger>;
+let mockTokenClient: jest.Mocked<IToken>;
 
-  const mockClientMetadata: Partial<ClientMetadata> = {
-    issuer: 'https://example.com/',
-    authorization_endpoint: 'https://example.com/oauth2/authorize',
-    token_endpoint: 'https://example.com/oauth2/token',
-    end_session_endpoint: 'https://example.com/oauth2/logout',
-    jwks_uri: 'https://example.com/.well-known/jwks.json',
-    userinfo_endpoint: 'https://example.com/oauth2/userinfo',
-    device_authorization_endpoint:
-      'https://example.com/oauth2/device_authorize',
+// Constants for reuse
+const MOCK_CLIENT_ID = 'test-client-id';
+const MOCK_REDIRECT_URI = 'https://example.com/callback';
+const MOCK_POST_LOGOUT_URI = 'https://example.com/logout-callback';
+const MOCK_DISCOVERY_URL =
+  'https://example.com/.well-known/openid-configuration';
+const MOCK_CLIENT_METADATA: Partial<ClientMetadata> = {
+  issuer: 'https://example.com/',
+  authorization_endpoint: 'https://example.com/oauth2/authorize',
+  token_endpoint: 'https://example.com/oauth2/token',
+  end_session_endpoint: 'https://example.com/oauth2/logout',
+  jwks_uri: 'https://example.com/.well-known/jwks.json',
+  userinfo_endpoint: 'https://example.com/oauth2/userinfo',
+  device_authorization_endpoint: 'https://example.com/oauth2/device_authorize',
+};
+
+// Helper function to create Auth instances
+const createAuthInstance = (
+  grantType: GrantType,
+  configOverrides?: Partial<IClientConfig>,
+): IAuth => {
+  const config: IClientConfig = {
+    clientId: MOCK_CLIENT_ID,
+    redirectUri: MOCK_REDIRECT_URI,
+    scopes: [Scopes.OpenId, Scopes.Profile],
+    discoveryUrl: MOCK_DISCOVERY_URL,
+    grantType,
+    pkce: grantType === GrantType.AuthorizationCode,
+    pkceMethod: PkceMethod.S256,
+    postLogoutRedirectUri: MOCK_POST_LOGOUT_URI,
+    ...configOverrides,
   };
+  return new Auth(config, mockLogger, mockIssuer, mockTokenClient);
+};
+
+// Helper function to mock fetch responses
+const mockFetchResponse = (data: any, status: number = 200) => {
+  (global.fetch as jest.Mock).mockResolvedValueOnce(
+    new Response(JSON.stringify(data), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  );
+};
+
+describe('Auth', () => {
+  let auth: IAuth;
 
   beforeEach(() => {
+    // Initialize mocks
     mockLogger = {
       debug: jest.fn(),
       info: jest.fn(),
@@ -52,11 +92,8 @@ describe('Auth', () => {
       setLogLevel: jest.fn(),
     };
 
-    // Mock fetch globally
-    global.fetch = jest.fn();
-
     mockIssuer = {
-      discover: jest.fn().mockResolvedValue(mockClientMetadata),
+      discover: jest.fn().mockResolvedValue(MOCK_CLIENT_METADATA),
     };
 
     mockTokenClient = {
@@ -70,7 +107,7 @@ describe('Auth', () => {
       exchangeCodeForToken: jest.fn(),
     };
 
-    // Mock TokenClient methods if necessary
+    // Mock TokenClient methods
     jest
       .spyOn(Token.prototype, 'setTokens')
       .mockImplementation(mockTokenClient.setTokens);
@@ -92,11 +129,14 @@ describe('Auth', () => {
     jest
       .spyOn(Token.prototype, 'revokeToken')
       .mockImplementation(mockTokenClient.revokeToken);
+
+    // Mock fetch globally
+    global.fetch = jest.fn();
   });
 
   afterEach(() => {
     jest.resetAllMocks();
-    jest.useRealTimers(); // Ensure timers are reset
+    jest.useRealTimers();
   });
 
   describe.each([
@@ -108,19 +148,9 @@ describe('Auth', () => {
     GrantType.JWTBearer,
     GrantType.SAML2Bearer,
     GrantType.Custom,
-  ])('auth with GrantType: %s', (grantType) => {
+  ])('GrantType: %s', (grantType) => {
     beforeEach(() => {
-      config = {
-        clientId: 'test-client-id',
-        redirectUri: 'https://example.com/callback',
-        scopes: [Scopes.OpenId, Scopes.Profile],
-        discoveryUrl: 'https://example.com/.well-known/openid-configuration',
-        grantType,
-        pkce: grantType === GrantType.AuthorizationCode,
-        pkceMethod: PkceMethod.S256,
-        postLogoutRedirectUri: 'https://example.com/logout-callback',
-      };
-      auth = new Auth(config, mockLogger, mockIssuer, mockTokenClient);
+      auth = createAuthInstance(grantType);
     });
 
     describe('constructor', () => {
@@ -131,760 +161,977 @@ describe('Auth', () => {
 
     // DeviceCode-specific tests
     if (grantType === GrantType.DeviceCode) {
-      describe('startDeviceAuthorization', () => {
-        it('should initiate device authorization successfully', async () => {
-          const deviceEndpoint = 'https://example.com/oauth2/device_authorize';
-          const deviceResponse = {
-            device_code: 'device-code',
-            user_code: 'user-code',
-            verification_uri: 'https://example.com/verify',
-            expires_in: 1800,
-            interval: 5,
-          };
+      describe('DeviceCode Flow', () => {
+        describe('startDeviceAuthorization', () => {
+          it('should initiate device authorization successfully', async () => {
+            const deviceResponse = {
+              device_code: 'device-code',
+              user_code: 'user-code',
+              verification_uri: 'https://example.com/verify',
+              expires_in: 1800,
+              interval: 5,
+            };
 
-          mockIssuer.discover.mockResolvedValueOnce({
-            ...mockClientMetadata,
-            device_authorization_endpoint: deviceEndpoint,
-          } as ClientMetadata);
+            mockIssuer.discover.mockResolvedValueOnce({
+              ...MOCK_CLIENT_METADATA,
+              device_authorization_endpoint:
+                'https://example.com/oauth2/device_authorize',
+            } as ClientMetadata);
 
-          (global.fetch as jest.Mock).mockResolvedValueOnce(
-            new Response(JSON.stringify(deviceResponse), {
-              status: 200,
-              headers: { 'Content-Type': 'application/json' },
-            }),
-          );
+            mockFetchResponse(deviceResponse);
 
-          const result = await auth.startDeviceAuthorization();
+            const result = await auth.startDeviceAuthorization();
 
-          expect(mockIssuer.discover).toHaveBeenCalledTimes(1);
-          expect(global.fetch).toHaveBeenCalledWith(deviceEndpoint, {
-            method: 'POST',
-            body: expect.stringContaining(
-              `client_id=${encodeURIComponent(config.clientId)}`,
-            ),
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          });
-          expect(result).toEqual(deviceResponse);
-          expect(mockLogger.info).toHaveBeenCalledWith(
-            'Device authorization initiated',
-          );
-        });
-
-        it('should throw ClientError if device_authorization_endpoint is missing', async () => {
-          mockIssuer.discover.mockResolvedValueOnce({
-            ...mockClientMetadata,
-            device_authorization_endpoint: undefined,
-          } as ClientMetadata);
-
-          await expect(auth.startDeviceAuthorization()).rejects.toThrow(
-            ClientError,
-          );
-
-          expect(mockLogger.error).toHaveBeenCalledWith(
-            'Failed to start device authorization',
-            { error: expect.any(ClientError) },
-          );
-        });
-
-        it('should handle errors during device authorization initiation', async () => {
-          const deviceEndpoint = 'https://example.com/oauth2/device_authorize';
-          mockIssuer.discover.mockResolvedValueOnce({
-            ...mockClientMetadata,
-            device_authorization_endpoint: deviceEndpoint,
-          } as ClientMetadata);
-          const mockError = new Error('Device authorization failed');
-
-          (global.fetch as jest.Mock).mockRejectedValueOnce(mockError);
-
-          await expect(auth.startDeviceAuthorization()).rejects.toThrow(
-            ClientError,
-          );
-          expect(mockLogger.error).toHaveBeenCalledWith(
-            'Failed to start device authorization',
-            { error: mockError },
-          );
-        });
-      });
-
-      describe('pollDeviceToken', () => {
-        // Separate tests that do not require fake timers
-        describe('Immediate Error Handling', () => {
-          it('should throw ClientError immediately on unexpected error', async () => {
-            const device_code = 'device-code';
-            const tokenEndpoint = mockClientMetadata.token_endpoint;
-
-            // Create an Error object with context.body
-            const mockError = Object.assign(new Error('Unexpected error'), {
-              context: {
-                body: JSON.stringify({ error: 'unexpected_error' }),
-              },
-            });
-            (global.fetch as jest.Mock).mockRejectedValueOnce(mockError);
-
-            await expect(
-              auth.pollDeviceToken(device_code, 5, 10000),
-            ).rejects.toThrow(ClientError);
-
-            expect(global.fetch).toHaveBeenCalledTimes(1);
-
-            const expectedParams = new URLSearchParams({
-              grant_type: GrantType.DeviceCode,
-              device_code: device_code,
-              client_id: config.clientId,
-            });
-
-            expect(global.fetch).toHaveBeenCalledWith(tokenEndpoint!, {
-              method: 'POST',
-              body: expectedParams.toString(),
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            });
-
-            expect(mockLogger.error).toHaveBeenCalledWith(
-              'Device token polling failed',
-              { originalError: mockError },
-            );
-          });
-        });
-
-        // Tests that involve timers
-        describe('Timed Polling', () => {
-          beforeEach(() => {
-            jest.useFakeTimers();
-            // Mock the sleep function to resolve immediately
-            (sleep as jest.Mock).mockResolvedValue(Promise.resolve());
-          });
-
-          afterEach(() => {
-            jest.useRealTimers();
-            // Reset the sleep mock after each test
-            (sleep as jest.Mock).mockReset();
-          });
-
-          it('should handle unexpected errors during polling', async () => {
-            const device_code = 'device-code';
-
-            const unexpectedError = Object.assign(
-              new Error('Unexpected error'),
+            expect(mockIssuer.discover).toHaveBeenCalledTimes(1);
+            expect(global.fetch).toHaveBeenCalledWith(
+              'https://example.com/oauth2/device_authorize',
               {
-                context: {
-                  body: JSON.stringify({ error: 'unexpected_error' }),
+                method: 'POST',
+                body: expect.stringContaining(
+                  `client_id=${encodeURIComponent(MOCK_CLIENT_ID)}`,
+                ),
+                headers: {
+                  'Content-Type': 'application/x-www-form-urlencoded',
                 },
               },
             );
-            (global.fetch as jest.Mock).mockRejectedValueOnce(unexpectedError);
+            expect(result).toEqual(deviceResponse);
+            expect(mockLogger.info).toHaveBeenCalledWith(
+              'Device authorization initiated',
+            );
+          });
 
-            const pollPromise = auth.pollDeviceToken(device_code, 5, 10000);
+          it('should throw ClientError if device_authorization_endpoint is missing', async () => {
+            mockIssuer.discover.mockResolvedValueOnce({
+              ...MOCK_CLIENT_METADATA,
+              device_authorization_endpoint: undefined,
+            } as ClientMetadata);
 
-            // First poll: unexpected error, method should throw immediately
-            await expect(pollPromise).rejects.toThrow(ClientError);
+            await expect(auth.startDeviceAuthorization()).rejects.toThrow(
+              ClientError,
+            );
 
-            expect(global.fetch).toHaveBeenCalledTimes(1);
             expect(mockLogger.error).toHaveBeenCalledWith(
-              'Device token polling failed',
+              'Failed to start device authorization',
+              { error: expect.any(ClientError) },
+            );
+          });
+
+          it('should handle errors during device authorization initiation', async () => {
+            mockIssuer.discover.mockResolvedValueOnce({
+              ...MOCK_CLIENT_METADATA,
+              device_authorization_endpoint:
+                'https://example.com/oauth2/device_authorize',
+            } as ClientMetadata);
+
+            const mockError = new Error('Device authorization failed');
+            (global.fetch as jest.Mock).mockRejectedValueOnce(mockError);
+
+            await expect(auth.startDeviceAuthorization()).rejects.toThrow(
+              ClientError,
+            );
+            expect(mockLogger.error).toHaveBeenCalledWith(
+              'Failed to start device authorization',
+              { error: mockError },
+            );
+          });
+        });
+
+        describe('pollDeviceToken', () => {
+          describe('Immediate Error Handling', () => {
+            it('should throw ClientError immediately on unexpected error', async () => {
+              const device_code = 'device-code';
+              const mockError = Object.assign(new Error('Unexpected error'), {
+                context: {
+                  body: JSON.stringify({ error: 'unexpected_error' }),
+                },
+              });
+
+              (global.fetch as jest.Mock).mockRejectedValueOnce(mockError);
+
+              await expect(
+                auth.pollDeviceToken(device_code, 5, 10000),
+              ).rejects.toThrow(ClientError);
+
+              expect(global.fetch).toHaveBeenCalledTimes(1);
+              expect(global.fetch).toHaveBeenCalledWith(
+                MOCK_CLIENT_METADATA.token_endpoint!,
+                {
+                  method: 'POST',
+                  body: new URLSearchParams({
+                    grant_type: GrantType.DeviceCode,
+                    device_code,
+                    client_id: MOCK_CLIENT_ID,
+                  }).toString(),
+                  headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                  },
+                },
+              );
+              expect(mockLogger.error).toHaveBeenCalledWith(
+                'Device token polling failed',
+                { originalError: mockError },
+              );
+            });
+          });
+
+          describe('handlePollingError coverage', () => {
+            beforeEach(() => {
+              jest.useFakeTimers();
+              (sleep as jest.Mock).mockResolvedValue(Promise.resolve());
+            });
+
+            afterEach(() => {
+              jest.useRealTimers();
+            });
+
+            it('should handle "authorization_pending" by sleeping and continuing polling', async () => {
+              const device_code = 'test-device-code';
+
+              // First fetch attempt: simulate "authorization_pending" error
+              (global.fetch as jest.Mock).mockRejectedValueOnce(
+                Object.assign(new Error('authorization_pending'), {
+                  context: {
+                    body: JSON.stringify({ error: 'authorization_pending' }),
+                  },
+                }),
+              );
+
+              // Second fetch attempt: return a valid token so we can exit the loop
+              (global.fetch as jest.Mock).mockResolvedValueOnce(
+                new Response(
+                  JSON.stringify({
+                    access_token: 'access-token',
+                    token_type: 'Bearer',
+                    expires_in: 3600,
+                  }),
+                  {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' },
+                  },
+                ),
+              );
+
+              await auth.pollDeviceToken(device_code, 5, 30000);
+
+              // We expect `sleep` to have been called once with 5 seconds
+              expect(sleep).toHaveBeenCalledWith(5 * 1000);
+
+              // We also expect we eventually get tokens set
+              expect(mockTokenClient.setTokens).toHaveBeenCalledWith({
+                access_token: 'access-token',
+                token_type: 'Bearer',
+                expires_in: 3600,
+              });
+            });
+
+            it('should handle "slow_down" by adding 5 to interval, sleeping, then continuing polling', async () => {
+              const device_code = 'test-device-code';
+
+              // First fetch attempt: simulate "slow_down" error
+              (global.fetch as jest.Mock).mockRejectedValueOnce(
+                Object.assign(new Error('slow_down'), {
+                  context: {
+                    body: JSON.stringify({ error: 'slow_down' }),
+                  },
+                }),
+              );
+
+              // Second fetch attempt: return a valid token so we can exit the loop
+              (global.fetch as jest.Mock).mockResolvedValueOnce(
+                new Response(
+                  JSON.stringify({
+                    access_token: 'access-token',
+                    token_type: 'Bearer',
+                    expires_in: 3600,
+                  }),
+                  {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' },
+                  },
+                ),
+              );
+
+              await auth.pollDeviceToken(device_code, 5, 30000);
+
+              // After "slow_down", the interval should increment by 5 => 10
+              // We expect `sleep` to have been called with 10 * 1000
+              expect(sleep).toHaveBeenCalledWith(10 * 1000);
+
+              // Then we get tokens set
+              expect(mockTokenClient.setTokens).toHaveBeenCalledWith({
+                access_token: 'access-token',
+                token_type: 'Bearer',
+                expires_in: 3600,
+              });
+            });
+
+            it('should handle "expired_token" by logging an error and throwing ClientError', async () => {
+              const device_code = 'test-device-code';
+
+              // Simulate "expired_token" error
+              (global.fetch as jest.Mock).mockRejectedValueOnce(
+                Object.assign(new Error('expired_token'), {
+                  context: {
+                    body: JSON.stringify({ error: 'expired_token' }),
+                  },
+                }),
+              );
+
+              await expect(
+                auth.pollDeviceToken(device_code, 5, 30000),
+              ).rejects.toThrowError('Device code expired');
+
+              // We also check that the logger.error was called for the "expired_token" case
+              expect(mockLogger.error).toHaveBeenCalledWith(
+                'Device code expired',
+                {
+                  error: expect.any(ClientError),
+                },
+              );
+
+              // And we expect NO token was ever set
+              expect(mockTokenClient.setTokens).not.toHaveBeenCalled();
+            });
+          });
+
+          describe('Timed Polling', () => {
+            beforeEach(() => {
+              jest.useFakeTimers();
+              (sleep as jest.Mock).mockResolvedValue(Promise.resolve());
+            });
+
+            afterEach(() => {
+              jest.useRealTimers();
+              (sleep as jest.Mock).mockReset();
+            });
+
+            it('should handle unexpected errors during polling', async () => {
+              const device_code = 'device-code';
+              const unexpectedError = Object.assign(
+                new Error('Unexpected error'),
+                {
+                  context: {
+                    body: JSON.stringify({ error: 'unexpected_error' }),
+                  },
+                },
+              );
+
+              (global.fetch as jest.Mock).mockRejectedValueOnce(
+                unexpectedError,
+              );
+
+              const pollPromise = auth.pollDeviceToken(device_code, 5, 10000);
+
+              await expect(pollPromise).rejects.toThrow(ClientError);
+
+              expect(global.fetch).toHaveBeenCalledTimes(1);
+              expect(mockLogger.error).toHaveBeenCalledWith(
+                'Device token polling failed',
+                { originalError: unexpectedError },
+              );
+            });
+
+            it('should successfully obtain tokens when polling succeeds', async () => {
+              const device_code = 'device-code';
+              const tokenResponse = {
+                access_token: 'access-token',
+                id_token: 'id-token',
+                token_type: 'Bearer',
+                expires_in: 3600,
+              };
+
+              mockFetchResponse(tokenResponse);
+
+              const pollPromise = auth.pollDeviceToken(device_code, 5, 10000);
+
+              jest.runAllTimers();
+
+              await pollPromise;
+
+              expect(global.fetch).toHaveBeenCalledTimes(1);
+              expect(global.fetch).toHaveBeenCalledWith(
+                MOCK_CLIENT_METADATA.token_endpoint!,
+                {
+                  method: 'POST',
+                  body: expect.stringContaining(
+                    `grant_type=${encodeURIComponent(GrantType.DeviceCode)}`,
+                  ),
+                  headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                  },
+                },
+              );
+              expect(mockTokenClient.setTokens).toHaveBeenCalledWith(
+                tokenResponse,
+              );
+              expect(mockLogger.info).toHaveBeenCalledWith(
+                'Device authorized and tokens obtained',
+              );
+            });
+          });
+        });
+
+        describe('getLogoutUrl', () => {
+          it('should generate logout URL with idTokenHint and state', async () => {
+            const idTokenHint = 'id-token';
+            const state = 'logout-state';
+            const expectedLogoutUrl = buildLogoutUrl({
+              endSessionEndpoint: MOCK_CLIENT_METADATA.end_session_endpoint!,
+              clientId: MOCK_CLIENT_ID,
+              postLogoutRedirectUri: MOCK_POST_LOGOUT_URI,
+              idTokenHint,
+              state,
+            });
+
+            const result = await auth.getLogoutUrl(idTokenHint, state);
+
+            expect(mockIssuer.discover).toHaveBeenCalledTimes(1);
+            expect(result).toBe(expectedLogoutUrl);
+            expect(mockLogger.debug).toHaveBeenCalledWith(
+              'Logout URL generated',
               {
-                originalError: unexpectedError,
+                logoutUrl: result,
               },
             );
           });
 
-          it('should successfully obtain tokens when polling succeeds', async () => {
-            const device_code = 'device-code';
-            const tokenEndpoint = mockClientMetadata.token_endpoint;
+          it('should generate logout URL without idTokenHint and state', async () => {
+            const expectedLogoutUrl = buildLogoutUrl({
+              endSessionEndpoint: MOCK_CLIENT_METADATA.end_session_endpoint!,
+              clientId: MOCK_CLIENT_ID,
+              postLogoutRedirectUri: MOCK_POST_LOGOUT_URI,
+              idTokenHint: undefined,
+              state: undefined,
+            });
+
+            const result = await auth.getLogoutUrl();
+
+            expect(result).toBe(expectedLogoutUrl);
+            expect(mockLogger.debug).toHaveBeenCalledWith(
+              'Logout URL generated',
+              {
+                logoutUrl: result,
+              },
+            );
+          });
+
+          it('should throw ClientError if end_session_endpoint is missing', async () => {
+            mockIssuer.discover.mockResolvedValueOnce({
+              ...MOCK_CLIENT_METADATA,
+              end_session_endpoint: undefined,
+            } as ClientMetadata);
+
+            await expect(auth.getLogoutUrl()).rejects.toThrow(ClientError);
+
+            expect(mockLogger.error).toHaveBeenCalledWith(
+              'Failed to generate logout URL',
+              { error: expect.any(ClientError) },
+            );
+          });
+        });
+
+        describe('getAuthorizationUrl', () => {
+          const buildAuthorizationUrlSpy = () =>
+            jest.spyOn(require('../utils'), 'buildAuthorizationUrl');
+
+          it('should generate an authorization URL with PKCE', async () => {
+            const utils = require('../utils');
+            (utils.generateRandomString as jest.Mock)
+              .mockReturnValueOnce('state123')
+              .mockReturnValueOnce('nonce123');
+
+            const buildSpy = buildAuthorizationUrlSpy().mockReturnValue(
+              'https://example.com/oauth2/authorize?client_id=test-client-id',
+            );
+
+            const result = await auth.getAuthorizationUrl();
+
+            expect(result.url).toContain(
+              `client_id=${encodeURIComponent(MOCK_CLIENT_ID)}`,
+            );
+            expect(mockLogger.debug).toHaveBeenCalledWith(
+              'Authorization URL generated',
+              {
+                url: result.url,
+              },
+            );
+
+            buildSpy.mockRestore();
+          });
+
+          it('should generate an authorization URL without PKCE', async () => {
+            auth = createAuthInstance(GrantType.AuthorizationCode, {
+              pkce: false,
+            });
+
+            const utils = require('../utils');
+            (utils.generateRandomString as jest.Mock)
+              .mockReturnValueOnce('state123')
+              .mockReturnValueOnce('nonce123');
+
+            const buildSpy = buildAuthorizationUrlSpy().mockReturnValue(
+              'https://example.com/oauth2/authorize?client_id=test-client-id',
+            );
+
+            const result = await auth.getAuthorizationUrl();
+
+            expect(result.url).toContain(
+              `client_id=${encodeURIComponent(MOCK_CLIENT_ID)}`,
+            );
+            expect(mockLogger.debug).toHaveBeenCalledWith(
+              'Authorization URL generated',
+              {
+                url: result.url,
+              },
+            );
+
+            buildSpy.mockRestore();
+          });
+
+          it('should not generate PKCE details if grantType is not AuthorizationCode', async () => {
+            auth = createAuthInstance(GrantType.ClientCredentials, {
+              pkce: true,
+            });
+
+            await expect(auth.getAuthorizationUrl()).rejects.toThrow(
+              ClientError,
+            );
+
+            expect(mockLogger.error).toHaveBeenCalledWith(
+              'Failed to generate authorization URL',
+              { error: expect.any(ClientError) },
+            );
+            expect(mockLogger.debug).not.toHaveBeenCalledWith(
+              'Authorization URL generated',
+              expect.anything(),
+            );
+          });
+
+          it('should throw ClientError if authorization_endpoint is missing', async () => {
+            mockIssuer.discover.mockResolvedValueOnce({
+              ...MOCK_CLIENT_METADATA,
+              authorization_endpoint: undefined,
+            } as ClientMetadata);
+
+            await expect(auth.getAuthorizationUrl()).rejects.toThrow(
+              ClientError,
+            );
+
+            expect(mockLogger.error).toHaveBeenCalledWith(
+              'Failed to generate authorization URL',
+              { error: expect.any(ClientError) },
+            );
+          });
+
+          // Removed duplicate test case for 'authorization_endpoint is missing'
+        });
+
+        describe('handleRedirect', () => {
+          let authInstance: IAuth;
+          let configInstance: IClientConfig;
+
+          beforeEach(() => {
+            configInstance = {
+              clientId: MOCK_CLIENT_ID,
+              redirectUri: MOCK_REDIRECT_URI,
+              scopes: [Scopes.OpenId, Scopes.Profile],
+              discoveryUrl: MOCK_DISCOVERY_URL,
+              grantType: GrantType.AuthorizationCode,
+              pkce: true,
+              pkceMethod: PkceMethod.S256,
+              postLogoutRedirectUri: MOCK_POST_LOGOUT_URI,
+            };
+            authInstance = new Auth(
+              configInstance,
+              mockLogger,
+              mockIssuer,
+              mockTokenClient,
+            );
+          });
+
+          it('should handle redirect successfully and validate ID token', async () => {
+            const code = 'auth-code';
+            const returnedState = 'valid-state';
+            const expectedNonce = 'generated-nonce';
+
+            // Mock state retrieval
+            (authInstance as Auth)['state'].addState(
+              returnedState,
+              expectedNonce,
+            );
+
+            // Mock token exchange
             const tokenResponse = {
               access_token: 'access-token',
               id_token: 'id-token',
               token_type: 'Bearer',
               expires_in: 3600,
             };
+            mockTokenClient.exchangeCodeForToken.mockResolvedValueOnce();
+            mockTokenClient.getTokens.mockReturnValueOnce(tokenResponse);
 
-            (global.fetch as jest.Mock).mockResolvedValueOnce(
-              new Response(JSON.stringify(tokenResponse), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' },
-              }),
+            // Mock issuer discovery
+            mockIssuer.discover.mockResolvedValueOnce(
+              MOCK_CLIENT_METADATA as ClientMetadata,
             );
 
-            const pollPromise = auth.pollDeviceToken(device_code, 5, 10000);
+            // Create JWT Payload
+            const jwtPayload = {
+              sub: '12345',
+              iss: 'https://example.com/',
+              aud: MOCK_CLIENT_ID,
+              nonce: expectedNonce,
+              exp: Math.floor(Date.now() / 1000) + 3600,
+            };
 
-            // Fast-forward until all timers have been executed
-            jest.runAllTimers();
+            // Mock JWT validation
+            jest
+              .spyOn(JwtValidator.prototype, 'validateIdToken')
+              .mockResolvedValueOnce(jwtPayload);
 
-            await pollPromise;
+            await authInstance.handleRedirect(code, returnedState);
 
-            expect(global.fetch).toHaveBeenCalledTimes(1);
-            expect(global.fetch).toHaveBeenCalledWith(tokenEndpoint!, {
-              method: 'POST',
-              body: expect.stringContaining(
-                `grant_type=${encodeURIComponent(GrantType.DeviceCode)}`,
-              ),
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            });
-            expect(mockTokenClient.setTokens).toHaveBeenCalledWith(
-              tokenResponse,
+            expect(mockTokenClient.exchangeCodeForToken).toHaveBeenCalledWith(
+              code,
+              // Accessing private method via type assertion
+              (authInstance as Auth).getCodeVerifier(),
+            );
+            expect(mockTokenClient.getTokens).toHaveBeenCalled();
+            expect(mockIssuer.discover).toHaveBeenCalled();
+            expect(JwtValidator.prototype.validateIdToken).toHaveBeenCalledWith(
+              'id-token',
+              expectedNonce,
             );
             expect(mockLogger.info).toHaveBeenCalledWith(
-              'Device authorized and tokens obtained',
+              'ID token validated successfully',
             );
-          });
-        });
-      });
-
-      describe('getLogoutUrl', () => {
-        it('should generate logout URL with idTokenHint and state', async () => {
-          const idTokenHint = 'id-token';
-          const state = 'logout-state';
-          const expectedLogoutUrl = buildLogoutUrl({
-            endSessionEndpoint: mockClientMetadata.end_session_endpoint!,
-            clientId: config.clientId,
-            postLogoutRedirectUri: config.postLogoutRedirectUri,
-            idTokenHint,
-            state,
+            // Verify code verifier is cleared
+            expect((authInstance as Auth).getCodeVerifier()).toBeNull();
           });
 
-          const result = await auth.getLogoutUrl(idTokenHint, state);
-          expect(mockIssuer.discover).toHaveBeenCalledTimes(1);
-          expect(result).toBe(expectedLogoutUrl);
-          expect(mockLogger.debug).toHaveBeenCalledWith(
-            'Logout URL generated',
-            {
-              logoutUrl: result,
-            },
-          );
-        });
+          it('should throw ClientError if state does not match', async () => {
+            const code = 'auth-code';
+            const returnedState = 'invalid-state';
 
-        it('should generate logout URL without idTokenHint and state', async () => {
-          const expectedLogoutUrl = buildLogoutUrl({
-            endSessionEndpoint: mockClientMetadata.end_session_endpoint!,
-            clientId: config.clientId,
-            postLogoutRedirectUri: config.postLogoutRedirectUri,
-            idTokenHint: undefined,
-            state: undefined,
+            await expect(
+              authInstance.handleRedirect(code, returnedState),
+            ).rejects.toThrow(ClientError);
+
+            expect(mockLogger.error).not.toHaveBeenCalled();
+            expect(mockTokenClient.exchangeCodeForToken).not.toHaveBeenCalled();
           });
 
-          const result = await auth.getLogoutUrl();
-          expect(result).toBe(expectedLogoutUrl);
-          expect(mockLogger.debug).toHaveBeenCalledWith(
-            'Logout URL generated',
-            {
-              logoutUrl: result,
-            },
-          );
-        });
+          it('should throw ClientError if token exchange fails', async () => {
+            const code = 'auth-code';
+            const returnedState = 'valid-state';
+            const expectedNonce = 'generated-nonce';
 
-        it('should throw ClientError if end_session_endpoint is missing', async () => {
-          mockIssuer.discover.mockResolvedValueOnce({
-            ...mockClientMetadata,
-            end_session_endpoint: undefined,
-          } as ClientMetadata);
-          await expect(auth.getLogoutUrl()).rejects.toThrow(ClientError);
-          expect(mockLogger.error).toHaveBeenCalledWith(
-            'Failed to generate logout URL',
-            { error: expect.any(ClientError) },
-          );
-        });
-      });
-
-      describe('getAuthorizationUrl', () => {
-        it('should generate an authorization URL with PKCE', async () => {
-          // Mock generateRandomString to return predictable values
-          const utils = require('../utils');
-          (utils.generateRandomString as jest.Mock)
-            .mockReturnValueOnce('state123')
-            .mockReturnValueOnce('nonce123');
-
-          // No need to mock generateAuthUrl; let it execute normally
-
-          const buildAuthorizationUrlSpy = jest
-            .spyOn(require('../utils'), 'buildAuthorizationUrl')
-            .mockReturnValue(
-              'https://example.com/oauth2/authorize?client_id=test-client-id',
+            (authInstance as Auth)['state'].addState(
+              returnedState,
+              expectedNonce,
+            );
+            const exchangeError = new ClientError('Exchange failed');
+            mockTokenClient.exchangeCodeForToken.mockRejectedValueOnce(
+              exchangeError,
             );
 
-          const result = await auth.getAuthorizationUrl();
+            await expect(
+              authInstance.handleRedirect(code, returnedState),
+            ).rejects.toThrow(ClientError);
 
-          expect(result.url).toEqual(
-            expect.stringContaining(
-              `client_id=${encodeURIComponent(config.clientId)}`,
-            ),
-          );
-          expect(mockLogger.debug).toHaveBeenCalledWith(
-            'Authorization URL generated',
-            {
-              url: result.url,
-            },
-          );
+            expect(mockLogger.error).toHaveBeenCalledWith(
+              'Failed to exchange authorization code for tokens',
+              { error: exchangeError },
+            );
+          });
 
-          // Restore the original implementation
-          buildAuthorizationUrlSpy.mockRestore();
-        });
+          it('should log a warning if no ID token is returned', async () => {
+            const code = 'auth-code';
+            const returnedState = 'valid-state';
+            const expectedNonce = 'generated-nonce';
 
-        it('should generate an authorization URL without PKCE', async () => {
-          // Modify config to disable PKCE
-          config.pkce = false;
-
-          // Mock generateRandomString to return predictable values
-          const utils = require('../utils');
-          (utils.generateRandomString as jest.Mock)
-            .mockReturnValueOnce('state123')
-            .mockReturnValueOnce('nonce123');
-
-          // No need to mock generateAuthUrl; let it execute normally
-
-          const buildAuthorizationUrlSpy = jest
-            .spyOn(require('../utils'), 'buildAuthorizationUrl')
-            .mockReturnValue(
-              'https://example.com/oauth2/authorize?client_id=test-client-id',
+            (authInstance as Auth)['state'].addState(
+              returnedState,
+              expectedNonce,
             );
 
-          const result = await auth.getAuthorizationUrl();
+            const tokenResponse = {
+              access_token: 'access-token',
+              token_type: 'Bearer',
+              expires_in: 3600,
+            };
+            mockTokenClient.exchangeCodeForToken.mockResolvedValueOnce();
+            mockTokenClient.getTokens.mockReturnValueOnce(tokenResponse);
 
-          expect(result.url).toEqual(
-            expect.stringContaining(
-              `client_id=${encodeURIComponent(config.clientId)}`,
-            ),
-          );
-          expect(mockLogger.debug).toHaveBeenCalledWith(
-            'Authorization URL generated',
-            {
-              url: result.url,
-            },
-          );
+            await authInstance.handleRedirect(code, returnedState);
 
-          // Restore the original implementation
-          buildAuthorizationUrlSpy.mockRestore();
-        });
+            expect(mockLogger.warn).toHaveBeenCalledWith(
+              'No ID token returned to validate',
+            );
+            expect((authInstance as Auth).getCodeVerifier()).toBeNull();
+          });
 
-        it('should not generate PKCE details if grantType is not AuthorizationCode', async () => {
-          config.pkce = true;
-          config.grantType = GrantType.ClientCredentials; // Unsupported for PKCE
+          it('should throw ClientError if ID token validation fails', async () => {
+            const code = 'auth-code';
+            const returnedState = 'valid-state';
+            const expectedNonce = 'generated-nonce';
 
-          await expect(auth.getAuthorizationUrl()).rejects.toThrow(ClientError);
-          expect(mockLogger.error).toHaveBeenCalledWith(
-            'Failed to generate authorization URL',
-            { error: expect.any(ClientError) },
-          );
-          expect(mockLogger.debug).not.toHaveBeenCalledWith(
-            'Authorization URL generated',
-            expect.anything(),
-          );
-        });
+            (authInstance as Auth)['state'].addState(
+              returnedState,
+              expectedNonce,
+            );
 
-        it('should throw ClientError if authorization_endpoint is missing', async () => {
-          mockIssuer.discover.mockResolvedValueOnce({
-            ...mockClientMetadata,
-            authorization_endpoint: undefined,
-          } as ClientMetadata);
-          await expect(auth.getAuthorizationUrl()).rejects.toThrow(ClientError);
-          expect(mockLogger.error).toHaveBeenCalledWith(
-            'Failed to generate authorization URL',
-            { error: expect.any(ClientError) },
-          );
-        });
-      });
+            const tokenResponse = {
+              access_token: 'access-token',
+              id_token: 'invalid-id-token',
+              token_type: 'Bearer',
+              expires_in: 3600,
+            };
+            mockTokenClient.exchangeCodeForToken.mockResolvedValueOnce();
+            mockTokenClient.getTokens.mockReturnValueOnce(tokenResponse);
 
-      describe('handleRedirect', () => {
-        let authInstance: IAuth;
-        let configInstance: IClientConfig;
+            mockIssuer.discover.mockResolvedValueOnce(
+              MOCK_CLIENT_METADATA as ClientMetadata,
+            );
+            jest
+              .spyOn(JwtValidator.prototype, 'validateIdToken')
+              .mockRejectedValueOnce(new Error('Invalid ID token'));
 
-        beforeEach(() => {
-          configInstance = {
-            clientId: 'test-client-id',
-            redirectUri: 'https://example.com/callback',
-            scopes: [Scopes.OpenId, Scopes.Profile],
-            discoveryUrl:
-              'https://example.com/.well-known/openid-configuration',
-            grantType: GrantType.AuthorizationCode,
-            pkce: true,
-            pkceMethod: PkceMethod.S256,
-            postLogoutRedirectUri: 'https://example.com/logout-callback',
-          };
-          authInstance = new Auth(
-            configInstance,
-            mockLogger,
-            mockIssuer,
-            mockTokenClient,
-          );
-        });
+            await expect(
+              authInstance.handleRedirect(code, returnedState),
+            ).rejects.toThrow();
 
-        it('should handle redirect successfully and validate ID token', async () => {
-          const code = 'auth-code';
-          const returnedState = 'valid-state';
-          const expectedNonce = 'generated-nonce';
-
-          // Mock state retrieval
-          (authInstance as Auth)['state'].addState(
-            returnedState,
-            expectedNonce,
-          );
-
-          // Mock token exchange
-          const tokenResponse = {
-            access_token: 'access-token',
-            id_token: 'id-token',
-            token_type: 'Bearer',
-            expires_in: 3600,
-          };
-          mockTokenClient.exchangeCodeForToken.mockResolvedValueOnce();
-          mockTokenClient.getTokens.mockReturnValueOnce(tokenResponse);
-
-          // Mock issuer discovery
-          mockIssuer.discover.mockResolvedValueOnce(
-            mockClientMetadata as ClientMetadata,
-          );
-
-          // create Jwt Payload
-          const jwtPayload = {
-            sub: '12345',
-            iss: 'https://example.com/',
-            aud: 'test-client-id',
-            nonce: expectedNonce,
-            exp: Math.floor(Date.now() / 1000) + 3600,
-          };
-
-          // Mock JWT validation
-          jest
-            .spyOn(JwtValidator.prototype, 'validateIdToken')
-            .mockResolvedValueOnce(jwtPayload);
-
-          await authInstance.handleRedirect(code, returnedState);
-
-          expect(mockTokenClient.exchangeCodeForToken).toHaveBeenCalledWith(
-            code,
-            // @ts-ignore // Private method
-            (authInstance as Auth).getCodeVerifier(),
-          );
-          expect(mockTokenClient.getTokens).toHaveBeenCalled();
-          expect(mockIssuer.discover).toHaveBeenCalled();
-          expect(JwtValidator.prototype.validateIdToken).toHaveBeenCalledWith(
-            'id-token',
-            expectedNonce,
-          );
-          expect(mockLogger.info).toHaveBeenCalledWith(
-            'ID token validated successfully',
-          );
-          // @ts-ignore // Private method
-          expect((authInstance as Auth).getCodeVerifier()).toBeNull();
-        });
-
-        it('should throw ClientError if state does not match', async () => {
-          const code = 'auth-code';
-          const returnedState = 'invalid-state';
-
-          await expect(
-            authInstance.handleRedirect(code, returnedState),
-          ).rejects.toThrow(ClientError);
-          expect(mockLogger.error).not.toHaveBeenCalled();
-          expect(mockTokenClient.exchangeCodeForToken).not.toHaveBeenCalled();
-        });
-
-        it('should throw ClientError if token exchange fails', async () => {
-          const code = 'auth-code';
-          const returnedState = 'valid-state';
-          const expectedNonce = 'generated-nonce';
-
-          (authInstance as Auth)['state'].addState(
-            returnedState,
-            expectedNonce,
-          );
-          const exchangeError = new ClientError('Exchange failed');
-          mockTokenClient.exchangeCodeForToken.mockRejectedValueOnce(
-            exchangeError,
-          );
-
-          await expect(
-            authInstance.handleRedirect(code, returnedState),
-          ).rejects.toThrow(ClientError);
-          expect(mockLogger.error).toHaveBeenCalledWith(
-            'Failed to exchange authorization code for tokens',
-            { error: exchangeError },
-          );
-        });
-
-        it('should log a warning if no ID token is returned', async () => {
-          const code = 'auth-code';
-          const returnedState = 'valid-state';
-          const expectedNonce = 'generated-nonce';
-
-          (authInstance as Auth)['state'].addState(
-            returnedState,
-            expectedNonce,
-          );
-
-          const tokenResponse = {
-            access_token: 'access-token',
-            token_type: 'Bearer',
-            expires_in: 3600,
-          };
-          mockTokenClient.exchangeCodeForToken.mockResolvedValueOnce();
-          mockTokenClient.getTokens.mockReturnValueOnce(tokenResponse);
-
-          await authInstance.handleRedirect(code, returnedState);
-
-          expect(mockLogger.warn).toHaveBeenCalledWith(
-            'No ID token returned to validate',
-          );
-          // @ts-ignore // Private method
-          expect((authInstance as Auth).getCodeVerifier()).toBeNull();
-        });
-
-        it('should throw ClientError if ID token validation fails', async () => {
-          const code = 'auth-code';
-          const returnedState = 'valid-state';
-          const expectedNonce = 'generated-nonce';
-
-          (authInstance as Auth)['state'].addState(
-            returnedState,
-            expectedNonce,
-          );
-
-          const tokenResponse = {
-            access_token: 'access-token',
-            id_token: 'invalid-id-token',
-            token_type: 'Bearer',
-            expires_in: 3600,
-          };
-          mockTokenClient.exchangeCodeForToken.mockResolvedValueOnce();
-          mockTokenClient.getTokens.mockReturnValueOnce(tokenResponse);
-
-          mockIssuer.discover.mockResolvedValueOnce(
-            mockClientMetadata as ClientMetadata,
-          );
-          jest
-            .spyOn(JwtValidator.prototype, 'validateIdToken')
-            .mockRejectedValueOnce(new Error('Invalid ID token'));
-
-          await expect(
-            authInstance.handleRedirect(code, returnedState),
-          ).rejects.toThrow();
-          expect(mockLogger.error).toHaveBeenCalledWith(
-            'Failed to validate ID token',
-            { error: expect.any(Error) },
-          );
+            expect(mockLogger.error).toHaveBeenCalledWith(
+              'Failed to validate ID token',
+              { error: expect.any(Error) },
+            );
+          });
         });
       });
     }
   });
 
-  describe('handleRedirectForImplicitFlow', () => {
+  describe('Implicit Flow', () => {
     beforeEach(() => {
-      config = {
-        clientId: 'test-client-id',
-        redirectUri: 'https://example.com/callback',
-        scopes: [Scopes.OpenId, Scopes.Profile],
-        discoveryUrl: 'https://example.com/.well-known/openid-configuration',
-        grantType: GrantType.Implicit,
-        pkce: false, // PKCE is typically not used with Implicit flow
-        postLogoutRedirectUri: 'https://example.com/logout-callback',
-      };
-      auth = new Auth(config, mockLogger, mockIssuer, mockTokenClient);
+      auth = createAuthInstance(GrantType.Implicit, { pkce: false });
     });
 
-    it('should handle redirect successfully with id_token', async () => {
-      const fragment =
-        '#access_token=access-token&id_token=id-token&state=valid-state&token_type=Bearer&expires_in=3600';
+    describe('handleRedirectForImplicitFlow', () => {
+      it('should handle redirect successfully with id_token', async () => {
+        const fragment =
+          '#access_token=access-token&id_token=id-token&state=valid-state&token_type=Bearer&expires_in=3600';
 
-      // Mock parseFragment to parse the fragment correctly
-      (parseFragment as jest.Mock).mockReturnValue({
-        access_token: 'access-token',
-        id_token: 'id-token',
-        state: 'valid-state',
-        token_type: 'Bearer',
-        expires_in: '3600',
-      });
-
-      // Mock state retrieval
-      (auth as Auth)['state'].addState('valid-state', 'expected-nonce');
-      jest
-        .spyOn((auth as Auth)['state'], 'getNonce')
-        .mockResolvedValue('expected-nonce');
-
-      // Mock issuer discovery
-      mockIssuer.discover.mockResolvedValueOnce(
-        mockClientMetadata as ClientMetadata,
-      );
-
-      // Spy on JwtValidator.prototype.validateIdToken
-      const validateIdTokenMock = jest
-        .spyOn(JwtValidator.prototype, 'validateIdToken')
-        .mockResolvedValueOnce({
-          sub: '12345',
-          iss: 'https://example.com/',
-          aud: 'test-client-id',
-          nonce: 'expected-nonce',
-          exp: Math.floor(Date.now() / 1000) + 3600,
+        // Mock parseFragment
+        (parseFragment as jest.Mock).mockReturnValue({
+          access_token: 'access-token',
+          id_token: 'id-token',
+          state: 'valid-state',
+          token_type: 'Bearer',
+          expires_in: '3600',
         });
 
-      // Call the method
-      await auth.handleRedirectForImplicitFlow(fragment);
+        // Mock state retrieval
+        (auth as Auth)['state'].addState('valid-state', 'expected-nonce');
+        jest
+          .spyOn((auth as Auth)['state'], 'getNonce')
+          .mockResolvedValue('expected-nonce');
 
-      // Assertions
-      expect(parseFragment).toHaveBeenCalledWith(fragment);
-      expect((auth as Auth)['state'].getNonce).toHaveBeenCalledWith(
-        'valid-state',
-      );
-      expect(mockIssuer.discover).toHaveBeenCalledTimes(1);
-      expect(validateIdTokenMock).toHaveBeenCalledWith(
-        'id-token',
-        'expected-nonce',
-      );
-      expect(mockTokenClient.setTokens).toHaveBeenCalledWith({
-        access_token: 'access-token',
-        id_token: 'id-token',
-        token_type: 'Bearer',
-        expires_in: 3600,
-      });
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        'ID token validated successfully',
-      );
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        'Tokens obtained and stored successfully',
-      );
-      expect((auth as Auth).getCodeVerifier()).toBeNull();
-    });
+        // Mock issuer discovery
+        mockIssuer.discover.mockResolvedValueOnce(
+          MOCK_CLIENT_METADATA as ClientMetadata,
+        );
 
-    it('should handle redirect successfully without id_token', async () => {
-      const fragment =
-        '#access_token=access-token&state=valid-state&token_type=Bearer&expires_in=3600';
+        // Mock JWT validation
+        jest
+          .spyOn(JwtValidator.prototype, 'validateIdToken')
+          .mockResolvedValueOnce({
+            sub: '12345',
+            iss: 'https://example.com/',
+            aud: MOCK_CLIENT_ID,
+            nonce: 'expected-nonce',
+            exp: Math.floor(Date.now() / 1000) + 3600,
+          });
 
-      // Mock parseFragment to parse the fragment correctly
-      (parseFragment as jest.Mock).mockReturnValue({
-        access_token: 'access-token',
-        state: 'valid-state',
-        token_type: 'Bearer',
-        expires_in: '3600',
-      });
+        // Mock token exchange
+        mockTokenClient.setTokens.mockImplementation();
 
-      // Mock state retrieval
-      (auth as Auth)['state'].addState('valid-state', 'expected-nonce');
-      jest
-        .spyOn((auth as Auth)['state'], 'getNonce')
-        .mockResolvedValue('expected-nonce');
+        await auth.handleRedirectForImplicitFlow(fragment);
 
-      // Mock token storage
-      mockTokenClient.setTokens.mockImplementation();
-
-      // Call the method
-      await auth.handleRedirectForImplicitFlow(fragment);
-
-      // Assertions
-      expect(parseFragment).toHaveBeenCalledWith(fragment);
-      expect((auth as Auth)['state'].getNonce).toHaveBeenCalledWith(
-        'valid-state',
-      );
-      expect(mockIssuer.discover).not.toHaveBeenCalled(); // No id_token, so no discovery
-      expect(JwtValidator.prototype.validateIdToken).not.toHaveBeenCalled();
-      expect(mockTokenClient.setTokens).toHaveBeenCalledWith({
-        access_token: 'access-token',
-        id_token: undefined,
-        token_type: 'Bearer',
-        expires_in: 3600,
-      });
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        'No ID token returned to validate',
-      );
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        'Tokens obtained and stored successfully',
-      );
-      expect((auth as Auth).getCodeVerifier()).toBeNull();
-    });
-
-    it('should throw ClientError if fragment contains an error', async () => {
-      const fragment =
-        '#error=access_denied&error_description=User denied access';
-
-      // Mock parseFragment to parse the fragment correctly
-      (parseFragment as jest.Mock).mockReturnValue({
-        error: 'access_denied',
-        error_description: 'User denied access',
+        expect(parseFragment).toHaveBeenCalledWith(fragment);
+        expect((auth as Auth)['state'].getNonce).toHaveBeenCalledWith(
+          'valid-state',
+        );
+        expect(mockIssuer.discover).toHaveBeenCalledTimes(1);
+        expect(JwtValidator.prototype.validateIdToken).toHaveBeenCalledWith(
+          'id-token',
+          'expected-nonce',
+        );
+        expect(mockTokenClient.setTokens).toHaveBeenCalledWith({
+          access_token: 'access-token',
+          id_token: 'id-token',
+          token_type: 'Bearer',
+          expires_in: 3600,
+        });
+        expect(mockLogger.info).toHaveBeenCalledWith(
+          'ID token validated successfully',
+        );
+        expect(mockLogger.info).toHaveBeenCalledWith(
+          'Tokens obtained and stored successfully',
+        );
+        expect((auth as Auth).getCodeVerifier()).toBeNull();
       });
 
-      // Call the method and expect an error
-      await expect(
-        auth.handleRedirectForImplicitFlow(fragment),
-      ).rejects.toThrow(ClientError);
+      it('should handle redirect successfully without id_token', async () => {
+        const fragment =
+          '#access_token=access-token&state=valid-state&token_type=Bearer&expires_in=3600';
 
-      // Assertions
-      expect(parseFragment).toHaveBeenCalledWith(fragment);
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        'Error in implicit flow redirect',
-        {
+        // Mock parseFragment
+        (parseFragment as jest.Mock).mockReturnValue({
+          access_token: 'access-token',
+          state: 'valid-state',
+          token_type: 'Bearer',
+          expires_in: '3600',
+        });
+
+        // Mock state retrieval
+        (auth as Auth)['state'].addState('valid-state', 'expected-nonce');
+        jest
+          .spyOn((auth as Auth)['state'], 'getNonce')
+          .mockResolvedValue('expected-nonce');
+
+        // Mock token storage
+        mockTokenClient.setTokens.mockImplementation();
+
+        await auth.handleRedirectForImplicitFlow(fragment);
+
+        expect(parseFragment).toHaveBeenCalledWith(fragment);
+        expect((auth as Auth)['state'].getNonce).toHaveBeenCalledWith(
+          'valid-state',
+        );
+        expect(mockIssuer.discover).not.toHaveBeenCalled();
+        expect(JwtValidator.prototype.validateIdToken).not.toHaveBeenCalled();
+        expect(mockTokenClient.setTokens).toHaveBeenCalledWith({
+          access_token: 'access-token',
+          id_token: undefined,
+          token_type: 'Bearer',
+          expires_in: 3600,
+        });
+        expect(mockLogger.warn).toHaveBeenCalledWith(
+          'No ID token returned to validate',
+        );
+        expect(mockLogger.info).toHaveBeenCalledWith(
+          'Tokens obtained and stored successfully',
+        );
+        expect((auth as Auth).getCodeVerifier()).toBeNull();
+      });
+
+      it('should throw ClientError if fragment contains an error', async () => {
+        const fragment =
+          '#error=access_denied&error_description=User denied access';
+
+        // Mock parseFragment
+        (parseFragment as jest.Mock).mockReturnValue({
           error: 'access_denied',
           error_description: 'User denied access',
+        });
+
+        await expect(
+          auth.handleRedirectForImplicitFlow(fragment),
+        ).rejects.toThrow(ClientError);
+
+        expect(parseFragment).toHaveBeenCalledWith(fragment);
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          'Error in implicit flow redirect',
+          {
+            error: 'access_denied',
+            error_description: 'User denied access',
+          },
+        );
+      });
+
+      it('should throw ClientError if access_token is missing', async () => {
+        const fragment =
+          '#id_token=id-token&state=valid-state&token_type=Bearer&expires_in=3600';
+
+        // Mock parseFragment
+        (parseFragment as jest.Mock).mockReturnValue({
+          id_token: 'id-token',
+          state: 'valid-state',
+          token_type: 'Bearer',
+          expires_in: '3600',
+        });
+
+        await expect(
+          auth.handleRedirectForImplicitFlow(fragment),
+        ).rejects.toThrow(ClientError);
+
+        expect(parseFragment).toHaveBeenCalledWith(fragment);
+        expect(mockLogger.error).not.toHaveBeenCalled();
+      });
+
+      it('should throw ClientError if state is missing', async () => {
+        const fragment =
+          '#access_token=access-token&id_token=id-token&token_type=Bearer&expires_in=3600';
+
+        // Mock parseFragment
+        (parseFragment as jest.Mock).mockReturnValue({
+          access_token: 'access-token',
+          id_token: 'id-token',
+          token_type: 'Bearer',
+          expires_in: '3600',
+        });
+
+        await expect(
+          auth.handleRedirectForImplicitFlow(fragment),
+        ).rejects.toThrow(ClientError);
+
+        expect(parseFragment).toHaveBeenCalledWith(fragment);
+        expect(mockLogger.error).not.toHaveBeenCalled();
+      });
+
+      it('should throw ClientError if state does not match any stored state', async () => {
+        const fragment =
+          '#access_token=access-token&id_token=id-token&state=invalid-state&token_type=Bearer&expires_in=3600';
+
+        // Mock parseFragment
+        (parseFragment as jest.Mock).mockReturnValue({
+          access_token: 'access-token',
+          id_token: 'id-token',
+          state: 'invalid-state',
+          token_type: 'Bearer',
+          expires_in: '3600',
+        });
+
+        // Mock state retrieval to return null
+        jest.spyOn((auth as Auth)['state'], 'getNonce').mockResolvedValue(null);
+
+        await expect(
+          auth.handleRedirectForImplicitFlow(fragment),
+        ).rejects.toThrow(ClientError);
+
+        expect(parseFragment).toHaveBeenCalledWith(fragment);
+        expect((auth as Auth)['state'].getNonce).toHaveBeenCalledWith(
+          'invalid-state',
+        );
+        expect(mockLogger.error).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('PKCE generation', () => {
+    let authWithPkce: Auth;
+    let pkceServiceMock: jest.Mocked<IPkce>;
+
+    beforeEach(() => {
+      pkceServiceMock = {
+        generatePkce: jest.fn(),
+      };
+
+      // IMPORTANT: We have to re-inject the mock return value for generateRandomString:
+      (generateRandomString as jest.Mock).mockReturnValue('test-random-string');
+
+      authWithPkce = new Auth(
+        {
+          clientId: MOCK_CLIENT_ID,
+          redirectUri: MOCK_REDIRECT_URI,
+          scopes: [Scopes.OpenId, Scopes.Profile],
+          discoveryUrl: MOCK_DISCOVERY_URL,
+          grantType: GrantType.AuthorizationCode,
+          pkce: true,
+          pkceMethod: PkceMethod.S256,
+          postLogoutRedirectUri: MOCK_POST_LOGOUT_URI,
         },
+        mockLogger,
+        mockIssuer,
+        mockTokenClient,
+        pkceServiceMock, // so we can control generatePkce
       );
     });
 
-    it('should throw ClientError if access_token is missing', async () => {
-      const fragment =
-        '#id_token=id-token&state=valid-state&token_type=Bearer&expires_in=3600';
-
-      // Mock parseFragment to parse the fragment correctly
-      (parseFragment as jest.Mock).mockReturnValue({
-        id_token: 'id-token',
-        state: 'valid-state',
-        token_type: 'Bearer',
-        expires_in: '3600',
+    it('should generate PKCE successfully with valid pkceMethod', async () => {
+      // 1) Mock PKCE generation to return codeVerifier & codeChallenge
+      pkceServiceMock.generatePkce.mockReturnValue({
+        codeVerifier: 'test_verifier',
+        codeChallenge: 'test_challenge',
       });
 
-      // Call the method and expect an error
-      await expect(
-        auth.handleRedirectForImplicitFlow(fragment),
-      ).rejects.toThrow(ClientError);
+      // 2) Also mock discover call so we have a valid authorization_endpoint
+      mockIssuer.discover.mockResolvedValue({
+        ...MOCK_CLIENT_METADATA,
+        authorization_endpoint: 'https://example.com/oauth2/authorize',
+      } as ClientMetadata);
 
-      // Assertions
-      expect(parseFragment).toHaveBeenCalledWith(fragment);
-      expect(mockLogger.error).not.toHaveBeenCalled(); // Error due to missing access_token is thrown before logging
+      // 3) Call the method that triggers PKCE generation (getAuthorizationUrl)
+      const { url, state } = await authWithPkce.getAuthorizationUrl();
+
+      // 4) Assertions
+      expect(state).toBeDefined();
+      expect(url).toContain('test_challenge'); // optional: depends on your buildAuthorizationUrl logic
+      expect(mockLogger.warn).not.toHaveBeenCalled(); // We expect no warning since pkceMethod is valid
+
+      // Check that the codeVerifier was set internally
+      expect(authWithPkce.getCodeVerifier()).toBe('test_verifier');
     });
 
-    it('should throw ClientError if state is missing', async () => {
-      const fragment =
-        '#access_token=access-token&id_token=id-token&token_type=Bearer&expires_in=3600';
-
-      // Mock parseFragment to parse the fragment correctly
-      (parseFragment as jest.Mock).mockReturnValue({
-        access_token: 'access-token',
-        id_token: 'id-token',
-        token_type: 'Bearer',
-        expires_in: '3600',
-      });
-
-      // Call the method and expect an error
-      await expect(
-        auth.handleRedirectForImplicitFlow(fragment),
-      ).rejects.toThrow(ClientError);
-
-      // Assertions
-      expect(parseFragment).toHaveBeenCalledWith(fragment);
-      expect(mockLogger.error).not.toHaveBeenCalled(); // Error due to missing state is thrown before logging
-    });
-
-    it('should throw ClientError if state does not match any stored state', async () => {
-      const fragment =
-        '#access_token=access-token&id_token=id-token&state=invalid-state&token_type=Bearer&expires_in=3600';
-
-      // Mock parseFragment to parse the fragment correctly
-      (parseFragment as jest.Mock).mockReturnValue({
-        access_token: 'access-token',
-        id_token: 'id-token',
-        state: 'invalid-state',
-        token_type: 'Bearer',
-        expires_in: '3600',
-      });
-
-      // Mock state retrieval to return null for the invalid state
-      jest.spyOn((auth as Auth)['state'], 'getNonce').mockResolvedValue(null);
-
-      // Call the method and expect an error
-      await expect(
-        auth.handleRedirectForImplicitFlow(fragment),
-      ).rejects.toThrow(ClientError);
-
-      // Assertions
-      expect(parseFragment).toHaveBeenCalledWith(fragment);
-      expect((auth as Auth)['state'].getNonce).toHaveBeenCalledWith(
-        'invalid-state',
+    it('should log a warning and omit code_challenge_method if pkceMethod is invalid', async () => {
+      // Re-instantiate Auth with an invalid pkceMethod
+      authWithPkce = new Auth(
+        {
+          clientId: MOCK_CLIENT_ID,
+          redirectUri: MOCK_REDIRECT_URI,
+          scopes: [Scopes.OpenId, Scopes.Profile],
+          discoveryUrl: MOCK_DISCOVERY_URL,
+          grantType: GrantType.AuthorizationCode,
+          pkce: true,
+          pkceMethod: 'INVALID_METHOD' as PkceMethod, // cast to bypass TS check
+          postLogoutRedirectUri: MOCK_POST_LOGOUT_URI,
+        },
+        mockLogger,
+        mockIssuer,
+        mockTokenClient,
+        pkceServiceMock,
       );
-      expect(mockLogger.error).not.toHaveBeenCalled(); // Error due to state mismatch is thrown before logging
+
+      // Mock PKCE generation success
+      pkceServiceMock.generatePkce.mockReturnValue({
+        codeVerifier: 'test_verifier',
+        codeChallenge: 'test_challenge',
+      });
+      mockIssuer.discover.mockResolvedValue({
+        ...MOCK_CLIENT_METADATA,
+        authorization_endpoint: 'https://example.com/oauth2/authorize',
+      } as ClientMetadata);
+
+      await authWithPkce.getAuthorizationUrl();
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Invalid pkceMethod provided. Omitting code_challenge_method.',
+      );
+    });
+
+    it('should throw ClientError if pkceService.generatePkce() fails', async () => {
+      // 1) Simulate generatePkce throwing an error
+      const pkceError = new Error('PKCE generation failed');
+      pkceServiceMock.generatePkce.mockImplementation(() => {
+        throw pkceError;
+      });
+
+      // 2) Mock discover call for completeness
+      mockIssuer.discover.mockResolvedValue({
+        ...MOCK_CLIENT_METADATA,
+        authorization_endpoint: 'https://example.com/oauth2/authorize',
+      } as ClientMetadata);
+
+      // 3) We expect an error from getAuthorizationUrl
+      await expect(authWithPkce.getAuthorizationUrl()).rejects.toThrow(
+        ClientError,
+      );
+
+      // 4) Verify the error logging
+      expect(mockLogger.error).toHaveBeenCalledWith('Failed to generate PKCE', {
+        error: pkceError,
+      });
     });
   });
 });
