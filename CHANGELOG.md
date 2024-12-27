@@ -1,3 +1,9 @@
+## [0.0.8](https://github.com/SailfinIO/oidc/compare/v0.0.7...v0.0.8) (2024-12-27)
+
+### Bug Fixes
+
+* code smells ([babdee5](https://github.com/SailfinIO/oidc/commit/babdee5ca0c385e58f36e981599334bd63762fd5))
+
 ## [0.0.8-beta.1](https://github.com/SailfinIO/oidc/compare/v0.0.7...v0.0.8-beta.1) (2024-12-27)
 
 ### Bug Fixes
