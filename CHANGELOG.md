@@ -1,3 +1,4 @@
+
 ## [0.0.7-beta.2](https://github.com/SailfinIO/oidc/compare/v0.0.7-beta.1...v0.0.7-beta.2) (2024-12-27)
 
 ### Bug Fixes
