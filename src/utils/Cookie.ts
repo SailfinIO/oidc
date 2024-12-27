@@ -24,8 +24,9 @@ import { CookieError } from '../errors/CookieError';
  * Represents a collection of parsed cookies.
  *
  * The `ParsedCookies` interface defines a mapping from cookie names to their values.
+ *
  */
-interface ParsedCookies {
+export interface ParsedCookies {
   [name: string]: string;
 }
 

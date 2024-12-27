@@ -115,7 +115,6 @@ export interface JwtPayload {
    * The issuer (`iss`) claim identifies the principal that issued the JWT.
    *
    * @type {string}
-   * @required
    * @example "https://auth.example.com/"
    */
   iss: string;
@@ -124,7 +123,6 @@ export interface JwtPayload {
    * The subject (`sub`) claim identifies the principal that is the subject of the JWT.
    *
    * @type {string}
-   * @required
    * @example "user123"
    */
   sub: string;
@@ -134,7 +132,6 @@ export interface JwtPayload {
    * It can be a single string or an array of strings.
    *
    * @type {string | string[]}
-   * @required
    * @example "client-app"
    */
   aud: string | string[];
@@ -144,7 +141,6 @@ export interface JwtPayload {
    * must not be accepted for processing.
    *
    * @type {number}
-   * @required
    * @example 1618884473
    */
   exp: number;
@@ -154,7 +150,6 @@ export interface JwtPayload {
    * for processing.
    *
    * @type {number}
-   * @optional
    * @example 1618880873
    */
   nbf?: number;
@@ -163,7 +158,6 @@ export interface JwtPayload {
    * The issued at (`iat`) claim identifies the time at which the JWT was issued.
    *
    * @type {number}
-   * @optional
    * @example 1618880873
    */
   iat?: number;
@@ -173,7 +167,6 @@ export interface JwtPayload {
    * This can be used to prevent the JWT from being replayed.
    *
    * @type {string}
-   * @optional
    * @example "unique-jwt-id-456"
    */
   jti?: string;
@@ -183,7 +176,6 @@ export interface JwtPayload {
    * This is typically used when there are multiple audiences.
    *
    * @type {string}
-   * @optional
    * @example "client-app"
    */
   azp?: string;
@@ -193,7 +185,6 @@ export interface JwtPayload {
    * and to mitigate replay attacks.
    *
    * @type {string}
-   * @optional
    * @example "randomNonceValue123"
    */
   nonce?: string;
@@ -203,7 +194,7 @@ export interface JwtPayload {
    * This allows for extensibility and the inclusion of application-specific data.
    *
    * @type {Record<string, any>}
-   * @optional
+   * @example { role: 'admin', permissions: ['read', 'write'] }
    */
   [key: string]: any;
 }
@@ -222,7 +213,7 @@ export interface Jwt {
    * The decoded header of the JWT.
    *
    * @type {JwtHeader}
-   * @required
+   * @example { alg: 'RS256', typ: 'JWT' }
    */
   header: JwtHeader;
 
@@ -230,7 +221,7 @@ export interface Jwt {
    * The decoded payload of the JWT.
    *
    * @type {JwtPayload}
-   * @required
+   * @example { iss: 'https://auth.example.com/', sub: 'user123', aud
    */
   payload: JwtPayload;
 
@@ -238,7 +229,7 @@ export interface Jwt {
    * The signature part of the JWT, encoded as a Base64URL string.
    *
    * @type {string}
-   * @required
+
    * @example "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
    */
   signature: string;
@@ -258,7 +249,6 @@ export interface JwtSegments {
    * The encoded header segment of the JWT.
    *
    * @type {string}
-   * @required
    * @example "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9"
    */
   header: string;
@@ -267,7 +257,6 @@ export interface JwtSegments {
    * The encoded payload segment of the JWT.
    *
    * @type {string}
-   * @required
    * @example "eyJpc3MiOiJodHRwczovL2F1dGguZXhhbXBsZS5jb20vIiwic3ViIjoidXNlcjEyMyIsImF1ZCI6ImNsaWVudC1hcHAiLCJleHAiOjE2MTg4ODQ0NzMsImlhdCI6MTYxODg4MDg3M30"
    */
   payload: string;
@@ -276,7 +265,6 @@ export interface JwtSegments {
    * The encoded signature segment of the JWT.
    *
    * @type {string}
-   * @required
    * @example "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
    */
   signature: string;
@@ -295,7 +283,7 @@ export interface DecodedJwt {
    * The header part of the JWT, containing metadata about the token.
    *
    * @type {JwtHeader}
-   * @required
+   * @example { alg: 'RS256', typ: 'JWT' }
    */
   header: JwtHeader;
 
@@ -303,7 +291,7 @@ export interface DecodedJwt {
    * The payload part of the JWT, containing the claims or assertions.
    *
    * @type {JwtPayload}
-   * @required
+   * @example { iss: 'https://auth.example.com/', sub: 'user123', aud
    */
   payload: JwtPayload;
 }

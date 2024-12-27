@@ -13,7 +13,6 @@ export * from './ITokenIntrospectionResponse';
 export * from './Jwk';
 export * from './Jwt';
 export * from './ICache';
-export * from './MakeRequestOptions';
 export * from './IIssuer';
 export * from './IToken';
 export * from './IUserInfo';

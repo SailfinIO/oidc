@@ -45,9 +45,7 @@ export class Logger implements ILogger {
   /**
    * Sets the log level for the logger, defining the minimum severity of messages to log.
    * @param level - The log level to apply (e.g., LogLevel.ERROR, LogLevel.DEBUG).
-   * @remarks Log levels are hierarchical, with DEBUG being the most verbose and ERROR the least.
-   * @remarks Messages at or above the specified level will be logged.
-   * @remarks The default log level is INFO.
+   * @remarks Log levels are hierarchical, with DEBUG being the most verbose and ERROR the least. Messages at or above the specified level will be logged. The default log level is INFO.
    * @returns {void}
    * @example
    * logger.setLogLevel(LogLevel.DEBUG);
