@@ -1,3 +1,9 @@
+## [0.0.9-beta.1](https://github.com/SailfinIO/oidc/compare/v0.0.8...v0.0.9-beta.1) (2024-12-27)
+
+### Bug Fixes
+
+* acr and uilocales support ([a24c4ff](https://github.com/SailfinIO/oidc/commit/a24c4ff846a6ffad7acacaa186a64580768bc481))
+* testing auth ([947a9aa](https://github.com/SailfinIO/oidc/commit/947a9aa495d3ccba9ed5f144a60e48c950f72578))
 
 ## [0.0.8-beta.2](https://github.com/SailfinIO/oidc/compare/v0.0.8-beta.1...v0.0.8-beta.2) (2024-12-27)
 
