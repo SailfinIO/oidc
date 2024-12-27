@@ -9,7 +9,7 @@ export * from './LoginPrompt';
 export * from './ResponseType';
 export * from './PkceMethod';
 export * from './ResponseMode';
-export * from './Storage';
+export * from './StorageMechanism';
 export * from './Scopes';
 export * from './Display';
 export * from './UILocales';

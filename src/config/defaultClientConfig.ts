@@ -6,7 +6,7 @@ import {
   ResponseType,
   PkceMethod,
   ResponseMode,
-  Storage,
+  StorageMechanism,
   Display,
   LoginPrompt,
   UILocales,
@@ -33,23 +33,23 @@ export const defaultClientConfig: Partial<IClientConfig> = {
   retryAttempts: 3, // Retry 3 times for failed requests
 
   session: {
+    mechanism: StorageMechanism.MEMORY, // Default to in-memory session storage
     useSilentRenew: true, // Enable silent token renewal
     store: undefined, // Default to no custom store
+    ttl: 3600000, // 1 hour in ms
     cookie: {
       name: 'sid', // Default session ID cookie name
       secret: 'default-secret', // Replace with a secure secret in production
-      secure: true, // Send cookie over HTTPS only
-      httpOnly: true, // Prevent JavaScript access
-      sameSite: SameSite.STRICT, // CSRF protection
-      path: '/', // Default path for the cookie
-      maxAge: 3600000, // Cookie expiration (1 hour)
-      domain: undefined, // Domain not set by default
+      options: {
+        secure: true, // Send cookie over HTTPS only
+        httpOnly: true, // Prevent JavaScript access
+        sameSite: SameSite.STRICT, // CSRF protection
+        path: '/', // Default path for the cookie
+        maxAge: 3600, // Cookie expiration (1 hour) in seconds
+        domain: undefined, // Domain not set by default
+        encode: encodeURIComponent, // Default encode function
+      },
     },
-  },
-
-  storage: {
-    mechanism: Storage.MEMORY, // Default to in-memory storage
-    options: {}, // No additional options by default
   },
 
   logging: {

@@ -16,7 +16,7 @@
 
 This library is built for enterprise-grade TypeScript and Node.js applications, adhering to modern TypeScript practices. It supports multiple grant types, token validation, user information retrieval, and more.
 
-**This package it under active development and is not yet ready for production use. Please use with caution and report any issues or bugs you encounter.**
+**Status:** This package it under active development and is not yet ready for production use. Please use with caution and report any issues or bugs you encounter.
 
 ## Table of Contents
 
@@ -25,9 +25,12 @@ This library is built for enterprise-grade TypeScript and Node.js applications, 
 - [Installation](#installation)
 - [Usage](#usage)
   - [Basic Setup](#basic-setup)
+  - [Session Management](#session-management)
+    - [Custom Session Store](#custom-session-store)
   - [Token Management](#token-management)
   - [Device Authorization Flow](#device-authorization-flow)
   - [Token Introspection and Revocation](#token-introspection-and-revocation)
+  - [Logout](#logout)
   - [Logging](#logging)
 - [Configuration Options](#configuration-options)
 - [API Reference](#api-reference)
@@ -78,102 +81,161 @@ import {
   Client,
   Scopes,
   GrantType,
-  SameSite,
-  Storage,
+  StorageMechanism,
   LogLevel,
+  SameSite,
 } from '@sailfin/oidc';
 
+// Create a new OIDC Client instance
 const oidcClient = new Client({
   clientId: 'your-client-id',
   clientSecret: 'your-client-secret',
-  redirectUri: 'https://your-app/callback',
+  redirectUri: 'https://your-app.com/callback',
   discoveryUrl: 'https://issuer.com/.well-known/openid-configuration',
   scopes: [Scopes.OpenId, Scopes.Profile, Scopes.Email],
   grantType: GrantType.AuthorizationCode,
-  logging: {
-    logLevel: LogLevel.INFO,
-  },
+  // Optional session config
   session: {
+    mechanism: StorageMechanism.MEMORY, // or COOKIE, or custom store
+    useSilentRenew: false,
+    // Only needed if using cookie-based sessions
     cookie: {
-      name: 'oidc:login.example.com',
-      secure: true,
-      httpOnly: true,
-      sameSite: SameSite.STRICT,
-      maxAge: 3600,
+      name: 'my_session',
+      options: {
+        secure: true,
+        httpOnly: true,
+        sameSite: SameSite.STRICT,
+        path: '/',
+        maxAge: 3600,
+      },
     },
-    useSilentRenew: true,
   },
-  storage: {
-    mechanism: Storage.MEMORY,
-    options: {
-      storage: { ttl: 3600 },
-    },
+  logging: {
+    logLevel: LogLevel.INFO, // or DEBUG, WARN, ERROR
   },
 });
 
 (async () => {
-  // Initialize the client
-  await oidcClient.getAuthorizationUrl();
-
-  // Generate the authorization URL
+  // 1) Generate the Authorization URL
   const { url, state } = await oidcClient.getAuthorizationUrl();
-  console.log(`Visit this URL to authenticate: ${url}`);
+  console.log('Visit this URL to authenticate:', url);
 
-  // Handle the redirect with the authorization code
-  await oidcClient.handleRedirect('auth-code', state, {
+  // 2) When the user returns from the authorization server with a code,
+  //    call handleRedirect with the code and state.
+  //
+  //    This context object (IStoreContext) must include request & response
+  //    objects so the session can be started/stored.
+  //
+  //    For example, in an Express-based app, you might do:
+  //    const context = { request: req, response: res };
+
+  await oidcClient.handleRedirect('the-auth-code', state, {
     request: mockRequest,
     response: mockResponse,
   });
 
-  // Fetch user info
+  // 3) Retrieve user info
   const userInfo = await oidcClient.getUserInfo();
   console.log('User Info:', userInfo);
+
+  // 4) You can now retrieve tokens on subsequent requests, introspect, etc.
+  const accessToken = await oidcClient.getAccessToken();
+  console.log('Access Token:', accessToken);
 })();
 ```
+
+### Session Management
+
+By default, the client uses an in-memory session store (StorageMechanism.MEMORY). For cookie-based session management—useful when running in stateless environments—you can set:
+
+```typescript
+session: {
+  mechanism: StorageMechanism.COOKIE,
+  cookie: {
+    name: 'oidcSession',
+    options: {
+      secure: true,
+      httpOnly: true,
+      sameSite: SameSite.STRICT,
+      path: '/',
+      maxAge: 3600,
+    },
+  },
+},
+```
+
+Your request and response objects must be passed to the relevant methods (such as _handleRedirect_) so the session can be created, updated, or destroyed.
+
+#### Custom Session Store
+
+You may also implement your own session store by conforming to the ISessionStore interface and injecting it via the session.store property.
 
 ### Token Management
 
 Retrieve, introspect, or revoke tokens with ease:
 
 ```typescript
-// Get the access token
+// Get the current Access Token (refreshes automatically if needed)
 const accessToken = await oidcClient.getAccessToken();
 console.log('Access Token:', accessToken);
 
-// Introspect a token
-const tokenInfo = await oidcClient.introspectToken(accessToken);
-console.log('Token Introspection:', tokenInfo);
-
-// Revoke a refresh token
-await oidcClient.revokeToken('refresh-token', 'refresh_token');
-console.log('Refresh token revoked.');
+// Clear stored tokens
+await oidcClient.clearTokens({ request, response });
+console.log('Tokens cleared.');
 ```
 
 ### Device Authorization Flow
 
-Supports device code authentication:
+Suitable for devices or environments with limited input capabilities:
 
 ```typescript
+// Step 1: Start device authorization
 const { device_code, user_code, verification_uri } =
   await oidcClient.startDeviceAuthorization();
 
-console.log(`Visit ${verification_uri} and enter the code: ${user_code}`);
+console.log(`Please go to ${verification_uri} and enter the code ${user_code}`);
 
-// Poll for tokens
-await oidcClient.pollDeviceToken(device_code);
-console.log('Device successfully authorized.');
+// Step 2: Poll for device token
+// Provide an optional context if you need to start a session upon success
+await oidcClient.pollDeviceToken(
+  device_code,
+  /* interval */ 5,
+  /* timeout */ 60000,
+  {
+    request: mockRequest,
+    response: mockResponse,
+  },
+);
+
+console.log('Device successfully authorized!');
+
+// Now you can fetch tokens or user info
+const tokens = await oidcClient.getTokens();
+console.log('Tokens:', tokens);
 ```
 
 ### Token Introspection and Revocation
 
 ```typescript
 // Introspect a token
-const introspection = await oidcClient.introspectToken('your-token');
-console.log('Token introspection:', introspection);
+const introspection = await oidcClient.introspectToken('some-access-token');
+console.log('Token introspection result:', introspection);
 
-// Revoke a token
-await oidcClient.revokeToken('your-refresh-token', 'refresh_token');
+// Revoke a token (access or refresh)
+await oidcClient.revokeToken('some-refresh-token', 'refresh_token');
 console.log('Token revoked.');
+```
+
+### Logout
+
+To initiate the OIDC logout flow (often used to sign the user out of the identity provider session):
+
+```typescript
+const logoutUrl = await oidcClient.logout(/* optional idTokenHint */);
+console.log('Logout URL:', logoutUrl);
+
+// Typically, you would redirect the user to this URL:
+res.redirect(logoutUrl);
 ```
 
 ### Logging
@@ -228,8 +290,11 @@ enum LogLevel {
 ### Methods
 
 - `getAuthorizationUrl()` - Generates an authorization URL for user login.
-- `handleRedirect(code, state)` - Processes the authorization code callback.
-- `handleRedirectForImplicitFlow(fragment)` - Processes the implicit flow callback.
+- `handleRedirect(code, state, context)` - Processes the callback from the authorization server.
+  - `code` - Authorization code from the callback.
+  - `state` - State value from the callback.
+  - `context` - An object containing your request and response (for session handling).
+- `handleRedirectForImplicitFlow(fragment, context)` - Processes the implicit flow callback.
 - `getUserInfo()` - Fetches user info from the userinfo endpoint.
 - `getAccessToken()` - Retrieves the current access token, refreshing it if necessary.
 - `clearTokens()` - Clears all stored tokens.
@@ -238,6 +303,7 @@ enum LogLevel {
 - `introspectToken(token)` - Introspects a token.
 - `revokeToken(token, tokenTypeHint)` - Revokes a token.
 - `setLogLevel(level)` - Sets the log level.
+- `logout(idTokenHint?)` - Initiates the OIDC logout flow.
 
 ## Error Handling
 

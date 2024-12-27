@@ -6,7 +6,7 @@ import { UserInfo } from './UserInfo';
 import { Logger } from '../utils';
 import { Token } from './Token';
 import { ClientError } from '../errors';
-import { GrantType, LogLevel, Scopes, TokenTypeHint, Storage } from '../enums';
+import { LogLevel, TokenTypeHint, StorageMechanism, GrantType } from '../enums';
 import { Issuer } from './Issuer';
 import { IStoreContext, IStore, ISessionStore } from '../interfaces';
 import { Store } from './Store';
@@ -161,7 +161,7 @@ const mockLoggerInstance = {
 // Configure the mocked Logger class to return the mockLoggerInstance
 (Logger as jest.Mock).mockImplementation(() => mockLoggerInstance);
 
-// Define a mock context to be used in tests with 'cookie' property
+// Define a mock context to be used in tests
 const mockContext: IStoreContext = {
   request: {
     headers: {
@@ -192,7 +192,7 @@ describe('Client', () => {
       },
     },
     storage: {
-      mechanism: Storage.MEMORY,
+      mechanism: StorageMechanism.MEMORY,
     },
     logging: {
       logLevel: LogLevel.INFO,
@@ -242,7 +242,7 @@ describe('Client', () => {
       };
 
       expect(() => new Client(configWithoutClientId as any)).toThrow(
-        new ClientError('clientId is required', 'CONFIG_ERROR'),
+        new ClientError('Missing required field(s): clientId', 'CONFIG_ERROR'),
       );
     });
 
@@ -254,7 +254,10 @@ describe('Client', () => {
       };
 
       expect(() => new Client(configWithoutRedirectUri as any)).toThrow(
-        new ClientError('redirectUri is required', 'CONFIG_ERROR'),
+        new ClientError(
+          'Missing required field(s): redirectUri',
+          'CONFIG_ERROR',
+        ),
       );
     });
 
@@ -278,7 +281,10 @@ describe('Client', () => {
       };
 
       expect(() => new Client(configWithoutDiscoveryUrl as any)).toThrow(
-        new ClientError('discoveryUrl is required', 'CONFIG_ERROR'),
+        new ClientError(
+          'Missing required field(s): discoveryUrl',
+          'CONFIG_ERROR',
+        ),
       );
     });
   });
@@ -301,19 +307,8 @@ describe('Client', () => {
       'state',
     );
 
-    // Verify that sessionStore.set was called with sessionData and context
-    expect(mockSessionStore.set).toHaveBeenCalledWith(
-      {
-        cookie: {
-          access_token: 'access_token',
-          refresh_token: 'refresh_token',
-          expires_in: 3600,
-          token_type: 'Bearer',
-        },
-        user: { id: 'user123', name: 'Test User' },
-      },
-      mockContext,
-    );
+    // Now that session logic is handled by Session, we simply ensure it was called:
+    expect(mockSessionInstance.start).toHaveBeenCalledWith(mockContext);
   });
 
   it('should handle redirect for implicit flow', async () => {
@@ -324,19 +319,49 @@ describe('Client', () => {
       'fragment',
     );
 
-    // Verify that sessionStore.set was called with sessionData and context
-    expect(mockSessionStore.set).toHaveBeenCalledWith(
-      {
-        cookie: {
-          access_token: 'access_token',
-          refresh_token: 'refresh_token',
-          expires_in: 3600,
-          token_type: 'Bearer',
-        },
-        user: { id: 'user123', name: 'Test User' },
-      },
-      mockContext,
+    // Again, we check that session start was called:
+    expect(mockSessionInstance.start).toHaveBeenCalledWith(mockContext);
+  });
+
+  it('should handle redirect for implicit flow with silent renew enabled', async () => {
+    await expect(
+      client.handleRedirectForImplicitFlow('fragment', mockContext),
+    ).resolves.toBeUndefined();
+
+    expect(mockAuthInstance.handleRedirectForImplicitFlow).toHaveBeenCalledWith(
+      'fragment',
     );
+
+    // Verify that session.start was called since useSilentRenew is true
+    expect(mockSessionInstance.start).toHaveBeenCalledWith(mockContext);
+  });
+
+  it('should handle redirect for implicit flow without silent renew', async () => {
+    // Update the config to disable silent renew
+    const configWithoutSilentRenew = {
+      ...mockConfig,
+      session: {
+        ...mockConfig.session,
+        useSilentRenew: false,
+      },
+    };
+
+    // Instantiate a new Client with the updated configuration
+    const clientWithoutSilentRenew = new Client(configWithoutSilentRenew);
+
+    await expect(
+      clientWithoutSilentRenew.handleRedirectForImplicitFlow(
+        'fragment',
+        mockContext,
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(mockAuthInstance.handleRedirectForImplicitFlow).toHaveBeenCalledWith(
+      'fragment',
+    );
+
+    // Verify that session.start was still called even without silent renew
+    expect(mockSessionInstance.start).toHaveBeenCalledWith(mockContext);
   });
 
   it('should retrieve user info', async () => {
@@ -383,19 +408,8 @@ describe('Client', () => {
       undefined,
     );
 
-    // Verify that sessionStore.set was called with sessionData and context
-    expect(mockSessionStore.set).toHaveBeenCalledWith(
-      {
-        cookie: {
-          access_token: 'access_token',
-          refresh_token: 'refresh_token',
-          expires_in: 3600,
-          token_type: 'Bearer',
-        },
-        user: { id: 'user123', name: 'Test User' },
-      },
-      mockContext,
-    );
+    // And session start should have been called
+    expect(mockSessionInstance.start).toHaveBeenCalledWith(mockContext);
   });
 
   it('should get access token', async () => {
@@ -418,11 +432,8 @@ describe('Client', () => {
   it('should clear tokens', async () => {
     await expect(client.clearTokens(mockContext)).resolves.toBeUndefined();
     expect(mockTokenInstance.clearTokens).toHaveBeenCalled();
-    expect(mockSessionStore.destroy).toHaveBeenCalledWith(
-      'mock_sid',
-      mockContext,
-    );
-    expect(mockSessionInstance.stop).toHaveBeenCalled();
+    // The Client no longer calls sessionStore.destroy directly; instead it calls session.stop()
+    expect(mockSessionInstance.stop).toHaveBeenCalledWith(mockContext);
   });
 
   it('should initiate logout', async () => {
@@ -436,38 +447,79 @@ describe('Client', () => {
     expect(mockLoggerInstance.setLogLevel).toHaveBeenCalledWith(LogLevel.DEBUG);
   });
 
-  it('should default grantType to AuthorizationCode if not provided', () => {
-    const configWithoutGrantType = {
-      clientId: 'test-client-id',
-      redirectUri: 'https://example.com/callback',
-      scopes: [Scopes.OpenId, Scopes.Profile],
-      discoveryUrl: 'https://example.com/.well-known/openid-configuration',
-      grantType: undefined, // Explicitly set grantType to undefined
-      logging: {
-        logLevel: LogLevel.DEBUG,
+  it('should throw an error when startDeviceAuthorization fails', async () => {
+    const authError = new Error('Auth failed');
+    mockAuthInstance.startDeviceAuthorization.mockRejectedValueOnce(authError);
+
+    await expect(client.startDeviceAuthorization()).rejects.toThrow(authError);
+    expect(mockAuthInstance.startDeviceAuthorization).toHaveBeenCalled();
+  });
+
+  it('should return null access token when tokenClient.getAccessToken returns null', async () => {
+    mockTokenInstance.getAccessToken.mockResolvedValueOnce(null);
+    const accessToken = await client.getAccessToken();
+    expect(accessToken).toBeNull();
+    expect(mockTokenInstance.getAccessToken).toHaveBeenCalled();
+  });
+
+  it('should handle timeout in pollDeviceToken', async () => {
+    const timeoutError = new Error('Polling timed out');
+    mockAuthInstance.pollDeviceToken.mockRejectedValueOnce(timeoutError);
+
+    await expect(
+      client.pollDeviceToken('device_code', 5, 10, mockContext),
+    ).rejects.toThrow(timeoutError);
+    expect(mockAuthInstance.pollDeviceToken).toHaveBeenCalledWith(
+      'device_code',
+      5,
+      10,
+    );
+    expect(mockSessionInstance.start).not.toHaveBeenCalled();
+  });
+  it('should handle redirect without silent renew', async () => {
+    // Update the config to disable silent renew
+    const configWithoutSilentRenew = {
+      ...mockConfig,
+      session: {
+        ...mockConfig.session,
+        useSilentRenew: false,
       },
     };
+    client = new Client(configWithoutSilentRenew);
 
-    const debugSpy = jest
-      .spyOn(mockLoggerInstance, 'debug')
-      .mockImplementation(() => {});
+    await expect(
+      client.handleRedirect('auth-code', 'state', mockContext),
+    ).resolves.toBeUndefined();
+    expect(mockAuthInstance.handleRedirect).toHaveBeenCalledWith(
+      'auth-code',
+      'state',
+    );
+    expect(mockSessionInstance.start).toHaveBeenCalledWith(mockContext);
+  });
 
-    // Mock Store.create to return sessionStore even when storageType is MEMORY
-    (Store as any).create.mockReturnValue({
-      store: mockStore,
-      sessionStore: mockSessionStore,
-    });
+  it('should default grantType to AuthorizationCode if not provided', () => {
+    const configWithoutGrantType = {
+      ...mockConfig,
+      // Explicitly omit grantType to test the default assignment
+      grantType: undefined,
+    };
 
-    // Instantiate a new Client with configWithoutGrantType
+    // Instantiate the Client without grantType
     const clientWithoutGrantType = new Client(configWithoutGrantType);
 
-    expect((clientWithoutGrantType as any).config.grantType).toBe(
-      GrantType.AuthorizationCode,
-    );
-    expect(debugSpy).toHaveBeenCalledWith(
+    // Verify that the logger.debug was called with the expected message
+    expect(mockLoggerInstance.debug).toHaveBeenCalledWith(
       'No grantType specified, defaulting to authorization_code',
     );
 
-    debugSpy.mockRestore();
+    // Optionally, verify that Token was instantiated with GrantType.AuthorizationCode
+    // This requires modifying the Token mock to capture constructor arguments
+    expect(Token).toHaveBeenCalledWith(
+      mockLoggerInstance,
+      expect.objectContaining({
+        grantType: GrantType.AuthorizationCode,
+      }),
+      mockIssuerInstance,
+    );
   });
 });

@@ -110,7 +110,8 @@ describe('Session', () => {
 
       // Assert
       expect(sessionStore.get).toHaveBeenCalledWith('mock-sid', context);
-      expect(logger.debug).toHaveBeenCalledWith('Existing session found', {
+      expect(logger.debug).toHaveBeenCalledWith('Existing session resumed', {
+        // Updated line
         sid: 'mock-sid',
       });
       expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 60000); // (120 - 60) * 1000
@@ -264,6 +265,34 @@ describe('Session', () => {
         sid: 'new-mock-sid',
       });
       expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 60000); // (120 - 60) * 1000
+    });
+
+    it('should throw an error if request is missing in context', async () => {
+      // Arrange
+      const mockResponse = new Response(null, {
+        headers: new Headers(),
+      });
+      const context = { request: undefined, response: mockResponse };
+
+      // Act & Assert
+      await expect(session.start(context)).rejects.toThrow(
+        'Both Request and Response objects are required to start a session.',
+      );
+    });
+
+    it('should throw an error if response is missing in context', async () => {
+      // Arrange
+      const mockRequest = new Request('http://localhost', {
+        headers: {
+          cookie: 'sid=mock-sid',
+        },
+      });
+      const context = { request: mockRequest, response: undefined };
+
+      // Act & Assert
+      await expect(session.start(context)).rejects.toThrow(
+        'Both Request and Response objects are required to start a session.',
+      );
     });
   });
 
@@ -543,6 +572,50 @@ describe('Session', () => {
       });
     });
 
+    it('should set a timer to refresh the token at the correct time', async () => {
+      // Arrange
+      const mockTokens = {
+        access_token: 'token',
+        token_type: 'Bearer',
+        expires_in: 120, // in seconds
+      };
+      const mockUser = { sub: 'user123', name: 'John Doe' };
+
+      // Mock tokenClient.getTokens to return tokens
+      (tokenClient.getTokens as jest.Mock).mockReturnValue(mockTokens);
+
+      // Mock userInfoClient.getUserInfo to return user info
+      (userInfoClient.getUserInfo as jest.Mock).mockResolvedValue(mockUser);
+
+      // Mock sessionStore.set to return a new sid
+      (sessionStore.set as jest.Mock).mockResolvedValue('mock-sid');
+
+      // Mock request and response objects
+      const mockRequest = new Request('http://localhost', {
+        headers: {
+          cookie: 'sid=mock-sid',
+        },
+      });
+
+      const mockResponse = new Response(null, {
+        headers: new Headers(),
+      });
+
+      mockResponse.headers.append = jest.fn();
+
+      const context = { request: mockRequest, response: mockResponse };
+
+      // Act
+      await session.start(context);
+      await (session as any).scheduleTokenRefresh(context);
+
+      // Assert
+      expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 60000); // (120 - 60) * 1000
+      expect(logger.debug).toHaveBeenCalledWith('Scheduled token refresh in', {
+        refreshTime: 60000,
+      });
+    });
+
     it('should handle token retrieval failure', async () => {
       // Arrange
       const getTokenError = new Error('Get token failed');
@@ -713,6 +786,162 @@ describe('Session', () => {
           refreshTime: expect.any(Number),
         },
       );
+    });
+  });
+
+  describe('updateSession', () => {
+    it('should log a warning and return if no tokens are available', async () => {
+      // Arrange
+      // Set a valid session ID
+      (sessionStore.get as jest.Mock).mockResolvedValue({
+        cookie: {
+          access_token: 'existing-token',
+          token_type: 'Bearer',
+          expires_in: 120,
+        },
+        user: { sub: 'user123' },
+      });
+
+      // Mock tokenClient.getTokens to return null
+      (tokenClient.getTokens as jest.Mock).mockResolvedValue(null);
+
+      // Mock request and response objects
+      const mockRequest = new Request('http://localhost', {
+        headers: {
+          cookie: 'sid=mock-sid',
+        },
+      });
+
+      const mockResponse = new Response(null, {
+        headers: new Headers(),
+      });
+
+      const context = { request: mockRequest, response: mockResponse };
+
+      // Set the session ID manually
+      (session as any)._sid = 'mock-sid';
+
+      // Act
+      await (session as any).updateSession(context);
+
+      // Assert
+      expect(tokenClient.getTokens).toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalledWith(
+        'No tokens available to update the session.',
+      );
+      expect(sessionStore.touch).not.toHaveBeenCalled();
+    });
+
+    it('should log a warning and proceed if fetching user info fails', async () => {
+      // Arrange
+      const mockTokens = {
+        access_token: 'existing-token',
+        token_type: 'Bearer',
+        expires_in: 120, // in seconds
+      };
+      const userInfoError = new Error('Failed to fetch user info');
+
+      // Mock sessionStore.get to return existing session data
+      (sessionStore.get as jest.Mock).mockResolvedValue({
+        cookie: mockTokens,
+        user: { sub: 'user123' },
+      });
+
+      // Mock tokenClient.getTokens to return tokens
+      (tokenClient.getTokens as jest.Mock).mockResolvedValue(mockTokens);
+
+      // Mock userInfoClient.getUserInfo to throw an error
+      (userInfoClient.getUserInfo as jest.Mock).mockRejectedValue(
+        userInfoError,
+      );
+
+      // Mock sessionStore.touch to simulate updating session
+      (sessionStore.touch as jest.Mock).mockResolvedValue(undefined);
+
+      // Mock request and response objects
+      const mockRequest = new Request('http://localhost', {
+        headers: {
+          cookie: 'sid=mock-sid',
+        },
+      });
+
+      const mockResponse = new Response(null, {
+        headers: new Headers(),
+      });
+
+      const context = { request: mockRequest, response: mockResponse };
+
+      // Set the session ID manually
+      (session as any)._sid = 'mock-sid';
+
+      // Act
+      await (session as any).updateSession(context);
+
+      // Assert
+      expect(tokenClient.getTokens).toHaveBeenCalled();
+      expect(userInfoClient.getUserInfo).toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Failed to fetch user info during session update',
+        { error: userInfoError },
+      );
+      expect(sessionStore.touch).toHaveBeenCalledWith(
+        'mock-sid',
+        {
+          cookie: mockTokens,
+          user: undefined, // User info should be undefined due to failure
+        },
+        context,
+      );
+    });
+  });
+  describe('sid setter', () => {
+    it('should set sid to a valid string', () => {
+      // Arrange
+      const newSid = 'valid-sid';
+
+      // Act
+      session.sid = newSid;
+
+      // Assert
+      expect(logger.debug).toHaveBeenCalledWith('Setting session ID', {
+        sid: newSid,
+      });
+      expect(session.sid).toBe(newSid);
+    });
+
+    it('should set sid to null', () => {
+      // Arrange
+      const newSid = null;
+
+      // Act
+      session.sid = newSid;
+
+      // Assert
+      expect(logger.debug).toHaveBeenCalledWith('Setting session ID', {
+        sid: newSid,
+      });
+      expect(session.sid).toBe(newSid);
+    });
+
+    it('should throw an error when setting sid to a non-string value', () => {
+      // Arrange
+      const invalidSid = 12345; // Number instead of string
+
+      // Act & Assert
+      expect(() => {
+        // Type assertion to bypass TypeScript type checking for test purposes
+        (session as any).sid = invalidSid;
+      }).toThrow('Session ID must be a string or null.');
+    });
+
+    it('should throw an error when setting sid to an object', () => {
+      // Arrange
+      const invalidSid = { id: 'invalid-sid' };
+
+      // Act & Assert
+      expect(() => {
+        (session as any).sid = invalidSid;
+      }).toThrow('Session ID must be a string or null.');
     });
   });
 });

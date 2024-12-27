@@ -11,7 +11,7 @@ import {
   IAuth,
 } from '../interfaces';
 import { ClientError } from '../errors/ClientError';
-import { buildLogoutUrl, sleep, generateRandomString } from '../utils';
+import { buildLogoutUrl, sleep, parseFragment } from '../utils';
 import { PkceMethod, Scopes, GrantType } from '../enums';
 import { JwtValidator } from './JwtValidator';
 
@@ -20,6 +20,9 @@ jest.mock('../utils', () => ({
   ...jest.requireActual('../utils'),
   sleep: jest.fn(), // Mock the sleep function
   generateRandomString: jest.fn(), // Mock generateRandomString
+  parseFragment: jest.fn(), // Mock parseFragment
+  buildAuthorizationUrl: jest.fn(),
+  buildLogoutUrl: jest.fn(),
 }));
 
 describe('Auth', () => {
@@ -660,5 +663,228 @@ describe('Auth', () => {
         });
       });
     }
+  });
+
+  describe('handleRedirectForImplicitFlow', () => {
+    beforeEach(() => {
+      config = {
+        clientId: 'test-client-id',
+        redirectUri: 'https://example.com/callback',
+        scopes: [Scopes.OpenId, Scopes.Profile],
+        discoveryUrl: 'https://example.com/.well-known/openid-configuration',
+        grantType: GrantType.Implicit,
+        pkce: false, // PKCE is typically not used with Implicit flow
+        postLogoutRedirectUri: 'https://example.com/logout-callback',
+      };
+      auth = new Auth(config, mockLogger, mockIssuer, mockTokenClient);
+    });
+
+    it('should handle redirect successfully with id_token', async () => {
+      const fragment =
+        '#access_token=access-token&id_token=id-token&state=valid-state&token_type=Bearer&expires_in=3600';
+
+      // Mock parseFragment to parse the fragment correctly
+      (parseFragment as jest.Mock).mockReturnValue({
+        access_token: 'access-token',
+        id_token: 'id-token',
+        state: 'valid-state',
+        token_type: 'Bearer',
+        expires_in: '3600',
+      });
+
+      // Mock state retrieval
+      (auth as Auth)['state'].addState('valid-state', 'expected-nonce');
+      jest
+        .spyOn((auth as Auth)['state'], 'getNonce')
+        .mockResolvedValue('expected-nonce');
+
+      // Mock issuer discovery
+      mockIssuer.discover.mockResolvedValueOnce(
+        mockClientMetadata as ClientMetadata,
+      );
+
+      // Spy on JwtValidator.prototype.validateIdToken
+      const validateIdTokenMock = jest
+        .spyOn(JwtValidator.prototype, 'validateIdToken')
+        .mockResolvedValueOnce({
+          sub: '12345',
+          iss: 'https://example.com/',
+          aud: 'test-client-id',
+          nonce: 'expected-nonce',
+          exp: Math.floor(Date.now() / 1000) + 3600,
+        });
+
+      // Call the method
+      await auth.handleRedirectForImplicitFlow(fragment);
+
+      // Assertions
+      expect(parseFragment).toHaveBeenCalledWith(fragment);
+      expect((auth as Auth)['state'].getNonce).toHaveBeenCalledWith(
+        'valid-state',
+      );
+      expect(mockIssuer.discover).toHaveBeenCalledTimes(1);
+      expect(validateIdTokenMock).toHaveBeenCalledWith(
+        'id-token',
+        'expected-nonce',
+      );
+      expect(mockTokenClient.setTokens).toHaveBeenCalledWith({
+        access_token: 'access-token',
+        id_token: 'id-token',
+        token_type: 'Bearer',
+        expires_in: 3600,
+      });
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'ID token validated successfully',
+      );
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Tokens obtained and stored successfully',
+      );
+      expect((auth as Auth).getCodeVerifier()).toBeNull();
+    });
+
+    it('should handle redirect successfully without id_token', async () => {
+      const fragment =
+        '#access_token=access-token&state=valid-state&token_type=Bearer&expires_in=3600';
+
+      // Mock parseFragment to parse the fragment correctly
+      (parseFragment as jest.Mock).mockReturnValue({
+        access_token: 'access-token',
+        state: 'valid-state',
+        token_type: 'Bearer',
+        expires_in: '3600',
+      });
+
+      // Mock state retrieval
+      (auth as Auth)['state'].addState('valid-state', 'expected-nonce');
+      jest
+        .spyOn((auth as Auth)['state'], 'getNonce')
+        .mockResolvedValue('expected-nonce');
+
+      // Mock token storage
+      mockTokenClient.setTokens.mockImplementation();
+
+      // Call the method
+      await auth.handleRedirectForImplicitFlow(fragment);
+
+      // Assertions
+      expect(parseFragment).toHaveBeenCalledWith(fragment);
+      expect((auth as Auth)['state'].getNonce).toHaveBeenCalledWith(
+        'valid-state',
+      );
+      expect(mockIssuer.discover).not.toHaveBeenCalled(); // No id_token, so no discovery
+      expect(JwtValidator.prototype.validateIdToken).not.toHaveBeenCalled();
+      expect(mockTokenClient.setTokens).toHaveBeenCalledWith({
+        access_token: 'access-token',
+        id_token: undefined,
+        token_type: 'Bearer',
+        expires_in: 3600,
+      });
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'No ID token returned to validate',
+      );
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Tokens obtained and stored successfully',
+      );
+      expect((auth as Auth).getCodeVerifier()).toBeNull();
+    });
+
+    it('should throw ClientError if fragment contains an error', async () => {
+      const fragment =
+        '#error=access_denied&error_description=User denied access';
+
+      // Mock parseFragment to parse the fragment correctly
+      (parseFragment as jest.Mock).mockReturnValue({
+        error: 'access_denied',
+        error_description: 'User denied access',
+      });
+
+      // Call the method and expect an error
+      await expect(
+        auth.handleRedirectForImplicitFlow(fragment),
+      ).rejects.toThrow(ClientError);
+
+      // Assertions
+      expect(parseFragment).toHaveBeenCalledWith(fragment);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Error in implicit flow redirect',
+        {
+          error: 'access_denied',
+          error_description: 'User denied access',
+        },
+      );
+    });
+
+    it('should throw ClientError if access_token is missing', async () => {
+      const fragment =
+        '#id_token=id-token&state=valid-state&token_type=Bearer&expires_in=3600';
+
+      // Mock parseFragment to parse the fragment correctly
+      (parseFragment as jest.Mock).mockReturnValue({
+        id_token: 'id-token',
+        state: 'valid-state',
+        token_type: 'Bearer',
+        expires_in: '3600',
+      });
+
+      // Call the method and expect an error
+      await expect(
+        auth.handleRedirectForImplicitFlow(fragment),
+      ).rejects.toThrow(ClientError);
+
+      // Assertions
+      expect(parseFragment).toHaveBeenCalledWith(fragment);
+      expect(mockLogger.error).not.toHaveBeenCalled(); // Error due to missing access_token is thrown before logging
+    });
+
+    it('should throw ClientError if state is missing', async () => {
+      const fragment =
+        '#access_token=access-token&id_token=id-token&token_type=Bearer&expires_in=3600';
+
+      // Mock parseFragment to parse the fragment correctly
+      (parseFragment as jest.Mock).mockReturnValue({
+        access_token: 'access-token',
+        id_token: 'id-token',
+        token_type: 'Bearer',
+        expires_in: '3600',
+      });
+
+      // Call the method and expect an error
+      await expect(
+        auth.handleRedirectForImplicitFlow(fragment),
+      ).rejects.toThrow(ClientError);
+
+      // Assertions
+      expect(parseFragment).toHaveBeenCalledWith(fragment);
+      expect(mockLogger.error).not.toHaveBeenCalled(); // Error due to missing state is thrown before logging
+    });
+
+    it('should throw ClientError if state does not match any stored state', async () => {
+      const fragment =
+        '#access_token=access-token&id_token=id-token&state=invalid-state&token_type=Bearer&expires_in=3600';
+
+      // Mock parseFragment to parse the fragment correctly
+      (parseFragment as jest.Mock).mockReturnValue({
+        access_token: 'access-token',
+        id_token: 'id-token',
+        state: 'invalid-state',
+        token_type: 'Bearer',
+        expires_in: '3600',
+      });
+
+      // Mock state retrieval to return null for the invalid state
+      jest.spyOn((auth as Auth)['state'], 'getNonce').mockResolvedValue(null);
+
+      // Call the method and expect an error
+      await expect(
+        auth.handleRedirectForImplicitFlow(fragment),
+      ).rejects.toThrow(ClientError);
+
+      // Assertions
+      expect(parseFragment).toHaveBeenCalledWith(fragment);
+      expect((auth as Auth)['state'].getNonce).toHaveBeenCalledWith(
+        'invalid-state',
+      );
+      expect(mockLogger.error).not.toHaveBeenCalled(); // Error due to state mismatch is thrown before logging
+    });
   });
 });

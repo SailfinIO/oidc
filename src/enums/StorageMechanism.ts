@@ -1,6 +1,6 @@
-// src/enums/Storage.ts
+// src/enums/StorageMechanism.ts
 
-export enum Storage {
+export enum StorageMechanism {
   /**
    * Local storage mechanism.
    */

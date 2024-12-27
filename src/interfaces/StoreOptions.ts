@@ -1,5 +1,8 @@
+// src/interfaces/StoreOptions.ts
+
 import { CookieOptions } from './CookieOptions';
-import { IStore } from './IStore';
+
+import { ISessionStore } from './ISessionStore';
 
 export interface StoreOptions {
   storage?: {
@@ -10,6 +13,6 @@ export interface StoreOptions {
       name?: string;
       options?: CookieOptions;
     };
-    store?: IStore; // Custom IStore for internal data storage in CookieStore
+    store?: ISessionStore;
   };
 }

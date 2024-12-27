@@ -7,16 +7,15 @@ import {
   ResponseType,
   PkceMethod,
   ResponseMode,
-  Storage,
+  StorageMechanism,
   Scopes,
   Display,
   UILocales,
-  SameSite,
 } from '../enums';
 import { ILogger } from './ILogger';
-import { IStore } from './IStore';
 import { ISessionStore } from './ISessionStore';
 import { StoreOptions } from './StoreOptions';
+import { CookieOptions } from './CookieOptions'; // Ensure this import exists
 
 export interface IClientConfig {
   clientId: string; // Client ID
@@ -47,8 +46,15 @@ export interface IClientConfig {
   /** Session Management Configuration */
   session?: {
     /**
-     * Session Store Configuration
-     * Users can provide a custom session store or configure predefined session stores.
+     * Storage Mechanism for Session Data
+     * Determines the type of storage to use (e.g., MEMORY, COOKIE).
+     */
+    mechanism?: StorageMechanism;
+    options?: StoreOptions; // Specific options based on the mechanism
+
+    /**
+     * Custom Session Store
+     * Users can provide a custom session store.
      */
     store?: ISessionStore; // Allow users to inject their own session store
 
@@ -59,26 +65,11 @@ export interface IClientConfig {
     cookie?: {
       name?: string; // Cookie name (e.g., 'sid')
       secret?: string; // Secret for signing cookies if needed
-      secure?: boolean; // Ensures the browser only sends the cookie over HTTPS
-      httpOnly?: boolean; // Prevents JavaScript access to the cookie
-      sameSite?: SameSite; // CSRF protection
-      path?: string; // Cookie path
-      maxAge?: number; // Cookie expiration in seconds
-      domain?: string; // Cookie domain
+      options?: CookieOptions; // **Added:** Options object
     };
 
     useSilentRenew?: boolean;
-  };
-
-  /** Storage Configuration */
-  storage?: {
-    /**
-     * Storage Mechanism
-     * Determines the type of storage to use (e.g., MEMORY, COOKIE).
-     */
-    mechanism?: Storage;
-    options?: StoreOptions; // Specific options based on the mechanism
-    store?: IStore; // Optional custom IStore for data storage
+    ttl?: number; // Session TTL in milliseconds
   };
 
   /** Logger Configuration */

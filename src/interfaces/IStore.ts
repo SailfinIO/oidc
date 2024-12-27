@@ -1,4 +1,4 @@
-// src/interfaces/ISessionStore.ts
+// src/interfaces/IStore.ts
 
 import { ISessionData } from './ISessionData';
 

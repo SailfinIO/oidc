@@ -3,11 +3,13 @@
 import { Store } from './Store';
 import { MemoryStore } from './MemoryStore';
 import { CookieStore } from './CookieStore';
-import { Storage } from '../enums';
-import { ILogger, StoreOptions, IStore, ISessionStore } from '../interfaces';
+import { SessionStore } from './SessionStore';
+import { StorageMechanism } from '../enums';
+import { ILogger, StoreOptions, ISessionStore } from '../interfaces';
 
 jest.mock('./MemoryStore');
 jest.mock('./CookieStore');
+jest.mock('./SessionStore');
 
 describe('Store', () => {
   let logger: ILogger;
@@ -25,17 +27,21 @@ describe('Store', () => {
   });
 
   describe('create', () => {
-    it('should create and return a MemoryStore when storage type is MEMORY', () => {
+    it('should create and return a SessionStore for MEMORY', () => {
       const options: StoreOptions = { storage: { ttl: 3600 } };
 
-      const result = Store.create(Storage.MEMORY, options, logger);
+      const result = Store.create(StorageMechanism.MEMORY, options, logger);
 
-      expect(MemoryStore).toHaveBeenCalledWith(logger, options.storage.ttl);
-      expect(result.store).toBeInstanceOf(MemoryStore);
-      expect(result.sessionStore).toBeNull();
+      // Verify that SessionStore was called with (logger, 3600)
+      expect(SessionStore).toHaveBeenCalledWith(logger, 3600);
+      // The resulting sessionStore is a SessionStore instance
+      expect(result.sessionStore).toBeInstanceOf(SessionStore);
+
+      // MemoryStore is NOT called directly in this code path,
+      // so we shouldn't expect(MemoryStore).toHaveBeenCalled.
     });
 
-    it('should create and return a CookieStore when storage type is COOKIE', () => {
+    it('should create and return a CookieStore for COOKIE', () => {
       const options: StoreOptions = {
         storage: { ttl: 3600 },
         session: {
@@ -46,20 +52,25 @@ describe('Store', () => {
         },
       };
 
-      const result = Store.create(Storage.COOKIE, options, logger);
+      const result = Store.create(StorageMechanism.COOKIE, options, logger);
 
-      expect(MemoryStore).toHaveBeenCalledWith(logger, options.storage.ttl);
+      // We expect MemoryStore to have been constructed internally
+      expect(MemoryStore).toHaveBeenCalledWith(logger, 3600);
+
+      // Then CookieStore is constructed with (name, cookieOptions, internalStore)
       expect(CookieStore).toHaveBeenCalledWith(
-        options.session.cookie.name,
-        options.session.cookie.options,
+        'session',
+        { path: '/', httpOnly: true },
         expect.any(MemoryStore),
       );
-      expect(result.store).toBeInstanceOf(MemoryStore);
       expect(result.sessionStore).toBeInstanceOf(CookieStore);
+
+      // SessionStore is NOT called in this path
+      expect(SessionStore).not.toHaveBeenCalled();
     });
 
-    it('should use a custom store for CookieStore if provided', () => {
-      const customStore: IStore = {
+    it('should return the user’s custom store if provided, regardless of mechanism', () => {
+      const customStore: ISessionStore = {
         set: jest.fn(),
         get: jest.fn(),
         destroy: jest.fn(),
@@ -76,44 +87,37 @@ describe('Store', () => {
         },
       };
 
-      const result = Store.create(Storage.COOKIE, options, logger);
+      const result = Store.create(StorageMechanism.COOKIE, options, logger);
 
-      expect(CookieStore).toHaveBeenCalledWith(
-        options.session.cookie.name,
-        options.session.cookie.options,
-        customStore,
-      );
-      expect(result.store).toBe(customStore);
-      expect(result.sessionStore).toBeInstanceOf(CookieStore);
+      // Because the code short-circuits, it won't call CookieStore or SessionStore
+      expect(CookieStore).not.toHaveBeenCalled();
+      expect(SessionStore).not.toHaveBeenCalled();
+
+      // The result is exactly the user’s custom store
+      expect(result.sessionStore).toBe(customStore);
     });
 
-    it('should default to MemoryStore when no options are provided', () => {
-      const result = Store.create(Storage.MEMORY, undefined, logger);
+    it('should default to a SessionStore (Memory) with default TTL if no options are provided', () => {
+      // With no options, code passes 3600000 (1 hour) to the SessionStore
+      const result = Store.create(StorageMechanism.MEMORY, undefined, logger);
 
-      expect(MemoryStore).toHaveBeenCalledWith(logger, undefined);
-      expect(result.store).toBeInstanceOf(MemoryStore);
-      expect(result.sessionStore).toBeNull();
+      expect(SessionStore).toHaveBeenCalledWith(logger, 3600000);
+      expect(result.sessionStore).toBeInstanceOf(SessionStore);
     });
 
     it('should throw an error for unsupported storage types', () => {
       expect(() => {
-        Store.create('unsupported' as Storage, undefined, logger);
-      }).toThrowError('Unsupported storage type: unsupported');
+        Store.create('unsupported' as StorageMechanism, undefined, logger);
+      }).toThrowError(/Unsupported storage type: unsupported/);
     });
   });
 
   describe('Integration with logger', () => {
-    it('should pass the logger to the MemoryStore', () => {
-      const options: StoreOptions = { storage: { ttl: 3600 } };
-
-      Store.create(Storage.MEMORY, options, logger);
-
-      expect(MemoryStore).toHaveBeenCalledWith(logger, options.storage.ttl);
-      expect(logger.info).not.toHaveBeenCalled();
-    });
-
-    it('should pass the logger to the CookieStore', () => {
+    it('should pass the logger to MemoryStore in COOKIE mode', () => {
+      // This test makes sense only for the COOKIE path,
+      // because that's the only time we do new MemoryStore(...) in Store.create()
       const options: StoreOptions = {
+        storage: { ttl: 3600 },
         session: {
           cookie: {
             name: 'test-cookie',
@@ -122,9 +126,14 @@ describe('Store', () => {
         },
       };
 
-      Store.create(Storage.COOKIE, options, logger);
+      Store.create(StorageMechanism.COOKIE, options, logger);
 
+      expect(MemoryStore).toHaveBeenCalledWith(logger, 3600);
       expect(logger.info).not.toHaveBeenCalled();
     });
+
+    // If you'd like, you can add a test for SessionStore or check
+    // that the logger is used inside the SessionStore constructor.
+    // But typically, you'd do that in SessionStore.test.ts if needed.
   });
 });

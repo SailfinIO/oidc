@@ -28,7 +28,7 @@ export class Session implements ISession {
     logger: ILogger,
     tokenClient: IToken,
     userInfoClient: IUserInfo,
-    sessionStore: ISessionStore, // Changed from IStore to ISessionStore
+    sessionStore: ISessionStore,
   ) {
     this.config = config;
     this.logger = logger;
@@ -48,29 +48,45 @@ export class Session implements ISession {
       );
     }
 
-    // Extract sid from cookies using .get() method
-    const cookieHeader = context.request.headers.get('cookie');
-    let sid: string | null = null;
-
-    if (cookieHeader && typeof cookieHeader === 'string') {
-      const cookies = parse(cookieHeader);
-      sid = cookies[this.config.session?.cookie?.name || 'sid'] || null;
-    }
+    // Extract sid from cookies
+    const sid = this.getSidFromCookies(context);
 
     if (sid) {
-      // Retrieve existing session data using ISessionStore
+      // Attempt to resume existing session
       const sessionData = await this.sessionStore.get(sid, context);
       if (sessionData) {
         this.sid = sid;
-        this.logger.debug('Existing session found', { sid });
-        if (this.config.session?.useSilentRenew) {
-          this.scheduleTokenRefresh(context);
-        }
+        this.logger.debug('Existing session resumed', { sid });
+        this.scheduleTokenRefresh(context);
         return;
+      } else {
+        this.logger.warn('SID found but no corresponding session data.');
       }
     }
 
-    // If no existing session, create a new one
+    // No valid session found; create a new one
+    await this.createNewSession(context);
+  }
+
+  /**
+   * Retrieves the session ID from cookies.
+   * @param context The store context containing the request.
+   * @returns The session ID or null if not found.
+   */
+  private getSidFromCookies(context: IStoreContext): string | null {
+    const cookieHeader = context.request.headers.get('cookie');
+    if (cookieHeader && typeof cookieHeader === 'string') {
+      const cookies = parse(cookieHeader);
+      return cookies[this.config.session?.cookie?.name || 'sid'] || null;
+    }
+    return null;
+  }
+
+  /**
+   * Creates a new session using tokens from the tokenClient.
+   * @param context The store context containing the request and response.
+   */
+  private async createNewSession(context: IStoreContext): Promise<void> {
     const tokens = this.tokenClient.getTokens();
     if (!tokens) {
       throw new ClientError(
@@ -86,21 +102,21 @@ export class Session implements ISession {
       this.logger.warn('Failed to fetch user info during session creation', {
         error,
       });
-      // Proceed with undefined user info
+      // Proceed without user info
     }
 
-    const newSessionData: ISessionData = {
+    const sessionData: ISessionData = {
       cookie: tokens,
       user: userInfo || undefined,
     };
 
-    // Use ISessionStore to set session data and receive `sid`
-    this.sid = await this.sessionStore.set(newSessionData, context);
-    this.logger.debug('New session created', { sid: this.sid });
+    // Store session data and receive `sid`
+    const sid = await this.sessionStore.set(sessionData, context);
+    this.sid = sid;
+    this.logger.debug('New session created', { sid });
 
-    if (this.config.session?.useSilentRenew) {
-      this.scheduleTokenRefresh(context);
-    }
+    // Schedule token refresh if enabled
+    this.scheduleTokenRefresh(context);
   }
 
   /**
@@ -111,12 +127,19 @@ export class Session implements ISession {
     try {
       const tokens = await this.tokenClient.getTokens();
       if (tokens?.expires_in) {
-        const refreshTime =
-          (tokens.expires_in - (this.config.tokenRefreshThreshold || 60)) *
-          1000;
+        const refreshThreshold =
+          (this.config.tokenRefreshThreshold || 60) * 1000; // default 60 seconds
+        const refreshTime = tokens.expires_in * 1000 - refreshThreshold;
+
+        // Clear any existing timer
+        if (this.sessionTimer) {
+          clearTimeout(this.sessionTimer);
+        }
+
         this.sessionTimer = setTimeout(() => {
           this.refreshToken(context);
         }, refreshTime);
+
         this.logger.debug('Scheduled token refresh in', { refreshTime });
       }
     } catch (error) {
@@ -136,7 +159,7 @@ export class Session implements ISession {
       this.logger.info('Access token refreshed successfully');
     } catch (error) {
       this.logger.error('Failed to refresh access token', { error });
-      this.stop(context); // Pass context to stop method
+      await this.stop(context);
     }
   }
 
@@ -160,7 +183,7 @@ export class Session implements ISession {
       this.logger.warn('Failed to fetch user info during session update', {
         error,
       });
-      // Proceed with undefined user info
+      // Proceed without user info
     }
 
     const sessionData: ISessionData = {
@@ -168,7 +191,7 @@ export class Session implements ISession {
       user: userInfo || undefined, // Optionally retain existing user info
     };
 
-    // Use ISessionStore to touch (update) the session
+    // Update (touch) the session data
     await this.sessionStore.touch(this.sid, sessionData, context);
     this.logger.debug('Session data updated', { sid: this.sid });
   }
@@ -184,7 +207,6 @@ export class Session implements ISession {
       this.logger.debug('Session timer cleared');
     }
     if (this.sid) {
-      // Use ISessionStore to destroy the session
       await this.sessionStore.destroy(this.sid, context);
       this.logger.debug('Session destroyed', { sid: this.sid });
       this.sid = null;
