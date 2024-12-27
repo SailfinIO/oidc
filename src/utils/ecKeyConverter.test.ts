@@ -100,4 +100,22 @@ describe('ecJwkToPem', () => {
       }
     }
   });
+  it('should throw the default unsupported curve error if curveOid exists but curve is not handled', () => {
+    // Temporarily add a curve with a valid OID but not in the switch
+    let CURVE_OIDS: Record<string, string> = {
+      'P-256': '1.2.840.10045.3.1.7',
+      'P-384': '1.3.132.0.34',
+      'P-521': '1.3.132.0.35',
+    };
+    (CURVE_OIDS as any)['P-256X'] = '1.2.840.10045.3.1.7';
+    try {
+      ecJwkToPem('P-256X', x, y);
+    } catch (err: any) {
+      expect(err).toBeInstanceOf(ClientError);
+      expect(err.message).toContain('Unsupported curve: P-256X');
+    } finally {
+      // Clean up
+      delete (CURVE_OIDS as any)['P-256X'];
+    }
+  });
 });

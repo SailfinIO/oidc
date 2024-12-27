@@ -106,6 +106,25 @@ describe('Issuer', () => {
       );
     });
 
+    it('should return cached config if available', async () => {
+      // Mock the cache to return a valid cached configuration
+      (cache.get as jest.Mock).mockReturnValue(sampleConfig);
+
+      // Instantiate the Issuer with mocks
+      issuer = new Issuer(discoveryUrl, logger, cache, 3600000);
+
+      // Call the discover method
+      const config = await issuer.discover();
+
+      // Assertions
+      expect(config).toStrictEqual(sampleConfig); // The returned config should match the cached config
+      expect(cache.get).toHaveBeenCalledWith('discoveryConfig'); // Ensure cache.get was called
+      expect(logger.debug).toHaveBeenCalledWith(
+        'Cache hit for discovery config.',
+      ); // Ensure the debug log was made
+      expect(global.fetch).not.toHaveBeenCalled(); // Ensure fetch was not called
+    });
+
     it('should force refresh the config even if cached', async () => {
       (cache.get as jest.Mock).mockReturnValue(sampleConfig);
 
@@ -163,6 +182,111 @@ describe('Issuer', () => {
   });
 
   describe('Error Handling', () => {
+    it('should throw ClientError if discovery config is missing authorization_endpoint', async () => {
+      // Create an invalid config missing the authorization_endpoint
+      const invalidConfig = { ...sampleConfig };
+      delete invalidConfig.authorization_endpoint;
+
+      // Mock the cache to return undefined (simulate no cached config)
+      (cache.get as jest.Mock).mockReturnValue(undefined);
+
+      // Mock fetch to return the invalid configuration
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        new Response(JSON.stringify(invalidConfig), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+      // Instantiate the Issuer with mocks
+      issuer = new Issuer(discoveryUrl, logger, cache, 3600000);
+
+      // Expect the discover method to throw a ClientError
+      await expect(issuer.discover()).rejects.toMatchObject({
+        message:
+          'Invalid discovery configuration: Missing or invalid authorization_endpoint.',
+        code: 'INVALID_DISCOVERY_CONFIG',
+      });
+
+      // Assertions
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to fetch discovery configuration.',
+        {
+          error: expect.any(ClientError),
+        },
+      );
+      expect(cache.set).not.toHaveBeenCalled(); // Ensure the invalid config is not cached
+    });
+    it('should throw ClientError if discovery config is missing token_endpoint', async () => {
+      // Create an invalid config missing the token_endpoint
+      const invalidConfig = { ...sampleConfig };
+      delete invalidConfig.token_endpoint;
+
+      // Mock the cache to return undefined (simulate no cached config)
+      (cache.get as jest.Mock).mockReturnValue(undefined);
+
+      // Mock fetch to return the invalid configuration
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        new Response(JSON.stringify(invalidConfig), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+      // Instantiate the Issuer with mocks
+      issuer = new Issuer(discoveryUrl, logger, cache, 3600000);
+
+      // Expect the discover method to throw a ClientError
+      await expect(issuer.discover()).rejects.toMatchObject({
+        message:
+          'Invalid discovery configuration: Missing or invalid token_endpoint.',
+        code: 'INVALID_DISCOVERY_CONFIG',
+      });
+
+      // Assertions
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to fetch discovery configuration.',
+        {
+          error: expect.any(ClientError),
+        },
+      );
+      expect(cache.set).not.toHaveBeenCalled(); // Ensure the invalid config is not cached
+    });
+    it('should throw ClientError if token_endpoint is not a string', async () => {
+      // Create an invalid config with a non-string token_endpoint
+      const invalidConfig = { ...sampleConfig, token_endpoint: 123 };
+
+      // Mock the cache to return undefined (simulate no cached config)
+      (cache.get as jest.Mock).mockReturnValue(undefined);
+
+      // Mock fetch to return the invalid configuration
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        new Response(JSON.stringify(invalidConfig), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+      // Instantiate the Issuer with mocks
+      issuer = new Issuer(discoveryUrl, logger, cache, 3600000);
+
+      // Expect the discover method to throw a ClientError
+      await expect(issuer.discover()).rejects.toMatchObject({
+        message:
+          'Invalid discovery configuration: Missing or invalid token_endpoint.',
+        code: 'INVALID_DISCOVERY_CONFIG',
+      });
+
+      // Assertions
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to fetch discovery configuration.',
+        {
+          error: expect.any(ClientError),
+        },
+      );
+      expect(cache.set).not.toHaveBeenCalled(); // Ensure the invalid config is not cached
+    });
+
     it('should throw ClientError if fetch fails', async () => {
       (cache.get as jest.Mock).mockReturnValue(undefined);
       (global.fetch as jest.Mock).mockRejectedValueOnce(
