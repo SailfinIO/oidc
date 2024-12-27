@@ -1,3 +1,9 @@
+## [0.0.6-beta.2](https://github.com/SailfinIO/oidc/compare/v0.0.6-beta.1...v0.0.6-beta.2) (2024-12-27)
+
+### Bug Fixes
+
+* docs deployment and readme usage error ([914f9ae](https://github.com/SailfinIO/oidc/commit/914f9ae517386dde8c62309794909d64d1a31917))
+
 ## [0.0.6-beta.1](https://github.com/SailfinIO/oidc/compare/v0.0.5...v0.0.6-beta.1) (2024-12-27)
 
 ### Bug Fixes
