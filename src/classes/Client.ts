@@ -1,9 +1,9 @@
-// src/clients/Client.ts
+// src/classes/Client.ts
 
 import { Auth } from './Auth';
 import { UserInfo } from './UserInfo';
-import { Logger } from '../utils';
-import { GrantType, LogLevel, TokenTypeHint } from '../enums';
+import { Logger, parse } from '../utils';
+import { GrantType, LogLevel, TokenTypeHint, Storage } from '../enums';
 import { Issuer } from './Issuer';
 import {
   IClientConfig,
@@ -14,12 +14,16 @@ import {
   IUser,
   IIssuer,
   IToken,
-  IHttp,
   IAuth,
+  ISession,
+  ISessionData,
+  IStoreContext,
+  ISessionStore,
 } from '../interfaces';
 import { ClientError } from '../errors';
-import { Http } from './Http';
 import { Token } from './Token';
+import { Session } from './Session';
+import { Store, StoreInstances } from './Store';
 import { defaultClientConfig } from '../config/defaultClientConfig';
 
 export class Client {
@@ -27,10 +31,11 @@ export class Client {
   private readonly auth: IAuth;
   private readonly tokenClient: IToken;
   private readonly logger: ILogger;
-  private readonly httpClient: IHttp;
   private readonly issuer: IIssuer;
+  private readonly sessionStore: ISessionStore | null;
   private userInfoClient!: IUserInfo;
   private initialized: boolean = false;
+  private session: ISession | null = null;
 
   constructor(userConfig: Partial<IClientConfig>) {
     // Merge userConfig with defaultClientConfig
@@ -49,21 +54,26 @@ export class Client {
         true,
       );
 
-    this.httpClient = new Http(this.logger);
-    this.issuer = new Issuer(this.config.discoveryUrl, this.logger);
-    this.tokenClient = new Token(
+    // Initialize the store using Store
+    const storeInstances: StoreInstances = Store.create(
+      this.config.storage?.mechanism || Storage.MEMORY,
+      this.config.storage?.options,
       this.logger,
-      this.config,
-      this.issuer,
-      this.httpClient,
     );
+
+    this.sessionStore = storeInstances.sessionStore;
+
+    this.issuer = new Issuer(this.config.discoveryUrl, this.logger);
+    this.tokenClient = new Token(this.logger, this.config, this.issuer);
     this.auth = new Auth(
       this.config,
       this.logger,
       this.issuer,
-      this.httpClient,
       this.tokenClient,
     );
+
+    // Initialize session as null; it will be set after discovering issuer
+    this.session = null;
 
     this.validateConfig(this.config);
   }
@@ -71,12 +81,18 @@ export class Client {
   private async initializeInternal(): Promise<void> {
     try {
       this.logger.debug('Initializing OIDC Client');
-      const client = await this.issuer.discover();
+      const clientMetadata = await this.issuer.discover();
       this.userInfoClient = new UserInfo(
         this.tokenClient,
-        client,
-        this.httpClient,
+        clientMetadata,
         this.logger,
+      );
+      this.session = new Session(
+        this.config,
+        this.logger,
+        this.tokenClient,
+        this.userInfoClient,
+        this.sessionStore,
       );
       this.initialized = true;
       this.logger.info('OIDC Client initialized successfully');
@@ -92,16 +108,20 @@ export class Client {
     const requiredFields: Array<keyof IClientConfig> = [
       'clientId',
       'redirectUri',
-      'scopes',
       'discoveryUrl',
     ];
+
     requiredFields.forEach((field) => {
       if (!config[field]) {
         throw new ClientError(`${field} is required`, 'CONFIG_ERROR');
       }
     });
-  }
 
+    // Custom check for 'scopes'
+    if (!config.scopes?.length) {
+      throw new ClientError('At least one scope is required', 'CONFIG_ERROR');
+    }
+  }
   private validateConfig(config: IClientConfig): void {
     if (!config.clientId)
       throw new ClientError('clientId is required', 'CONFIG_ERROR');
@@ -145,25 +165,122 @@ export class Client {
   /**
    * Handles the redirect callback for authorization code flow.
    * Exchanges the authorization code for tokens and validates the state and nonce.
+   * Updates the session with tokens and user info.
    * @param code The authorization code received from the provider.
    * @param returnedState The state returned in the redirect to validate against CSRF.
+   * @param context The store context containing the request and response.
    */
   public async handleRedirect(
     code: string,
     returnedState: string,
+    context: IStoreContext, // Pass context here
   ): Promise<void> {
     await this.ensureInitialized();
     await this.auth.handleRedirect(code, returnedState);
+
+    // After handling redirect, tokens should be set in tokenClient
+    const tokens = this.tokenClient.getTokens();
+    if (!tokens) {
+      throw new ClientError(
+        'No tokens available after handling redirect.',
+        'NO_TOKENS',
+      );
+    }
+
+    // Fetch user info
+    let userInfo: IUser | null = null;
+    try {
+      userInfo = await this.userInfoClient.getUserInfo();
+    } catch (error) {
+      this.logger.warn('Failed to fetch user info after handling redirect', {
+        error,
+      });
+      // Decide whether to proceed without user info or throw an error
+      // Here, we'll proceed without user info
+    }
+
+    const sessionData: ISessionData = {
+      cookie: tokens,
+      user: userInfo || undefined,
+    };
+
+    if (this.sessionStore) {
+      // Store session data and receive `sid`
+      const sid = await this.sessionStore.set(sessionData, context);
+      this.logger.debug('Session data stored after redirect handling', { sid });
+    } else {
+      // Fallback to using IStore directly (if applicable)
+      // This block can be customized based on your design
+      throw new ClientError(
+        'Session store is not configured.',
+        'SESSION_STORE_ERROR',
+      );
+    }
+
+    // Optionally start token refresh if enabled
+    if (this.config.session?.useSilentRenew && this.session) {
+      this.session.start(context);
+    }
   }
 
   /**
    * Handles the redirect callback for implicit flow.
-   * Extracts tokens from the URL fragment.
+   * Extracts tokens from the URL fragment and updates the session.
    * @param fragment The URL fragment containing tokens.
+   * @param context The store context containing the request and response.
    */
-  public async handleRedirectForImplicitFlow(fragment: string): Promise<void> {
+  public async handleRedirectForImplicitFlow(
+    fragment: string,
+    context: IStoreContext, // Pass context here
+  ): Promise<void> {
     await this.ensureInitialized();
     await this.auth.handleRedirectForImplicitFlow(fragment);
+
+    // After handling redirect, tokens should be set in tokenClient
+    const tokens = this.tokenClient.getTokens();
+    if (!tokens) {
+      throw new ClientError(
+        'No tokens available after handling redirect.',
+        'NO_TOKENS',
+      );
+    }
+
+    // Fetch user info
+    let userInfo: IUser | null = null;
+    try {
+      userInfo = await this.userInfoClient.getUserInfo();
+    } catch (error) {
+      this.logger.warn(
+        'Failed to fetch user info after handling implicit flow redirect',
+        { error },
+      );
+      // Proceed without user info
+    }
+
+    const sessionData: ISessionData = {
+      cookie: tokens,
+      user: userInfo || undefined,
+    };
+
+    if (this.sessionStore) {
+      // Store session data and receive `sid`
+      const sid = await this.sessionStore.set(sessionData, context);
+      this.logger.debug(
+        'Session data stored after implicit flow redirect handling',
+        { sid },
+      );
+    } else {
+      // Fallback to using IStore directly (if applicable)
+      throw new ClientError(
+        'Session store is not configured.',
+        'SESSION_STORE_ERROR',
+      );
+    }
+
+    // Optionally start token refresh if enabled
+    if (this.config.session?.useSilentRenew && this.session) {
+      this.session.start(context);
+    }
   }
 
   /**
@@ -220,14 +337,54 @@ export class Client {
    * @param device_code The device code obtained from device authorization.
    * @param interval Polling interval in seconds.
    * @param timeout Maximum time to wait in milliseconds.
+   * @param context The store context containing the request and response.
    */
   public async pollDeviceToken(
     device_code: string,
     interval: number = 5,
     timeout?: number,
+    context?: IStoreContext, // Pass context here
   ): Promise<void> {
     await this.ensureInitialized();
-    return this.auth.pollDeviceToken(device_code, interval, timeout);
+    await this.auth.pollDeviceToken(device_code, interval, timeout);
+
+    // After polling, tokens should be set in tokenClient
+    const tokens = this.tokenClient.getTokens();
+    if (!tokens) {
+      throw new ClientError(
+        'No tokens available after device token polling.',
+        'NO_TOKENS',
+      );
+    }
+
+    // Fetch user info
+    let userInfo: IUser | null = null;
+    try {
+      userInfo = await this.userInfoClient.getUserInfo();
+    } catch (error) {
+      this.logger.warn('Failed to fetch user info after device token polling', {
+        error,
+      });
+      // Proceed without user info
+    }
+
+    const sessionData: ISessionData = {
+      cookie: tokens,
+      user: userInfo || undefined,
+    };
+
+    if (context && this.sessionStore) {
+      // Store session data and receive `sid`
+      const sid = await this.sessionStore.set(sessionData, context);
+      this.logger.debug('Session data stored after device token polling', {
+        sid,
+      });
+
+      // Optionally start token refresh if enabled
+      if (this.config.session?.useSilentRenew && this.session) {
+        this.session.start(context);
+      }
+    }
   }
 
   /**
@@ -249,11 +406,28 @@ export class Client {
   }
 
   /**
-   * Clears all stored tokens.
+   * Clears all stored tokens and stops the session.
+   * @param context The store context containing the request and response.
    */
-  public async clearTokens(): Promise<void> {
+  public async clearTokens(context: IStoreContext): Promise<void> {
     await this.ensureInitialized();
     this.tokenClient.clearTokens();
+    if (this.session) {
+      await this.session.stop(context);
+      // Retrieve `sid` from cookies to destroy the session
+      if (context.request && context.response) {
+        const cookieHeader = context.request.headers['cookie'];
+        let sid: string | null = null;
+        if (cookieHeader && typeof cookieHeader === 'string') {
+          const cookies = parse(cookieHeader);
+          sid = cookies[this.config.session?.cookie?.name || 'sid'];
+        }
+        if (sid && this.sessionStore) {
+          await this.sessionStore.destroy(sid, context);
+          this.logger.debug('Session cleared and destroyed', { sid });
+        }
+      }
+    }
   }
 
   /**

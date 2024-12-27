@@ -1,21 +1,22 @@
-// src/clients/UserInfoClient.test.ts
+// src/classes/UserInfo.test.ts
 
 import { UserInfo } from './UserInfo';
 import {
   IUserInfo,
   IUser,
-  IHttp,
   ILogger,
   IToken,
   ClientMetadata,
 } from '../interfaces';
 import { ClientError } from '../errors/ClientError';
 
+// Mock the global fetch function
+global.fetch = jest.fn();
+
 describe('UserInfoClient', () => {
   let userInfoClient: IUserInfo;
   let mockTokenClient: jest.Mocked<IToken>;
   let mockDiscoveryConfig: Partial<ClientMetadata>;
-  let mockHttpClient: jest.Mocked<IHttp>;
   let mockLogger: jest.Mocked<ILogger>;
 
   const userInfoEndpoint = 'https://example.com/userinfo';
@@ -27,8 +28,11 @@ describe('UserInfoClient', () => {
   };
 
   beforeEach(() => {
+    // Reset all mocks before each test
     jest.resetAllMocks();
+    (global.fetch as jest.Mock).mockReset();
 
+    // Mock ILogger
     mockLogger = {
       debug: jest.fn(),
       info: jest.fn(),
@@ -37,6 +41,7 @@ describe('UserInfoClient', () => {
       setLogLevel: jest.fn(),
     };
 
+    // Mock IToken
     mockTokenClient = {
       getAccessToken: jest.fn(),
       refreshAccessToken: jest.fn(),
@@ -48,6 +53,7 @@ describe('UserInfoClient', () => {
       exchangeCodeForToken: jest.fn(),
     };
 
+    // Mock ClientMetadata
     mockDiscoveryConfig = {
       issuer: 'https://example.com/',
       authorization_endpoint: 'https://example.com/oauth2/authorize',
@@ -57,22 +63,10 @@ describe('UserInfoClient', () => {
       // Add other fields as necessary
     };
 
-    mockHttpClient = {
-      get: jest.fn(),
-      post: jest.fn(),
-      put: jest.fn(),
-      delete: jest.fn(),
-      patch: jest.fn(),
-      options: jest.fn(),
-      head: jest.fn(),
-      connect: jest.fn(),
-      trace: jest.fn(),
-    };
-
+    // Instantiate UserInfo without IHttp client
     userInfoClient = new UserInfo(
       mockTokenClient,
       mockDiscoveryConfig as ClientMetadata,
-      mockHttpClient,
       mockLogger,
     );
   });
@@ -81,15 +75,22 @@ describe('UserInfoClient', () => {
     it('should fetch user info successfully when access token is available', async () => {
       // Arrange
       mockTokenClient.getAccessToken.mockResolvedValue('valid-access-token');
-      mockHttpClient.get.mockResolvedValue(JSON.stringify(sampleUserInfo));
+
+      // Mock the fetch response
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        json: jest.fn().mockResolvedValue(sampleUserInfo),
+      });
 
       // Act
       const userInfo = await userInfoClient.getUserInfo();
 
       // Assert
       expect(mockTokenClient.getAccessToken).toHaveBeenCalledTimes(1);
-      expect(mockHttpClient.get).toHaveBeenCalledWith(userInfoEndpoint, {
-        Authorization: 'Bearer valid-access-token',
+      expect(global.fetch).toHaveBeenCalledWith(userInfoEndpoint, {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer valid-access-token',
+        },
       });
       expect(userInfo).toEqual(sampleUserInfo);
       expect(mockLogger.debug).toHaveBeenCalledWith(
@@ -111,14 +112,13 @@ describe('UserInfoClient', () => {
       mockTokenClient.getAccessToken.mockResolvedValue(null);
 
       // Act & Assert
-      await expect(userInfoClient.getUserInfo()).rejects.toThrow(ClientError);
       await expect(userInfoClient.getUserInfo()).rejects.toMatchObject({
         message: 'No valid access token available',
         code: 'NO_ACCESS_TOKEN',
       });
 
-      expect(mockTokenClient.getAccessToken).toHaveBeenCalledTimes(2); // Called twice due to two separate expect calls
-      expect(mockHttpClient.get).not.toHaveBeenCalled();
+      expect(mockTokenClient.getAccessToken).toHaveBeenCalledTimes(1);
+      expect(global.fetch).not.toHaveBeenCalled();
       expect(mockLogger.warn).toHaveBeenCalledWith(
         'No valid access token available when fetching user info',
       );
@@ -128,18 +128,20 @@ describe('UserInfoClient', () => {
       // Arrange
       mockTokenClient.getAccessToken.mockResolvedValue('valid-access-token');
       const mockError = new Error('Network Error');
-      mockHttpClient.get.mockRejectedValue(mockError);
+      (global.fetch as jest.Mock).mockRejectedValueOnce(mockError);
 
       // Act & Assert
-      await expect(userInfoClient.getUserInfo()).rejects.toThrow(ClientError);
       await expect(userInfoClient.getUserInfo()).rejects.toMatchObject({
         message: 'Failed to fetch user info',
         code: 'HTTP_GET_ERROR',
       });
 
-      expect(mockTokenClient.getAccessToken).toHaveBeenCalledTimes(2);
-      expect(mockHttpClient.get).toHaveBeenCalledWith(userInfoEndpoint, {
-        Authorization: 'Bearer valid-access-token',
+      expect(mockTokenClient.getAccessToken).toHaveBeenCalledTimes(1);
+      expect(global.fetch).toHaveBeenCalledWith(userInfoEndpoint, {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer valid-access-token',
+        },
       });
       expect(mockLogger.debug).toHaveBeenCalledWith(
         'Fetching user info from endpoint',
@@ -158,18 +160,26 @@ describe('UserInfoClient', () => {
     it('should throw ClientError with code "INVALID_JSON" if user info response is invalid JSON', async () => {
       // Arrange
       mockTokenClient.getAccessToken.mockResolvedValue('valid-access-token');
-      mockHttpClient.get.mockResolvedValue('invalid-json');
+
+      // Mock the fetch response to throw a SyntaxError when json() is called
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        json: jest
+          .fn()
+          .mockRejectedValue(new SyntaxError('Unexpected token i in JSON')),
+      });
 
       // Act & Assert
-      await expect(userInfoClient.getUserInfo()).rejects.toThrow(ClientError);
       await expect(userInfoClient.getUserInfo()).rejects.toMatchObject({
         message: 'Invalid JSON response from user info endpoint',
         code: 'INVALID_JSON',
       });
 
-      expect(mockTokenClient.getAccessToken).toHaveBeenCalledTimes(2);
-      expect(mockHttpClient.get).toHaveBeenCalledWith(userInfoEndpoint, {
-        Authorization: 'Bearer valid-access-token',
+      expect(mockTokenClient.getAccessToken).toHaveBeenCalledTimes(1);
+      expect(global.fetch).toHaveBeenCalledWith(userInfoEndpoint, {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer valid-access-token',
+        },
       });
       expect(mockLogger.debug).toHaveBeenCalledWith(
         'Fetching user info from endpoint',

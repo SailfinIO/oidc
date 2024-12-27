@@ -7,12 +7,16 @@ import {
   ResponseType,
   PkceMethod,
   ResponseMode,
-  StorageMechanism,
+  Storage,
   Scopes,
   Display,
   UILocales,
+  SameSite,
 } from '../enums';
 import { ILogger } from './ILogger';
+import { IStore } from './IStore';
+import { ISessionStore } from './ISessionStore';
+import { StoreOptions } from './StoreOptions';
 
 export interface IClientConfig {
   clientId: string; // Client ID
@@ -40,19 +44,44 @@ export interface IClientConfig {
   timeout?: number; // Network request timeout in ms
   retryAttempts?: number; // Number of retry attempts
 
-  /** Session Management */
+  /** Session Management Configuration */
   session?: {
+    /**
+     * Session Store Configuration
+     * Users can provide a custom session store or configure predefined session stores.
+     */
+    store?: ISessionStore; // Allow users to inject their own session store
+
+    /**
+     * Session Cookie Configuration
+     * Defines how the session ID cookie should be handled.
+     */
+    cookie?: {
+      name?: string; // Cookie name (e.g., 'sid')
+      secret?: string; // Secret for signing cookies if needed
+      secure?: boolean; // Ensures the browser only sends the cookie over HTTPS
+      httpOnly?: boolean; // Prevents JavaScript access to the cookie
+      sameSite?: SameSite; // CSRF protection
+      path?: string; // Cookie path
+      maxAge?: number; // Cookie expiration in seconds
+      domain?: string; // Cookie domain
+    };
+
     useSilentRenew?: boolean;
-    checkSessionIframeUrl?: string;
-    sessionCheckInterval?: number;
   };
 
   /** Storage Configuration */
   storage?: {
-    mechanism?: StorageMechanism;
-    prefix?: string;
+    /**
+     * Storage Mechanism
+     * Determines the type of storage to use (e.g., MEMORY, COOKIE).
+     */
+    mechanism?: Storage;
+    options?: StoreOptions; // Specific options based on the mechanism
+    store?: IStore; // Optional custom IStore for data storage
   };
 
+  /** Logger Configuration */
   logging?: {
     logLevel?: LogLevel;
     logger?: ILogger;

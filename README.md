@@ -20,6 +20,7 @@ This library is built for enterprise-grade TypeScript and Node.js applications, 
 
 ## Table of Contents
 
+- [Design Philosophy](#design-philosophy)
 - [Features](#features)
 - [Installation](#installation)
 - [Usage](#usage)
@@ -37,6 +38,10 @@ This library is built for enterprise-grade TypeScript and Node.js applications, 
 - [Contributing](#contributing)
 - [Support](#support)
 - [License](#license)
+
+## Design Philosophy
+
+To ensure a lightweight and dependency-free experience, `@sailfin/oidc` incorporates several internally built utility functions. These utilities handle complex operations such as DER encoding, key conversions, and asynchronous control flows without relying on external packages, providing a seamless and efficient integration for your applications. These utilities are designed to be modular and can be used independently in other projects, although they are primarily intended for internal use within the library and are not exposed as part of the public API. Feel free to explore the `src/utils` directory to learn more about these utilities.
 
 ## Features
 
@@ -66,25 +71,52 @@ yarn add @sailfin/oidc
 
 ### Basic Setup
 
-Here's an example of initializing and using the `OIDCClient`:
+Here's an example of initializing and using the `@sailfin/oidc` client:
 
 ```typescript
-import { Client, Scopes } from '@sailfin/oidc';
+import { Client, Scopes, GrantType, SameSite, Storage } from '@sailfin/oidc';
 
 const oidcClient = new Client({
   clientId: 'your-client-id',
+  clientSecret: 'your-client-secret',
   redirectUri: 'https://your-app/callback',
   discoveryUrl: 'https://issuer.com/.well-known/openid-configuration',
   scopes: [Scopes.OpenId, Scopes.Profile, Scopes.Email],
+  grantType: GrantType.AuthorizationCode,
+  logging: {
+    logLevel: 'info',
+  },
+  session: {
+    cookie: {
+      name: 'oidc-session',
+      secure: true,
+      httpOnly: true,
+      sameSite: SameSite.STRICT,
+      maxAge: 3600,
+    },
+    useSilentRenew: true,
+  },
+  storage: {
+    mechanism: Storage.MEMORY,
+    options: {
+      storage: { ttl: 3600 },
+    },
+  },
 });
 
 (async () => {
+  // Initialize the client
+  await oidcClient.getAuthorizationUrl();
+
   // Generate the authorization URL
   const { url, state } = await oidcClient.getAuthorizationUrl();
   console.log(`Visit this URL to authenticate: ${url}`);
 
   // Handle the redirect with the authorization code
-  await oidcClient.handleRedirect('auth-code', state);
+  await oidcClient.handleRedirect('auth-code', state, {
+    request: mockRequest,
+    response: mockResponse,
+  });
 
   // Fetch user info
   const userInfo = await oidcClient.getUserInfo();
@@ -147,17 +179,42 @@ oidcClient.setLogLevel('debug');
 
 ## Configuration Options
 
-Below are the required and optional parameters for initializing the `OIDCClient`:
+Below are the required and optional parameters for initializing the `Client`:
 
-| Parameter      | Type       | Required | Description                                        |
-| -------------- | ---------- | -------- | -------------------------------------------------- |
-| `clientId`     | `string`   | Yes      | Client ID registered with the OIDC provider.       |
-| `clientSecret` | `string`   | No       | Client secret (not needed for public clients).     |
-| `discoveryUrl` | `string`   | Yes      | URL to the OIDC provider's discovery endpoint.     |
-| `redirectUri`  | `string`   | Yes      | Redirect URI registered with the OIDC provider.    |
-| `scopes`       | `string[]` | Yes      | List of scopes for the OIDC flow (e.g., `openid`). |
-| `grantType`    | `string`   | No       | Grant type (default: `authorization_code`).        |
-| `logLevel`     | `string`   | No       | Logging level (`info`, `debug`, `warn`, `error`).  |
+| Parameter      | Type        | Required | Description                                        |
+| -------------- | ----------- | -------- | -------------------------------------------------- |
+| `clientId`     | `string`    | Yes      | Client ID registered with the OIDC provider.       |
+| `clientSecret` | `string`    | No       | Client secret (not needed for public clients).     |
+| `discoveryUrl` | `string`    | Yes      | URL to the OIDC provider's discovery endpoint.     |
+| `redirectUri`  | `string`    | Yes      | Redirect URI registered with the OIDC provider.    |
+| `scopes`       | `Scopes[]`  | Yes      | List of scopes for the OIDC flow (e.g., `openid`). |
+| `grantType`    | `GrantType` | No       | Grant type (default: `authorization_code`).        |
+| `logLevel`     | `LogLevel`  | No       | Logging level (`info`, `debug`, `warn`, `error`).  |
+
+`Scopes`, `GrantType`, and `LogLevel` are enums provided by the library. This is a non-exhaustive list of available values:
+
+```typescript
+enum Scopes {
+  OpenId = 'openid',
+  Profile = 'profile',
+  Email = 'email',
+}
+
+enum GrantType {
+  AuthorizationCode = 'authorization_code',
+  ClientCredentials = 'client_credentials',
+  DeviceCode = 'urn:ietf:params:oauth:grant-type:device_code',
+}
+
+enum LogLevel {
+  Info = 'info',
+  Debug = 'debug',
+  Warn = 'warn',
+  Error = 'error',
+}
+```
+
+**note** - The client accepts additonal options for customizing the OIDC flow, such as `responseType`, `responseMode`, `prompt`, `nonce`, and `state` etc. These options can be configured by adhereing to the `ICl
 
 ## API Reference
 

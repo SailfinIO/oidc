@@ -1,6 +1,6 @@
 {
   "name": "@sailfin/oidc",
-  "version": "0.0.5",
+  "version": "0.0.6-beta.1",
   "description": "An OIDC client for Node.js",
   "author": "Michael Curtis <michael@sailfin.io>",
   "readme": "README.md",
@@ -48,7 +48,9 @@
     "identity token management",
     "identity token federation",
     "typescript",
-    "nodejs"
+    "nodejs",
+    "session",
+    "session management"
   ],
   "scripts": {
     "build": "npm run clean && tsc -b tsconfig.build.json",
@@ -56,14 +58,13 @@
     "e2e-test": "jest --detectOpenHandles --forceExit --config jest.e2e.config.ts",
     "test:watch": "jest --watch --config jest.config.ts",
     "test:coverage": "jest --detectOpenHandles --forceExit --config jest.config.ts --coverage",
-    "start:dev": "nest start --watch",
     "lint": "eslint",
     "lint:fix": "eslint --fix",
     "format": "prettier --write \"src/**/*.ts\"",
     "prepublishOnly": "npm run lint && npm run test && npm run build",
     "prepare": "npm run build",
     "clean": "rimraf dist",
-    "doc": "typedoc"
+    "docs": "typedoc"
   },
   "peerDependencies": {
     "typescript": ">=4.0.0"

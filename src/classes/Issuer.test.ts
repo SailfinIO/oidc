@@ -1,13 +1,16 @@
-// src/clients/Issuer.test.ts
+// src/classes/Issuer.test.ts
 
 import { Issuer } from './Issuer';
-import { ILogger, ICache, IHttp, ClientMetadata, IIssuer } from '../interfaces';
+import { ILogger, ICache, ClientMetadata, IIssuer } from '../interfaces';
 import { ClientError } from '../errors/ClientError';
+import { Response } from 'node-fetch'; // Ensure you have node-fetch installed for the Response type
+
+// Mock the global fetch function
+global.fetch = jest.fn();
 
 describe('Issuer', () => {
   let issuer: IIssuer;
   let logger: ILogger;
-  let httpClient: IHttp;
   let cache: ICache<ClientMetadata>;
 
   const discoveryUrl = 'https://example.com/.well-known/openid-configuration';
@@ -23,6 +26,9 @@ describe('Issuer', () => {
     // Reset all mocks before each test
     jest.resetAllMocks();
 
+    // Reset the fetch mock
+    (global.fetch as jest.Mock).mockReset();
+
     // Mock ILogger
     logger = {
       debug: jest.fn(),
@@ -32,20 +38,7 @@ describe('Issuer', () => {
       setLogLevel: jest.fn(),
     };
 
-    // Mock IHttpClient
-    httpClient = {
-      get: jest.fn(),
-      post: jest.fn(),
-      put: jest.fn(),
-      patch: jest.fn(),
-      delete: jest.fn(),
-      options: jest.fn(),
-      head: jest.fn(),
-      connect: jest.fn(),
-      trace: jest.fn(),
-    };
-
-    // Mock ICache<IDiscoveryConfig>
+    // Mock ICache<ClientMetadata>
     cache = {
       get: jest.fn(),
       set: jest.fn(),
@@ -57,7 +50,7 @@ describe('Issuer', () => {
 
   describe('Constructor', () => {
     it('should initialize with provided dependencies', () => {
-      issuer = new Issuer(discoveryUrl, logger, httpClient, cache, 3600000);
+      issuer = new Issuer(discoveryUrl, logger, cache, 3600000);
       expect(issuer).toBeInstanceOf(Issuer);
     });
 
@@ -68,21 +61,27 @@ describe('Issuer', () => {
       );
     });
 
-    it('should use default HTTPClient and InMemoryCache if not provided', () => {
+    it('should use default Cache if not provided', () => {
       issuer = new Issuer(discoveryUrl, logger);
       expect(issuer).toBeInstanceOf(Issuer);
       // Further checks can be added if necessary
     });
   });
 
-  describe('getDiscoveryConfig', () => {
+  describe('discover', () => {
+    // Changed from 'getDiscoveryConfig' to 'discover' to match the method name
     it('should fetch config and cache it if cache is empty', async () => {
       (cache.get as jest.Mock).mockReturnValue(undefined);
-      (httpClient.get as jest.Mock).mockResolvedValue(
-        JSON.stringify(sampleConfig),
+
+      // Mock the fetch response
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        new Response(JSON.stringify(sampleConfig), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
       );
 
-      issuer = new Issuer(discoveryUrl, logger, httpClient, cache, 3600000);
+      issuer = new Issuer(discoveryUrl, logger, cache, 3600000);
 
       const config = await issuer.discover();
       expect(config).toStrictEqual(sampleConfig);
@@ -96,7 +95,7 @@ describe('Issuer', () => {
           discoveryUrl,
         },
       );
-      expect(httpClient.get).toHaveBeenCalledWith(discoveryUrl);
+      expect(global.fetch).toHaveBeenCalledWith(discoveryUrl);
       expect(cache.set).toHaveBeenCalledWith(
         'discoveryConfig',
         sampleConfig,
@@ -109,11 +108,16 @@ describe('Issuer', () => {
 
     it('should force refresh the config even if cached', async () => {
       (cache.get as jest.Mock).mockReturnValue(sampleConfig);
-      (httpClient.get as jest.Mock).mockResolvedValue(
-        JSON.stringify(sampleConfig),
+
+      // Mock the fetch response
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        new Response(JSON.stringify(sampleConfig), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
       );
 
-      issuer = new Issuer(discoveryUrl, logger, httpClient, cache, 3600000);
+      issuer = new Issuer(discoveryUrl, logger, cache, 3600000);
 
       const config = await issuer.discover(true);
       expect(config).toStrictEqual(sampleConfig); // Changed from toBe to toStrictEqual
@@ -124,7 +128,7 @@ describe('Issuer', () => {
       expect(logger.debug).toHaveBeenCalledWith(
         'Force refresh enabled. Fetching discovery config.',
       );
-      expect(httpClient.get).toHaveBeenCalledWith(discoveryUrl);
+      expect(global.fetch).toHaveBeenCalledWith(discoveryUrl);
       expect(cache.set).toHaveBeenCalledWith(
         'discoveryConfig',
         sampleConfig,
@@ -134,11 +138,16 @@ describe('Issuer', () => {
 
     it('should handle concurrent fetches gracefully', async () => {
       (cache.get as jest.Mock).mockReturnValue(undefined);
-      (httpClient.get as jest.Mock).mockResolvedValue(
-        JSON.stringify(sampleConfig),
+
+      // Mock the fetch response
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        new Response(JSON.stringify(sampleConfig), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
       );
 
-      issuer = new Issuer(discoveryUrl, logger, httpClient, cache, 3600000);
+      issuer = new Issuer(discoveryUrl, logger, cache, 3600000);
 
       // Initiate two simultaneous fetches
       const [config1, config2] = await Promise.all([
@@ -148,19 +157,19 @@ describe('Issuer', () => {
 
       expect(config1).toStrictEqual(sampleConfig); // Changed from toBe to toStrictEqual
       expect(config2).toStrictEqual(sampleConfig); // Changed from toBe to toStrictEqual
-      expect(httpClient.get).toHaveBeenCalledTimes(1);
+      expect(global.fetch).toHaveBeenCalledTimes(1);
       expect(cache.set).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('Error Handling', () => {
-    it('should throw ClientError if HTTPClient.get fails', async () => {
+    it('should throw ClientError if fetch fails', async () => {
       (cache.get as jest.Mock).mockReturnValue(undefined);
-      (httpClient.get as jest.Mock).mockRejectedValue(
+      (global.fetch as jest.Mock).mockRejectedValueOnce(
         new Error('Network failure'),
       );
 
-      issuer = new Issuer(discoveryUrl, logger, httpClient, cache, 3600000);
+      issuer = new Issuer(discoveryUrl, logger, cache, 3600000);
 
       await expect(issuer.discover()).rejects.toMatchObject({
         message: 'Unable to fetch discovery configuration',
@@ -179,9 +188,15 @@ describe('Issuer', () => {
 
     it('should throw ClientError if response is invalid JSON', async () => {
       (cache.get as jest.Mock).mockReturnValue(undefined);
-      (httpClient.get as jest.Mock).mockResolvedValue('invalid-json');
 
-      issuer = new Issuer(discoveryUrl, logger, httpClient, cache, 3600000);
+      // Mock the fetch response to throw a SyntaxError when json() is called
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        json: jest
+          .fn()
+          .mockRejectedValue(new SyntaxError('Unexpected token i in JSON')),
+      });
+
+      issuer = new Issuer(discoveryUrl, logger, cache, 3600000);
 
       await expect(issuer.discover()).rejects.toMatchObject({
         message: 'Unable to fetch discovery configuration',
@@ -203,11 +218,14 @@ describe('Issuer', () => {
       delete invalidConfig.issuer;
 
       (cache.get as jest.Mock).mockReturnValue(undefined);
-      (httpClient.get as jest.Mock).mockResolvedValue(
-        JSON.stringify(invalidConfig),
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        new Response(JSON.stringify(invalidConfig), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
       );
 
-      issuer = new Issuer(discoveryUrl, logger, httpClient, cache, 3600000);
+      issuer = new Issuer(discoveryUrl, logger, cache, 3600000);
 
       await expect(issuer.discover()).rejects.toMatchObject({
         message: 'Invalid discovery configuration: Missing or invalid issuer.',
@@ -228,11 +246,14 @@ describe('Issuer', () => {
       delete invalidConfig.jwks_uri;
 
       (cache.get as jest.Mock).mockReturnValue(undefined);
-      (httpClient.get as jest.Mock).mockResolvedValue(
-        JSON.stringify(invalidConfig),
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        new Response(JSON.stringify(invalidConfig), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
       );
 
-      issuer = new Issuer(discoveryUrl, logger, httpClient, cache, 3600000);
+      issuer = new Issuer(discoveryUrl, logger, cache, 3600000);
 
       await expect(issuer.discover()).rejects.toMatchObject({
         message:

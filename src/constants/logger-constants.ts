@@ -1,13 +1,13 @@
-// src/utils/ColorCodes.ts
+// src/utils/COLOR_CODES.ts
 
-import { LabelSelector } from '../types';
+import { KeyValueMap } from '../types';
 import { LogLevel } from '../enums';
 
 /**
  * ANSI color codes for log levels, used to style console log output.
  * Each log level is associated with a specific color for improved readability.
  */
-export const ColorCodes: LabelSelector = {
+export const COLOR_CODES: KeyValueMap = {
   /**
    * Red color code for error messages, indicating critical issues.
    */
@@ -43,4 +43,4 @@ export const ColorCodes: LabelSelector = {
  * ANSI reset code to clear formatting and return to the default console color.
  * Used after each colored message to prevent color bleed.
  */
-export const ResetCode = '\x1b[0m';
+export const RESET_CODE = '\x1b[0m';

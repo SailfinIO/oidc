@@ -1,14 +1,12 @@
-// src/clients/Issuer.ts
+// src/classes/Issuer.ts
 
-import { IHttp, ICache, IIssuer, ILogger, ClientMetadata } from '../interfaces';
+import { ICache, IIssuer, ILogger, ClientMetadata } from '../interfaces';
 import { ClientError } from '../errors/ClientError';
-import { Http } from './Http';
-import { InMemoryCache } from '../cache/InMemoryCache';
+import { Cache } from '../cache/Cache';
 
 export class Issuer implements IIssuer {
   private readonly discoveryUrl: string;
   private readonly logger: ILogger;
-  private readonly httpClient: IHttp;
   private readonly cache: ICache<ClientMetadata>;
   private readonly cacheKey: string = 'discoveryConfig';
   private readonly cacheTtl: number;
@@ -17,7 +15,6 @@ export class Issuer implements IIssuer {
   constructor(
     discoveryUrl: string,
     logger: ILogger,
-    httpClient?: IHttp,
     cache?: ICache<ClientMetadata>,
     cacheTtl: number = 3600000, // 1 hour default
   ) {
@@ -30,9 +27,7 @@ export class Issuer implements IIssuer {
 
     this.discoveryUrl = discoveryUrl;
     this.logger = logger;
-    this.httpClient = httpClient ?? new Http(this.logger);
-    this.cache =
-      cache ?? new InMemoryCache<ClientMetadata>(this.logger, cacheTtl);
+    this.cache = cache ?? new Cache<ClientMetadata>(this.logger, cacheTtl);
     this.cacheTtl = cacheTtl;
   }
 
@@ -90,8 +85,8 @@ export class Issuer implements IIssuer {
     });
 
     try {
-      const response = await this.httpClient.get(this.discoveryUrl);
-      const config: ClientMetadata = JSON.parse(response);
+      const response = await fetch(this.discoveryUrl);
+      const config: ClientMetadata = await response.json();
       this.validateDiscoveryMetadata(config);
 
       this.cache.set(this.cacheKey, config, this.cacheTtl);

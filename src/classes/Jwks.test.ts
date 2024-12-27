@@ -1,16 +1,32 @@
-// src/clients/Jwks.test.ts
+// src/classes/Jwks.test.ts
+
 import { Jwks } from './Jwks'; // Adjust the import path as necessary
-import { ILogger, ICache, IHttp, Jwk, JwksResponse } from '../interfaces';
+import { ILogger, ICache, Jwk, JwksResponse } from '../interfaces';
 import { ClientError } from '../errors/ClientError';
+
+// Helper to mock successful fetch responses
+const mockFetchSuccess = (data: any, status: number = 200) => ({
+  ok: status >= 200 && status < 300,
+  status,
+  json: jest.fn().mockResolvedValue(data),
+});
+
+// Helper to mock failed fetch responses
+const mockFetchFailure = (error: any) => ({
+  ok: false,
+  status: 500,
+  json: jest.fn().mockResolvedValue({ error: error.message }),
+});
+
+global.fetch = jest.fn();
 
 describe('Jwks', () => {
   let client: Jwks;
   let logger: ILogger;
   let cache: ICache<Jwk[]>;
-  let httpClient: IHttp;
 
   const jwksUri = 'https://example.com/.well-known/jwks.json';
-  const sampleJWKS = {
+  const sampleJWKS: JwksResponse = {
     keys: [
       {
         kid: 'key1',
@@ -48,29 +64,21 @@ describe('Jwks', () => {
       size: jest.fn(),
     };
 
-    httpClient = {
-      get: jest.fn(),
-      post: jest.fn(),
-      put: jest.fn(),
-      patch: jest.fn(),
-      delete: jest.fn(),
-      options: jest.fn(),
-      head: jest.fn(),
-      connect: jest.fn(),
-      trace: jest.fn(),
-    };
+    // Default mock for fetch to resolve with sampleJWKS
+    (global.fetch as jest.Mock).mockResolvedValue(mockFetchSuccess(sampleJWKS));
 
-    // Default mock for httpClient.get to resolve with sampleJWKS
-    (httpClient.get as jest.Mock).mockResolvedValue(JSON.stringify(sampleJWKS));
+    client = new Jwks(jwksUri, logger, cache, 3600000);
+  });
 
-    client = new Jwks(jwksUri, logger, httpClient, cache, 3600000);
+  afterEach(() => {
+    jest.clearAllMocks();
+    (global.fetch as jest.Mock).mockReset();
   });
 
   describe('Constructor', () => {
     it('should initialize with provided dependencies', () => {
       expect(client).toBeInstanceOf(Jwks);
       expect(logger).toBeDefined();
-      expect(httpClient).toBeDefined();
       expect(cache).toBeDefined();
     });
 
@@ -79,7 +87,7 @@ describe('Jwks', () => {
       expect(() => new Jwks('', logger)).toThrow('Invalid JWKS URI provided');
     });
 
-    it('should use default HTTPClient and cache if not provided', () => {
+    it('should use default cache if not provided', () => {
       const newClient = new Jwks(jwksUri, logger);
       expect(newClient).toBeInstanceOf(Jwks);
       // Further checks can be added to ensure defaults are used
@@ -87,9 +95,10 @@ describe('Jwks', () => {
   });
 
   describe('getKey', () => {
-    const kid = 'test-kid';
+    const kid = 'key1';
     const jwk: Jwk = { kid, kty: 'RSA', n: '...', e: 'AQAB' } as Jwk;
-    const jwksResponse: JwksResponse = { keys: [jwk] };
+    const jwksResponseWithKey: JwksResponse = { keys: [jwk] };
+    const jwksResponseEmpty: JwksResponse = { keys: [] };
 
     it('should throw ClientError if kid is not provided', async () => {
       await expect(client.getKey('')).rejects.toThrow(ClientError);
@@ -109,10 +118,10 @@ describe('Jwks', () => {
     it('should fetch JWKS and update cache if cache is empty', async () => {
       (cache.get as jest.Mock)
         .mockReturnValueOnce(undefined) // Initial cache miss
-        .mockReturnValueOnce(jwksResponse.keys); // After refresh
+        .mockReturnValueOnce(jwksResponseWithKey.keys); // After refresh
 
-      (httpClient.get as jest.Mock).mockResolvedValueOnce(
-        JSON.stringify(jwksResponse),
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        mockFetchSuccess(jwksResponseWithKey),
       );
 
       const result = await client.getKey(kid);
@@ -123,21 +132,21 @@ describe('Jwks', () => {
       expect(logger.debug).toHaveBeenCalledWith('Fetching JWKS from URI', {
         jwksUri,
       });
-      expect(httpClient.get).toHaveBeenCalledWith(jwksUri);
+      expect(global.fetch).toHaveBeenCalledWith(jwksUri);
       expect(cache.set).toHaveBeenCalledWith(
         'jwks',
-        jwksResponse.keys,
+        jwksResponseWithKey.keys,
         3600000,
       );
       expect(logger.debug).toHaveBeenCalledWith('JWKS cache refreshed', {
-        numberOfKeys: jwksResponse.keys.length,
+        numberOfKeys: jwksResponseWithKey.keys.length,
       });
       expect(result).toBe(jwk);
     });
 
     it('should throw ClientError if JWKS fetch fails', async () => {
       (cache.get as jest.Mock).mockReturnValue(undefined);
-      (httpClient.get as jest.Mock).mockRejectedValue(
+      (global.fetch as jest.Mock).mockRejectedValueOnce(
         new Error('Network error'),
       );
 
@@ -152,18 +161,13 @@ describe('Jwks', () => {
 
     it('should throw ClientError if JWKS cache is empty after refresh', async () => {
       // Simulate refreshCache fetching successfully but setting an empty keys array
-      const emptyJwksResponse: JwksResponse = { keys: [] };
-
-      // First call: Initial cache miss
-      // Second call: After first refresh, returns empty array
-      // Third call: After second refresh, still returns empty array
       (cache.get as jest.Mock)
         .mockReturnValueOnce(undefined) // Initial cache miss
-        .mockReturnValueOnce(emptyJwksResponse.keys) // After first refresh
-        .mockReturnValueOnce(emptyJwksResponse.keys); // After second refresh
+        .mockReturnValueOnce(jwksResponseEmpty.keys) // After first refresh
+        .mockReturnValueOnce(jwksResponseEmpty.keys); // After second refresh
 
-      (httpClient.get as jest.Mock).mockResolvedValueOnce(
-        JSON.stringify(emptyJwksResponse),
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        mockFetchSuccess(jwksResponseEmpty),
       );
 
       await expect(client.getKey(kid)).rejects.toMatchObject({
@@ -177,18 +181,13 @@ describe('Jwks', () => {
     });
 
     it('should throw ClientError if key not found after refresh', async () => {
-      const missingJwksResponse: JwksResponse = { keys: [] };
-
-      // First call: Initial cache miss
-      // Second call: After first refresh, returns empty array
-      // Third call: After second refresh, still returns empty array
       (cache.get as jest.Mock)
         .mockReturnValueOnce(undefined) // Initial cache miss
-        .mockReturnValueOnce(missingJwksResponse.keys) // After first refresh
-        .mockReturnValueOnce(missingJwksResponse.keys); // After second refresh
+        .mockReturnValueOnce(jwksResponseEmpty.keys) // After first refresh
+        .mockReturnValueOnce(jwksResponseEmpty.keys); // After second refresh
 
-      (httpClient.get as jest.Mock).mockResolvedValueOnce(
-        JSON.stringify(missingJwksResponse),
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        mockFetchSuccess(jwksResponseEmpty),
       );
 
       await expect(client.getKey(kid)).rejects.toMatchObject({
@@ -203,11 +202,11 @@ describe('Jwks', () => {
     it('should handle concurrent getKey calls without multiple fetches', async () => {
       (cache.get as jest.Mock)
         .mockReturnValueOnce(undefined) // Initial cache miss
-        .mockReturnValueOnce([jwk]) // After first refresh
-        .mockReturnValueOnce([jwk]); // After second refresh for concurrent calls
+        .mockReturnValueOnce(jwksResponseWithKey.keys) // After first refresh
+        .mockReturnValueOnce(jwksResponseWithKey.keys); // After second refresh for concurrent calls
 
-      (httpClient.get as jest.Mock).mockResolvedValueOnce(
-        JSON.stringify(jwksResponse),
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        mockFetchSuccess(jwksResponseWithKey),
       );
 
       const promise1 = client.getKey(kid);
@@ -215,7 +214,7 @@ describe('Jwks', () => {
 
       const [result1, result2] = await Promise.all([promise1, promise2]);
 
-      expect(httpClient.get).toHaveBeenCalledTimes(1);
+      expect(global.fetch).toHaveBeenCalledTimes(1);
       expect(cache.get).toHaveBeenCalledTimes(3);
       expect(cache.get).toHaveBeenNthCalledWith(1, 'jwks');
       expect(cache.get).toHaveBeenNthCalledWith(2, 'jwks');
@@ -227,7 +226,7 @@ describe('Jwks', () => {
 
   describe('refreshCache', () => {
     const jwk: Jwk = {
-      kid: 'test-kid',
+      kid: 'key1',
       kty: 'RSA',
       n: '...',
       e: 'AQAB',
@@ -235,8 +234,8 @@ describe('Jwks', () => {
     const jwksResponse: JwksResponse = { keys: [jwk] };
 
     it('should fetch JWKS and update cache', async () => {
-      (httpClient.get as jest.Mock).mockResolvedValueOnce(
-        JSON.stringify(jwksResponse),
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        mockFetchSuccess(jwksResponse),
       );
 
       await (client as any).refreshCache();
@@ -244,7 +243,7 @@ describe('Jwks', () => {
       expect(logger.debug).toHaveBeenCalledWith('Fetching JWKS from URI', {
         jwksUri,
       });
-      expect(httpClient.get).toHaveBeenCalledWith(jwksUri);
+      expect(global.fetch).toHaveBeenCalledWith(jwksUri);
       expect(cache.set).toHaveBeenCalledWith(
         'jwks',
         jwksResponse.keys,
@@ -256,7 +255,7 @@ describe('Jwks', () => {
     });
 
     it('should throw ClientError if HTTPClient.get fails', async () => {
-      (httpClient.get as jest.Mock).mockRejectedValueOnce(
+      (global.fetch as jest.Mock).mockRejectedValueOnce(
         new Error('Network failure'),
       );
 
@@ -270,7 +269,12 @@ describe('Jwks', () => {
     });
 
     it('should throw ClientError if JWKS response is invalid JSON', async () => {
-      (httpClient.get as jest.Mock).mockResolvedValueOnce('invalid-json');
+      // Mock fetch to return invalid JSON
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: jest.fn().mockRejectedValueOnce(new Error('Invalid JSON')),
+      });
 
       await expect((client as any).refreshCache()).rejects.toMatchObject({
         message: 'Invalid JWKS response format',
@@ -284,8 +288,8 @@ describe('Jwks', () => {
 
     it('should throw ClientError if JWKS response does not contain keys array', async () => {
       const invalidJwksResponse = { notKeys: [] };
-      (httpClient.get as jest.Mock).mockResolvedValueOnce(
-        JSON.stringify(invalidJwksResponse),
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        mockFetchSuccess(invalidJwksResponse),
       );
 
       await expect((client as any).refreshCache()).rejects.toMatchObject({

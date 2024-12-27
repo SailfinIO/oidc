@@ -1,9 +1,8 @@
-// src/clients/UserInfo.ts
+// src/classes/UserInfo.ts
 
 import {
   IUserInfo,
   IUser,
-  IHttp,
   ILogger,
   IToken,
   ClientMetadata,
@@ -13,7 +12,6 @@ import { ClientError } from '../errors/ClientError';
 export class UserInfo implements IUserInfo {
   private readonly tokenClient: IToken;
   private readonly client: ClientMetadata;
-  private readonly httpClient: IHttp;
   private readonly logger: ILogger;
 
   /**
@@ -21,18 +19,11 @@ export class UserInfo implements IUserInfo {
    *
    * @param {IToken} tokenClient - The token client to retrieve access tokens.
    * @param {ClientMetadata} client - The discovery configuration containing the userinfo endpoint.
-   * @param {IHttp} httpClient - The HTTP client for making requests.
    * @param {ILogger} logger - Logger instance for logging operations and errors.
    */
-  constructor(
-    tokenClient: IToken,
-    client: ClientMetadata,
-    httpClient: IHttp,
-    logger: ILogger,
-  ) {
+  constructor(tokenClient: IToken, client: ClientMetadata, logger: ILogger) {
     this.tokenClient = tokenClient;
     this.client = client;
-    this.httpClient = httpClient;
     this.logger = logger;
   }
 
@@ -62,10 +53,13 @@ export class UserInfo implements IUserInfo {
     this.logger.debug('Fetching user info from endpoint', { userInfoEndpoint });
 
     try {
-      const response = await this.httpClient.get(userInfoEndpoint, headers);
+      const response = await fetch(userInfoEndpoint, {
+        method: 'GET',
+        headers,
+      });
       let userInfo: IUser;
       try {
-        userInfo = JSON.parse(response);
+        userInfo = await response.json();
       } catch (parseError) {
         this.logger.error('Invalid JSON response from user info endpoint', {
           error: parseError,

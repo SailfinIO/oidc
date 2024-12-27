@@ -40,12 +40,21 @@ jobs:
       - name: Build the package
         run: npm run build
 
+      - name: Generate TypeDoc Documentation
+        run: npm run docs
+
       - name: Upload coverage report to workspace
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: coverage
           path: coverage/lcov.info
+
+      - name: Upload TypeDoc to Pages Artifact
+        if: success()
+        uses: actions/upload-pages-artifact@v1
+        with:
+          path: docs
 
   sonarcloud:
     name: SonarCloud
@@ -54,16 +63,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Shallow clones should be disabled for a better relevancy of analysis
+          fetch-depth: 0
       - name: Download coverage report from workspace
         uses: actions/download-artifact@v4
         with:
           name: coverage
           path: coverage
       - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@master
+        uses: SonarSource/sonarcloud-github-action@v4
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Needed to get PR information, if any
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
           args: >
@@ -96,3 +105,31 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  deploy:
+    name: Deploy Documentation to GitHub Pages
+    needs: [ci, release]
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    if: ${{ github.ref == 'refs/heads/main' }}
+
+    steps:
+      - name: Checkout the code
+        uses: actions/checkout@v4
+
+      - name: Download TypeDoc Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docs
+          path: docs
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

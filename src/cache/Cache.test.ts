@@ -1,8 +1,8 @@
-import { InMemoryCache } from './InMemoryCache';
+import { Cache } from './Cache';
 import { ClientError } from '../errors/ClientError';
 
-describe('InMemoryCache', () => {
-  let cache: InMemoryCache<string>;
+describe('Cache', () => {
+  let cache: Cache<string>;
   let mockLogger: any;
 
   beforeEach(() => {
@@ -10,7 +10,7 @@ describe('InMemoryCache', () => {
       debug: jest.fn(),
       error: jest.fn(),
     };
-    cache = new InMemoryCache<string>(mockLogger, 1000); // 1 second TTL for testing
+    cache = new Cache<string>(mockLogger, 1000); // 1 second TTL for testing
   });
 
   test('should set and get a value', () => {
@@ -46,6 +46,13 @@ describe('InMemoryCache', () => {
     );
   });
 
+  test('should return false for non-existent key', () => {
+    cache.delete('unknown');
+    expect(mockLogger.debug).toHaveBeenCalledWith(
+      'Attempted to delete non-existent key: unknown',
+    );
+  });
+
   test('should throw ClientError for invalid key', () => {
     expect(() => cache.set('', 'value')).toThrow(ClientError);
     expect(mockLogger.error).toHaveBeenCalledWith('Invalid key provided: ""');
@@ -69,5 +76,16 @@ describe('InMemoryCache', () => {
     cache.clear();
     expect(cache.size()).toBe(0);
     expect(mockLogger.debug).toHaveBeenCalledWith('Cleared all cache entries.');
+  });
+
+  test('should throw ClientError for clear error', () => {
+    const error = new Error('Test error');
+    (cache as any).store.clear = jest.fn(() => {
+      throw error;
+    });
+    expect(() => cache.clear()).toThrow(ClientError);
+    expect(mockLogger.error).toHaveBeenCalledWith('Failed to clear cache.', {
+      error,
+    });
   });
 });
