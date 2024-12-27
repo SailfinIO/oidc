@@ -1,3 +1,11 @@
+## [0.0.9-beta.2](https://github.com/SailfinIO/oidc/compare/v0.0.9-beta.1...v0.0.9-beta.2) (2024-12-27)
+
+### Bug Fixes
+
+* auth tests ([2a84a90](https://github.com/SailfinIO/oidc/commit/2a84a90570830b17981844408e24e87369c2c87f))
+* code smells ([2431889](https://github.com/SailfinIO/oidc/commit/2431889d7ab1b61ebafd6046874a365d03d1a546))
+* coverage for quality gate ([4e78493](https://github.com/SailfinIO/oidc/commit/4e78493a78fe909f3d1bdfbfa37933e72ce1df9f))
+
 ## [0.0.9-beta.1](https://github.com/SailfinIO/oidc/compare/v0.0.8...v0.0.9-beta.1) (2024-12-27)
 
 ### Bug Fixes
