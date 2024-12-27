@@ -74,7 +74,14 @@ yarn add @sailfin/oidc
 Here's an example of initializing and using the `@sailfin/oidc` client:
 
 ```typescript
-import { Client, Scopes, GrantType, SameSite, Storage } from '@sailfin/oidc';
+import {
+  Client,
+  Scopes,
+  GrantType,
+  SameSite,
+  Storage,
+  LogLevel,
+} from '@sailfin/oidc';
 
 const oidcClient = new Client({
   clientId: 'your-client-id',
@@ -84,11 +91,11 @@ const oidcClient = new Client({
   scopes: [Scopes.OpenId, Scopes.Profile, Scopes.Email],
   grantType: GrantType.AuthorizationCode,
   logging: {
-    logLevel: 'info',
+    logLevel: LogLevel.INFO,
   },
   session: {
     cookie: {
-      name: 'oidc-session',
+      name: 'oidc:login.example.com',
       secure: true,
       httpOnly: true,
       sameSite: SameSite.STRICT,
