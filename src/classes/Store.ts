@@ -1,59 +1,58 @@
-// src/classes/Store.ts
-
 import { ILogger } from '../interfaces/ILogger';
-import { IStore } from '../interfaces/IStore';
 import { ISessionStore } from '../interfaces/ISessionStore';
 import { MemoryStore } from './MemoryStore';
 import { CookieStore } from './CookieStore';
-import { Storage } from '../enums';
+import { StorageMechanism } from '../enums';
 import { StoreOptions } from '../interfaces';
+import { SessionStore } from './SessionStore';
 
 export interface StoreInstances {
-  store: IStore;
   sessionStore: ISessionStore | null;
 }
 
 export class Store {
   /**
-   * Creates store instances based on the specified storage mechanism.
-   * Returns both `IStore` and `ISessionStore` if applicable.
+   * Creates a session store instance based on the specified storage mechanism.
+   * Returns an object with the `sessionStore` property.
    *
-   * @param storageType The type of storage mechanism.
-   * @param options Configuration options for the store.
-   * @param logger Optional logger.
-   * @returns An object containing both `IStore` and `ISessionStore` instances.
+   * @param storageType The type of storage mechanism (MEMORY or COOKIE).
+   * @param options     Configuration options for the store.
+   * @param logger      Optional logger.
+   * @returns           An object containing `sessionStore`.
    */
   public static create(
-    storageType: Storage,
+    storageType: StorageMechanism,
     options?: StoreOptions,
     logger?: ILogger,
   ): StoreInstances {
-    let store: IStore;
-    let sessionStore: ISessionStore | null = null;
+    // 1) If the user provides a custom session store, use it directly.
+    if (options?.session?.store) {
+      return { sessionStore: options.session.store };
+    }
+
+    const DEFAULT_TTL = 3600000; // 1 hour
 
     switch (storageType) {
-      case Storage.COOKIE: {
-        // Create an internal IStore for CookieStore to use
-        const internalStore =
-          options?.session?.store ||
-          new MemoryStore(logger, options?.storage?.ttl);
-        sessionStore = new CookieStore(
+      case StorageMechanism.COOKIE: {
+        const ttl = options?.storage?.ttl ?? DEFAULT_TTL;
+        const internalStore = new MemoryStore(logger, ttl);
+        const sessionStore = new CookieStore(
           options?.session?.cookie?.name,
           options?.session?.cookie?.options,
           internalStore,
         );
-        store = internalStore;
-        break;
+        return { sessionStore };
       }
-      case Storage.MEMORY: {
-        store = new MemoryStore(logger, options?.storage?.ttl);
-        break;
-      }
-      default: {
-        throw new Error(`Unsupported storage type: ${storageType}`);
-      }
-    }
 
-    return { store, sessionStore };
+      case StorageMechanism.MEMORY: {
+        // Explicitly pass the default TTL so we call the constructor as the test expects
+        const ttl = options?.storage?.ttl ?? DEFAULT_TTL;
+        const sessionStore = new SessionStore(logger, ttl);
+        return { sessionStore };
+      }
+
+      default:
+        throw new Error(`Unsupported storage type: ${storageType}`);
+    }
   }
 }
