@@ -514,8 +514,9 @@ export class Auth implements IAuth {
     const client: ClientMetadata = await this.issuer.discover();
     const tokenEndpoint = client.token_endpoint;
     const startTime = Date.now();
+    let currentInterval = interval;
 
-    while (true) {
+    const pollLoop = async (): Promise<void> => {
       if (timeout && Date.now() - startTime > timeout) {
         const timeoutError = new ClientError(
           'Device code polling timed out',
@@ -548,9 +549,13 @@ export class Auth implements IAuth {
         this.logger.info('Device authorized and tokens obtained');
         return;
       } catch (error: any) {
-        interval = await this.handlePollingError(error, interval);
+        currentInterval = await this.handlePollingError(error, currentInterval);
+        await sleep(currentInterval * 1000);
+        return pollLoop();
       }
-    }
+    };
+
+    await pollLoop();
   }
 
   /**

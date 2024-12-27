@@ -275,6 +275,52 @@ describe('Auth', () => {
             });
           });
 
+          it('should log warnings when error response is invalid JSON and throw TOKEN_POLLING_ERROR', async () => {
+            const device_code = 'device-code';
+            const interval = 1; // seconds
+            const timeout = 3000; // 3 seconds
+
+            // Mock fetch to throw an error with invalid JSON in context.body
+            const invalidJsonError = Object.assign(new Error('Invalid JSON'), {
+              context: { body: 'invalid-json' },
+            });
+            (global.fetch as jest.Mock).mockRejectedValueOnce(invalidJsonError);
+
+            // Initiate the polling
+            const pollPromise = auth.pollDeviceToken(
+              device_code,
+              interval,
+              timeout,
+            );
+
+            // Since handlePollingError throws immediately, no need to advance timers
+            await expect(pollPromise).rejects.toThrow(
+              'Device token polling failed',
+            );
+
+            // Verify that the logger.warn was called with a SyntaxError
+            expect(mockLogger.warn).toHaveBeenCalledWith(
+              'Failed to parse error response as JSON',
+              expect.objectContaining({
+                originalError: expect.any(SyntaxError),
+              }),
+            );
+
+            // Verify that the logger.warn was called with the response body
+            expect(mockLogger.warn).toHaveBeenCalledWith(
+              'Error response from token endpoint',
+              { response: 'invalid-json' },
+            );
+
+            // Verify that the logger.error was called with 'Device token polling failed'
+            expect(mockLogger.error).toHaveBeenCalledWith(
+              'Device token polling failed',
+              {
+                originalError: invalidJsonError,
+              },
+            );
+          });
+
           describe('handlePollingError coverage', () => {
             beforeEach(() => {
               jest.useFakeTimers();
@@ -430,6 +476,58 @@ describe('Auth', () => {
                 'Device token polling failed',
                 { originalError: unexpectedError },
               );
+            });
+
+            it('should throw ClientError when polling times out', async () => {
+              const device_code = 'device-code';
+              const interval = 1; // seconds
+              const timeout = 3000; // 3 seconds
+
+              // Mock fetch to always return 'authorization_pending'
+              const pendingError = Object.assign(
+                new Error('authorization_pending'),
+                {
+                  context: {
+                    body: JSON.stringify({ error: 'authorization_pending' }),
+                  },
+                },
+              );
+              (global.fetch as jest.Mock).mockRejectedValue(pendingError);
+
+              const pollPromise = auth.pollDeviceToken(
+                device_code,
+                interval,
+                timeout,
+              );
+
+              // Simulate the passage of time by advancing timers
+              for (let i = 0; i < 4; i++) {
+                // 4 intervals * 1s = 4s > 3s
+                await Promise.resolve(); // Allow any pending promises to resolve
+                jest.advanceTimersByTime(interval * 1000); // Advance time by interval
+                await Promise.resolve(); // Allow any pending promises to resolve
+              }
+
+              await expect(pollPromise).rejects.toThrow(
+                'Device code polling timed out',
+              );
+
+              // Verify that the logger.error was called with the correct message and error
+              expect(mockLogger.error).toHaveBeenCalledWith(
+                'Device token polling timed out',
+                {
+                  error: expect.any(ClientError),
+                },
+              );
+
+              // Optionally, verify that the correct ClientError was thrown
+              try {
+                await pollPromise;
+              } catch (error) {
+                expect(error).toBeInstanceOf(ClientError);
+                expect(error.message).toBe('Device code polling timed out');
+                expect(error.code).toBe('TIMEOUT_ERROR');
+              }
             });
 
             it('should successfully obtain tokens when polling succeeds', async () => {
