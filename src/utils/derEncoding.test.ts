@@ -32,6 +32,11 @@ describe('DER Encoding Utilities', () => {
       expect(buf).toEqual(Buffer.from([0x82, 0x01, 0x2c]));
     });
 
+    it('should throw a RangeError if the length is negative', () => {
+      expect(() => encodeLength(-1)).toThrow(RangeError);
+      expect(() => encodeLength(-1)).toThrow('Length cannot be negative');
+    });
+
     it('should handle very large lengths correctly', () => {
       const largeLength = 65535; // 0xFFFF
       const buf = encodeLength(largeLength);

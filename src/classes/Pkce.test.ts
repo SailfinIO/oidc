@@ -71,4 +71,22 @@ describe('Pkce', () => {
     expect(codeVerifier).toBeDefined();
     expect(codeChallenge).toBeDefined();
   });
+
+  it('should throw ClientError if an unsupported PKCE method is specified', () => {
+    const validConfig: Partial<IClientConfig> = {
+      pkce: true,
+      pkceMethod: PkceMethod.S256, // Start with a valid method
+    };
+
+    const pkceService = new Pkce(validConfig as IClientConfig);
+
+    // Dynamically set an unsupported method to bypass constructor validation
+    // @ts-ignore - bypassing TypeScript checks for testing purposes
+    pkceService['config'].pkceMethod = 'unsupported_method';
+
+    expect(() => pkceService.generatePkce()).toThrow(ClientError);
+    expect(() => pkceService.generatePkce()).toThrow(
+      'Unsupported PKCE method: unsupported_method',
+    );
+  });
 });

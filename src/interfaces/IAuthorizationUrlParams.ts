@@ -6,6 +6,8 @@
  * @module src/interfaces/IAuthorizationUrlParams
  */
 
+import { ResponseMode } from '../enums';
+
 /**
  * Represents the parameters required to construct an authorization URL.
  *
@@ -152,5 +154,7 @@ export interface IAuthorizationUrlParams {
    * const params: IAuthorizationUrlParams = { responseMode: 'fragment' };
    * ```
    */
-  responseMode?: 'query' | 'fragment' | 'form_post';
+  responseMode?: ResponseMode;
+
+  acrValues?: string | string[];
 }

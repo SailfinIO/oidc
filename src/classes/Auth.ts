@@ -38,6 +38,7 @@ export class Auth implements IAuth {
   private readonly state: IState;
 
   private codeVerifier: string | null = null;
+  private clientMetadata: ClientMetadata | null = null;
 
   constructor(
     config: IClientConfig,
@@ -55,6 +56,13 @@ export class Auth implements IAuth {
     this.state = new State();
   }
 
+  private async getClientMetadata(): Promise<ClientMetadata> {
+    if (this.clientMetadata === null) {
+      this.clientMetadata = await this.issuer.discover();
+    }
+    return this.clientMetadata;
+  }
+
   /**
    * Generates the authorization URL to initiate the OAuth2/OIDC flow.
    * Generates and stores state and nonce internally.
@@ -67,7 +75,20 @@ export class Auth implements IAuth {
     // Store state -> nonce mapping
     this.state.addState(state, nonce);
 
-    const { url, codeVerifier } = await this.generateAuthUrl(state, nonce);
+    // 1) Build up any extra query params to pass
+    const additionalParams: Record<string, string> = {};
+
+    // If user has set uiLocales in config, convert array -> space-delimited string
+    if (this.config.uiLocales && this.config.uiLocales.length > 0) {
+      additionalParams.ui_locales = this.config.uiLocales.join(' ');
+    }
+
+    // 2) Pass these extraParams into generateAuthUrl
+    const { url, codeVerifier } = await this.generateAuthUrl(
+      state,
+      nonce,
+      additionalParams,
+    );
 
     if (codeVerifier) {
       this.codeVerifier = codeVerifier;
@@ -85,71 +106,149 @@ export class Auth implements IAuth {
   private async generateAuthUrl(
     state: string,
     nonce?: string,
+    extraParams?: Record<string, string>,
   ): Promise<{ url: string; codeVerifier?: string }> {
     try {
-      const client: ClientMetadata = await this.issuer.discover();
+      // 1) Get client metadata and ensure the authorization endpoint is present
+      const client = await this.checkAuthorizationEndpoint();
 
-      if (!client.authorization_endpoint) {
-        const error = new ClientError(
-          'Authorization endpoint is missing',
-          'AUTH_ENDPOINT_MISSING',
-        );
-        this.logger.error('Failed to generate authorization URL', { error });
-        throw error;
-      }
-
+      // 2) Ensure we are using a valid grant type for building auth URLs
       this.ensureGrantTypeSupportsAuthUrl();
 
-      let codeVerifier: string | undefined;
-      let codeChallenge: string | undefined;
-      let codeChallengeMethod: PkceMethod | undefined;
+      // 3) Try to generate PKCE if configured
+      const pkceResult = this.tryGeneratePkce();
 
-      if (
-        this.config.pkce &&
-        this.config.grantType === GrantType.AuthorizationCode
-      ) {
-        try {
-          const pkce = this.pkceService.generatePkce();
-          codeVerifier = pkce.codeVerifier;
-          codeChallenge = pkce.codeChallenge;
-          if (
-            this.config.pkceMethod &&
-            Object.values(PkceMethod).includes(this.config.pkceMethod)
-          ) {
-            codeChallengeMethod = this.config.pkceMethod;
-          } else {
-            this.logger.warn(
-              'Invalid pkceMethod provided. Omitting code_challenge_method.',
-            );
-          }
-        } catch (error) {
-          this.logger.error('Failed to generate PKCE', { error });
-          throw new ClientError('PKCE generation failed', 'PKCE_ERROR', {
-            originalError: error,
-          });
-        }
-      }
+      // 4) Optionally build acr_values
+      const acrValues = this.buildAcrValues();
 
-      const url = buildAuthorizationUrl(
-        {
-          authorizationEndpoint: client.authorization_endpoint,
-          clientId: this.config.clientId,
-          redirectUri: this.config.redirectUri,
-          responseType: this.config.responseType || 'code',
-          scope: this.config.scopes.join(' '),
-          state,
-          codeChallenge,
-          codeChallengeMethod,
-        },
-        nonce ? { nonce } : undefined,
-      );
+      // 5) Build the final URL
+      const authUrlResult = this.buildAuthUrl({
+        client,
+        state,
+        nonce,
+        extraParams,
+        acrValues,
+        pkceResult,
+      });
 
-      this.logger.debug('Authorization URL generated', { url });
-      return { url, codeVerifier };
+      this.logger.debug('Authorization URL generated', {
+        url: authUrlResult.url,
+      });
+      return authUrlResult;
     } catch (error) {
       this.logger.error('Failed to generate authorization URL', { error });
       throw error;
     }
+  }
+
+  private async checkAuthorizationEndpoint(): Promise<ClientMetadata> {
+    const client: ClientMetadata = await this.getClientMetadata();
+    if (!client.authorization_endpoint) {
+      const error = new ClientError(
+        'Authorization endpoint is missing',
+        'AUTH_ENDPOINT_MISSING',
+      );
+      this.logger.error('Failed to generate authorization URL', { error });
+      throw error;
+    }
+    return client;
+  }
+
+  private tryGeneratePkce(): {
+    codeVerifier?: string;
+    codeChallenge?: string;
+    codeChallengeMethod?: PkceMethod;
+  } {
+    // If PKCE is turned on and we are in Authorization Code flow, generate it
+    if (
+      this.config.pkce &&
+      this.config.grantType === GrantType.AuthorizationCode
+    ) {
+      try {
+        const pkce = this.pkceService.generatePkce();
+        let codeChallengeMethod: PkceMethod | undefined;
+
+        // Validate pkceMethod if provided
+        if (
+          this.config.pkceMethod &&
+          Object.values(PkceMethod).includes(this.config.pkceMethod)
+        ) {
+          codeChallengeMethod = this.config.pkceMethod;
+        } else {
+          this.logger.warn(
+            'Invalid pkceMethod provided. Omitting code_challenge_method.',
+          );
+        }
+
+        return {
+          codeVerifier: pkce.codeVerifier,
+          codeChallenge: pkce.codeChallenge,
+          codeChallengeMethod,
+        };
+      } catch (error) {
+        this.logger.error('Failed to generate PKCE', { error });
+        throw new ClientError('PKCE generation failed', 'PKCE_ERROR', {
+          originalError: error,
+        });
+      }
+    }
+    return {};
+  }
+
+  private buildAcrValues(): string | undefined {
+    if (!this.config.acrValues) {
+      return undefined;
+    }
+    // Accept either a string or string[]
+    return Array.isArray(this.config.acrValues)
+      ? this.config.acrValues.join(' ')
+      : this.config.acrValues;
+  }
+
+  private buildAuthUrl(options: {
+    client: ClientMetadata;
+    state: string;
+    nonce?: string;
+    extraParams?: Record<string, string>;
+    acrValues?: string;
+    pkceResult: {
+      codeVerifier?: string;
+      codeChallenge?: string;
+      codeChallengeMethod?: PkceMethod;
+    };
+  }): { url: string; codeVerifier?: string } {
+    const { client, state, nonce, extraParams, acrValues, pkceResult } =
+      options;
+
+    // Base params
+    const authUrlParams = {
+      authorizationEndpoint: client.authorization_endpoint,
+      clientId: this.config.clientId,
+      redirectUri: this.config.redirectUri,
+      responseType: this.config.responseType || 'code',
+      scope: this.config.scopes.join(' '),
+      state,
+      codeChallenge: pkceResult.codeChallenge,
+      codeChallengeMethod: pkceResult.codeChallengeMethod,
+      acrValues,
+    };
+
+    // Additional params (nonce, ui_locales, etc.)
+    const mergedParams: Record<string, string> = {};
+    if (nonce) {
+      mergedParams.nonce = nonce;
+    }
+    if (extraParams) {
+      Object.assign(mergedParams, extraParams);
+    }
+
+    // Finally, build the URL
+    const url = buildAuthorizationUrl(authUrlParams, mergedParams);
+
+    return {
+      url,
+      codeVerifier: pkceResult.codeVerifier,
+    };
   }
 
   /**
@@ -187,7 +286,7 @@ export class Auth implements IAuth {
     try {
       // Validate ID token if present
       const tokens = this.tokenClient.getTokens();
-      const client = await this.issuer.discover();
+      const client = await this.getClientMetadata();
       if (tokens?.id_token) {
         const jwtValidator = new JwtValidator(
           this.logger as Logger,
@@ -262,7 +361,7 @@ export class Auth implements IAuth {
 
     // Optionally handle ID token validation
     if (id_token) {
-      const client = await this.issuer.discover();
+      const client = await this.getClientMetadata();
       const jwtValidator = new JwtValidator(
         this.logger as Logger,
         client,
@@ -415,8 +514,9 @@ export class Auth implements IAuth {
     const client: ClientMetadata = await this.issuer.discover();
     const tokenEndpoint = client.token_endpoint;
     const startTime = Date.now();
+    let currentInterval = interval;
 
-    while (true) {
+    const pollLoop = async (): Promise<void> => {
       if (timeout && Date.now() - startTime > timeout) {
         const timeoutError = new ClientError(
           'Device code polling timed out',
@@ -449,9 +549,13 @@ export class Auth implements IAuth {
         this.logger.info('Device authorized and tokens obtained');
         return;
       } catch (error: any) {
-        interval = await this.handlePollingError(error, interval);
+        currentInterval = await this.handlePollingError(error, currentInterval);
+        await sleep(currentInterval * 1000);
+        return pollLoop();
       }
-    }
+    };
+
+    await pollLoop();
   }
 
   /**

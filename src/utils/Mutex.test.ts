@@ -152,24 +152,63 @@ describe('Mutex', () => {
     it('should handle errors during acquire and reject appropriately', async () => {
       // To simulate an error during acquire, we'll mock the logger.debug to throw an error
       const originalDebug = logger.debug;
-      const mockError = new MutexError('Acquire failed');
-      (logger.debug as jest.Mock).mockImplementationOnce(() => {
-        throw mockError;
-      });
+      const mockError = new MutexError('Acquire failed', 'MUTEX_ERROR');
+
+      // First call to logger.debug is from constructor; second call is from acquire
+      (logger.debug as jest.Mock)
+        .mockImplementationOnce(() => {}) // constructor's debug
+        .mockImplementationOnce(() => {
+          throw mockError;
+        }); // acquire's debug
 
       const acquirePromise = mutex.acquire();
 
       await expect(acquirePromise).rejects.toThrow(MutexError);
       await expect(acquirePromise).rejects.toHaveProperty(
         'message',
-        'Acquire failed',
+        'Failed to acquire the mutex lock',
       );
       await expect(acquirePromise).rejects.toHaveProperty(
         'code',
-        'MUTEX_ERROR',
+        'ACQUIRE_FAILED',
       );
 
       // Restore original logger.debug
+      logger.debug = originalDebug;
+    });
+
+    it('should handle errors thrown by logger.error in handleAcquireError', async () => {
+      // Spy on console.error
+      const consoleErrorSpy = jest
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+
+      // Mock logger.error to throw an error
+      const loggerError = new Error('Logger failed');
+      (logger.error as jest.Mock).mockImplementationOnce(() => {
+        throw loggerError;
+      });
+
+      // Mock logger.debug to throw an error to trigger handleAcquireError
+      const originalDebug = logger.debug;
+      (logger.debug as jest.Mock)
+        .mockImplementationOnce(() => {}) // constructor's debug
+        .mockImplementationOnce(() => {
+          throw new Error('Acquire failed');
+        }); // acquire's debug
+
+      const acquirePromise = mutex.acquire();
+
+      await expect(acquirePromise).rejects.toThrow(MutexError);
+
+      // Verify that console.error was called with the expected message
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'Logger error in handleAcquireError:',
+        loggerError,
+      );
+
+      // Restore the original console.error and logger.debug
+      consoleErrorSpy.mockRestore();
       logger.debug = originalDebug;
     });
   });

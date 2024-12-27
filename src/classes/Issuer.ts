@@ -1,9 +1,25 @@
-// src/classes/Issuer.ts
+/**
+ * @fileoverview
+ * Implements the `Issuer` class, which handles fetching and caching OpenID Connect (OIDC)
+ * discovery metadata. It ensures efficient retrieval and validation of configuration data
+ * from the issuer's discovery endpoint.
+ *
+ * @module src/classes/Issuer
+ */
 
 import { ICache, IIssuer, ILogger, ClientMetadata } from '../interfaces';
 import { ClientError } from '../errors/ClientError';
 import { Cache } from '../cache/Cache';
 
+/**
+ * Represents an OIDC issuer responsible for discovery metadata.
+ *
+ * The `Issuer` class fetches and validates discovery metadata from the OIDC issuer's
+ * discovery URL and caches the results for efficient reuse.
+ *
+ * @class
+ * @implements {IIssuer}
+ */
 export class Issuer implements IIssuer {
   private readonly discoveryUrl: string;
   private readonly logger: ILogger;
@@ -12,6 +28,15 @@ export class Issuer implements IIssuer {
   private readonly cacheTtl: number;
   private fetchingConfig: Promise<ClientMetadata> | null = null;
 
+  /**
+   * Creates an instance of `Issuer`.
+   *
+   * @param {string} discoveryUrl - The URL of the issuer's discovery endpoint.
+   * @param {ILogger} logger - Logger instance for logging discovery operations.
+   * @param {ICache<ClientMetadata>} [cache] - Optional cache implementation for storing metadata.
+   * @param {number} [cacheTtl=3600000] - Time-to-live (TTL) for cached metadata in milliseconds.
+   * @throws {ClientError} Throws an error if the discovery URL is invalid.
+   */
   constructor(
     discoveryUrl: string,
     logger: ILogger,
@@ -32,10 +57,13 @@ export class Issuer implements IIssuer {
   }
 
   /**
-   * Retrieves the discovery configuration.
-   * @param forceRefresh - If true, bypasses the cache and fetches fresh data.
-   * @returns The discovery configuration.
-   * @throws ClientError if fetching fails.
+   * Retrieves the OIDC discovery configuration.
+   *
+   * If `forceRefresh` is true, the method bypasses the cache and fetches fresh data.
+   *
+   * @param {boolean} [forceRefresh=false] - Whether to bypass the cache.
+   * @returns {Promise<ClientMetadata>} A promise that resolves to the discovery configuration.
+   * @throws {ClientError} Throws an error if fetching or parsing the configuration fails.
    */
   public async discover(
     forceRefresh: boolean = false,
@@ -56,8 +84,9 @@ export class Issuer implements IIssuer {
   }
 
   /**
-   * Ensures that only one fetch operation occurs at a time.
-   * @returns The discovery configuration.
+   * Fetches the discovery metadata and caches it, ensuring only one fetch occurs at a time.
+   *
+   * @returns {Promise<ClientMetadata>} A promise that resolves to the discovery configuration.
    */
   private async fetchAndCacheConfig(): Promise<ClientMetadata> {
     if (this.fetchingConfig !== null) {
@@ -75,9 +104,10 @@ export class Issuer implements IIssuer {
   }
 
   /**
-   * Fetches the discovery configuration from the discovery URL and caches it.
-   * @returns The fetched discovery configuration.
-   * @throws ClientError if fetching or parsing fails.
+   * Fetches the discovery metadata from the issuer's discovery URL and validates it.
+   *
+   * @returns {Promise<ClientMetadata>} A promise that resolves to the discovery configuration.
+   * @throws {ClientError} Throws an error if the fetch or validation fails.
    */
   private async fetchDiscoveryMetadata(): Promise<ClientMetadata> {
     this.logger.debug('Fetching discovery configuration.', {
@@ -108,9 +138,10 @@ export class Issuer implements IIssuer {
   }
 
   /**
-   * Validates the structure of the discovery configuration.
-   * @param config - The discovery configuration to validate.
-   * @throws ClientError if the configuration is invalid.
+   * Validates the discovery metadata against required fields.
+   *
+   * @param {ClientMetadata} client - The discovery metadata to validate.
+   * @throws {ClientError} Throws an error if any required field is missing or invalid.
    */
   private validateDiscoveryMetadata(client: ClientMetadata): void {
     const { issuer, jwks_uri, authorization_endpoint, token_endpoint } = client;
@@ -129,7 +160,6 @@ export class Issuer implements IIssuer {
       );
     }
 
-    // Additional validations
     if (!authorization_endpoint || typeof authorization_endpoint !== 'string') {
       throw new ClientError(
         'Invalid discovery configuration: Missing or invalid authorization_endpoint.',

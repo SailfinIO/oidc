@@ -1,3 +1,32 @@
+## [0.0.9-beta.3](https://github.com/SailfinIO/oidc/compare/v0.0.9-beta.2...v0.0.9-beta.3) (2024-12-27)
+
+### Bug Fixes
+
+* coverage ([f3e2520](https://github.com/SailfinIO/oidc/commit/f3e2520c776a3a56201a0d4137e2555f0d292884))
+* covereage for url and mutex ([16993e9](https://github.com/SailfinIO/oidc/commit/16993e902c15868f1aa990cb41a808bbd6c625e0))
+* covereage for url and mutex ([705c941](https://github.com/SailfinIO/oidc/commit/705c9416d5930bf47903813002eebe418a51d7ae))
+
+## [0.0.9-beta.2](https://github.com/SailfinIO/oidc/compare/v0.0.9-beta.1...v0.0.9-beta.2) (2024-12-27)
+
+### Bug Fixes
+
+* auth tests ([2a84a90](https://github.com/SailfinIO/oidc/commit/2a84a90570830b17981844408e24e87369c2c87f))
+* code smells ([2431889](https://github.com/SailfinIO/oidc/commit/2431889d7ab1b61ebafd6046874a365d03d1a546))
+* coverage for quality gate ([4e78493](https://github.com/SailfinIO/oidc/commit/4e78493a78fe909f3d1bdfbfa37933e72ce1df9f))
+
+## [0.0.9-beta.1](https://github.com/SailfinIO/oidc/compare/v0.0.8...v0.0.9-beta.1) (2024-12-27)
+
+### Bug Fixes
+
+* acr and uilocales support ([a24c4ff](https://github.com/SailfinIO/oidc/commit/a24c4ff846a6ffad7acacaa186a64580768bc481))
+* testing auth ([947a9aa](https://github.com/SailfinIO/oidc/commit/947a9aa495d3ccba9ed5f144a60e48c950f72578))
+
+## [0.0.8-beta.2](https://github.com/SailfinIO/oidc/compare/v0.0.8-beta.1...v0.0.8-beta.2) (2024-12-27)
+
+### Bug Fixes
+
+* acr and uilocales support ([a24c4ff](https://github.com/SailfinIO/oidc/commit/a24c4ff846a6ffad7acacaa186a64580768bc481))
+* testing auth ([947a9aa](https://github.com/SailfinIO/oidc/commit/947a9aa495d3ccba9ed5f144a60e48c950f72578))
 ## [0.0.8](https://github.com/SailfinIO/oidc/compare/v0.0.7...v0.0.8) (2024-12-27)
 
 ### Bug Fixes

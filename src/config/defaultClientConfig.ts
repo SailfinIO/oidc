@@ -1,4 +1,11 @@
-// src/config/defaultClientConfig.ts
+/**
+ * @fileoverview
+ * Provides the default configuration for an OAuth/OIDC client.
+ * The `defaultClientConfig` object specifies default values for authentication,
+ * session management, and logging settings.
+ *
+ * @module src/config/defaultClientConfig
+ */
 
 import {
   LogLevel,
@@ -15,45 +22,57 @@ import {
 import { IClientConfig } from '../interfaces';
 import { Logger } from '../utils';
 
+/**
+ * Default configuration for the OAuth/OIDC client.
+ *
+ * The `defaultClientConfig` object defines default settings for authentication flows,
+ * session management, logging, and various other client behaviors. It serves as a baseline
+ * configuration that can be overridden as needed.
+ *
+ * @constant
+ * @type {Partial<IClientConfig>}
+ */
 export const defaultClientConfig: Partial<IClientConfig> = {
-  responseType: ResponseType.Code, // Default to 'code'
+  /** Authentication Settings */
+  responseType: ResponseType.Code, // Default to 'code' flow
   grantType: GrantType.AuthorizationCode, // Use Authorization Code Grant
-  pkce: true, // PKCE enabled by default
-  pkceMethod: PkceMethod.S256, // SHA-256 PKCE Method
-  prompt: LoginPrompt.Consent, // Default login prompt
-  display: Display.PAGE, // Default display mode
-  maxAge: 3600, // Max authentication age (1 hour)
-  acrValues: 'urn:mace:incommon:iap:silver', // Example ACR value
-  uiLocales: [UILocales.EN_US], // Default UI locale
-  additionalParams: {}, // No additional params
-  responseMode: ResponseMode.Query, // Use 'query' response mode
-  clockSkew: 60, // Allow 60 seconds clock skew
-  tokenRefreshThreshold: 300, // Refresh 5 minutes before expiration
-  timeout: 5000, // Network timeout of 5 seconds
-  retryAttempts: 3, // Retry 3 times for failed requests
+  pkce: true, // Enable Proof Key for Code Exchange (PKCE) by default
+  pkceMethod: PkceMethod.S256, // Use SHA-256 as the PKCE method
+  prompt: LoginPrompt.Consent, // Default login prompt is 'consent'
+  display: Display.PAGE, // Default display mode for login interface
+  maxAge: 3600, // Max authentication age in seconds (1 hour)
+  uiLocales: [UILocales.EN_US], // Default UI locale is English (US)
+  additionalParams: {}, // No additional parameters by default
+  responseMode: ResponseMode.Query, // Use 'query' as the response mode
+  clockSkew: 60, // Allowable clock skew of 60 seconds
+  tokenRefreshThreshold: 300, // Refresh tokens 5 minutes (300 seconds) before expiration
+  timeout: 5000, // Network request timeout of 5 seconds
+  retryAttempts: 3, // Retry failed requests up to 3 times
 
+  /** Session Management Configuration */
   session: {
-    mechanism: StorageMechanism.MEMORY, // Default to in-memory session storage
-    useSilentRenew: true, // Enable silent token renewal
-    store: undefined, // Default to no custom store
-    ttl: 3600000, // 1 hour in ms
+    mechanism: StorageMechanism.MEMORY, // Use in-memory session storage by default
+    useSilentRenew: true, // Enable silent renewal of tokens
+    store: undefined, // No custom session store by default
+    ttl: 3600000, // Session TTL of 1 hour (in milliseconds)
     cookie: {
       name: 'sid', // Default session ID cookie name
       secret: 'default-secret', // Replace with a secure secret in production
       options: {
-        secure: true, // Send cookie over HTTPS only
-        httpOnly: true, // Prevent JavaScript access
-        sameSite: SameSite.STRICT, // CSRF protection
-        path: '/', // Default path for the cookie
-        maxAge: 3600, // Cookie expiration (1 hour) in seconds
-        domain: undefined, // Domain not set by default
-        encode: encodeURIComponent, // Default encode function
+        secure: true, // Restrict cookies to HTTPS
+        httpOnly: true, // Prevent JavaScript access to cookies
+        sameSite: SameSite.STRICT, // Use Strict SameSite for CSRF protection
+        path: '/', // Default cookie path
+        maxAge: 3600, // Cookie expiration in seconds (1 hour)
+        domain: undefined, // No specific domain by default
+        encode: encodeURIComponent, // Use default URL encoding for cookies
       },
     },
   },
 
+  /** Logging Configuration */
   logging: {
-    logLevel: LogLevel.INFO, // Default log level
-    logger: new Logger('Client', LogLevel.INFO, true), // Default logger
+    logLevel: LogLevel.INFO, // Default log level is INFO
+    logger: new Logger('Client', LogLevel.INFO, true), // Default logger instance
   },
 };

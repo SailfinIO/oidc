@@ -110,24 +110,24 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-  deploy:
-    name: Deploy Documentation to GitHub Pages
-    needs: [ci, release]
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
+  # deploy:
+  #   name: Deploy Documentation to GitHub Pages
+  #   needs: [ci, release]
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     pages: write
+  #     id-token: write
 
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  #   environment:
+  #     name: github-pages
+  #     url: ${{ steps.deployment.outputs.page_url }}
 
-    if: ${{ github.ref == 'refs/heads/main' }}
+  #   if: ${{ github.ref == 'refs/heads/main' }}
 
-    steps:
-      - name: Checkout the code
-        uses: actions/checkout@v4
+  #   steps:
+  #     - name: Checkout the code
+  #       uses: actions/checkout@v4
 
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+  #     - name: Deploy to GitHub Pages
+  #       id: deployment
+  #       uses: actions/deploy-pages@v4

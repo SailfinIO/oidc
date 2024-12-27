@@ -1,14 +1,37 @@
-// src/classes/MemoryStore.ts
+/**
+ * @fileoverview
+ * Implements the `MemoryStore` class, an in-memory session store that supports
+ * concurrent access control, session expiration, and session management operations.
+ *
+ * @module src/classes/MemoryStore
+ */
 
 import { IStore, ISessionData, ILogger } from '../interfaces';
 import { Cache } from '../cache/Cache';
 import { Mutex } from '../utils/Mutex';
 
+/**
+ * Represents an in-memory session store.
+ *
+ * The `MemoryStore` class provides a lightweight implementation for managing
+ * session data in memory. It is designed for environments where persistence
+ * across server restarts is not required. It includes support for TTL (time-to-live)
+ * values and ensures thread-safe operations using a mutex.
+ *
+ * @class
+ * @implements {IStore}
+ */
 export class MemoryStore implements IStore {
   private readonly cache: Cache<ISessionData>;
   private readonly mutex: Mutex;
-  private readonly ttl: number = 3600000; // 1 hour in ms
+  private readonly ttl: number = 3600000; // 1 hour in milliseconds
 
+  /**
+   * Creates an instance of `MemoryStore`.
+   *
+   * @param {ILogger} [logger] - Optional logger instance for logging session operations.
+   * @param {number} [ttl=3600000] - Optional time-to-live (TTL) in milliseconds for session data.
+   */
   constructor(
     private readonly logger?: ILogger,
     ttl?: number,
@@ -26,10 +49,11 @@ export class MemoryStore implements IStore {
   }
 
   /**
-   * Stores session data with the provided SID.
-   * @param sid - The session ID.
-   * @param data - The session data to store.
-   * @returns {Promise<void>} A promise that resolves when the data is set.
+   * Stores session data with the provided session ID (SID).
+   *
+   * @param {string} sid - The session ID.
+   * @param {ISessionData} data - The session data to store.
+   * @returns {Promise<void>} Resolves when the data is successfully stored.
    */
   public async set(sid: string, data: ISessionData): Promise<void> {
     return this.mutex.runExclusive(async () => {
@@ -39,9 +63,10 @@ export class MemoryStore implements IStore {
   }
 
   /**
-   * Retrieves session data based on the SID.
-   * @param sid - The session ID.
-   * @returns {Promise<ISessionData | null> } The session data or null if not found.
+   * Retrieves the session data for the specified session ID (SID).
+   *
+   * @param {string} sid - The session ID.
+   * @returns {Promise<ISessionData | null>} Resolves with the session data or `null` if not found.
    */
   public async get(sid: string): Promise<ISessionData | null> {
     return this.mutex.runExclusive(() => {
@@ -52,9 +77,10 @@ export class MemoryStore implements IStore {
   }
 
   /**
-   * Destroys the session associated with the SID.
-   * @param sid - The session ID.
-   * @returns {Promise<void>} A promise that resolves when the session is destroyed.
+   * Destroys the session associated with the specified session ID (SID).
+   *
+   * @param {string} sid - The session ID.
+   * @returns {Promise<void>} Resolves when the session is successfully destroyed.
    */
   public async destroy(sid: string): Promise<void> {
     return this.mutex.runExclusive(() => {
@@ -64,10 +90,11 @@ export class MemoryStore implements IStore {
   }
 
   /**
-   * Updates the session's expiration without altering the data.
-   * @param sid - The session ID.
-   * @param session - The current session data.
-   * @returns {Promise<void>} A promise that resolves when the session is touched.
+   * Updates the session's expiration time without altering its data.
+   *
+   * @param {string} sid - The session ID.
+   * @param {ISessionData} session - The current session data.
+   * @returns {Promise<void>} Resolves when the session expiration is updated.
    */
   public async touch(sid: string, session: ISessionData): Promise<void> {
     return this.mutex.runExclusive(() => {

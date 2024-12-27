@@ -1,44 +1,84 @@
-// src/interfaces/IStore.ts
+/**
+ * @fileoverview
+ * Defines the `IStore` interface, which standardizes the behavior of session storage implementations.
+ * Provides methods to create, retrieve, update, and delete session data, as well as an optional context
+ * for interacting with HTTP requests and responses.
+ *
+ * @module src/interfaces/IStore
+ */
 
 import { ISessionData } from './ISessionData';
 
+/**
+ * Represents the context for session storage operations.
+ *
+ * The `IStoreContext` interface provides optional access to the HTTP request and response objects,
+ * allowing implementations to interact with the HTTP layer when managing session data.
+ *
+ * @interface
+ */
 export interface IStoreContext {
+  /**
+   * The HTTP request object, if available.
+   *
+   * @type {Request | undefined}
+   */
   request?: Request;
+
+  /**
+   * The HTTP response object, if available.
+   *
+   * @type {Response | undefined}
+   */
   response?: Response;
 }
 
+/**
+ * Standard interface for session storage implementations.
+ *
+ * The `IStore` interface defines methods for managing session data, including setting, retrieving,
+ * destroying, and updating (touching) sessions. It supports optional context for integrating
+ * with HTTP layers or other environment-specific contexts.
+ *
+ * @interface
+ */
 export interface IStore {
   /**
-   * Sets session data with the given session ID.
-   * @param sid - The session ID.
-   * @param data - The session data to store.
-   * @param context - Optional store context.
-   * @returns A promise that resolves when the data is set.
+   * Stores session data with the specified session ID.
+   *
+   * @param {string} sid - The session ID.
+   * @param {ISessionData} data - The session data to store.
+   * @param {IStoreContext} [context] - Optional store context.
+   * @returns {Promise<void>} A promise that resolves when the data is successfully stored.
    */
   set(sid: string, data: ISessionData, context?: IStoreContext): Promise<void>;
 
   /**
-   * Retrieves session data based on the session ID.
-   * @param sid - The session ID.
-   * @param context - Optional store context.
-   * @returns A promise that resolves to the session data or null if not found.
+   * Retrieves the session data for the specified session ID.
+   *
+   * @param {string} sid - The session ID.
+   * @param {IStoreContext} [context] - Optional store context.
+   * @returns {Promise<ISessionData | null>} A promise that resolves to the session data,
+   * or `null` if the session is not found.
    */
   get(sid: string, context?: IStoreContext): Promise<ISessionData | null>;
 
   /**
-   * Destroys the session associated with the given session ID.
-   * @param sid - The session ID.
-   * @param context - Optional store context.
-   * @returns A promise that resolves when the session is destroyed.
+   * Deletes the session data associated with the specified session ID.
+   *
+   * @param {string} sid - The session ID.
+   * @param {IStoreContext} [context] - Optional store context.
+   * @returns {Promise<void>} A promise that resolves when the session data is successfully deleted.
    */
   destroy(sid: string, context?: IStoreContext): Promise<void>;
 
   /**
-   * Updates the session's expiration without altering the data.
-   * @param sid - The session ID.
-   * @param session - The current session data.
-   * @param context - Optional store context.
-   * @returns A promise that resolves when the session is touched.
+   * Extends the session's expiration without modifying its data.
+   *
+   * @param {string} sid - The session ID.
+   * @param {ISessionData} session - The session data to touch.
+   * @param {IStoreContext} [context] - Optional store context.
+   * @returns {Promise<void>} A promise that resolves when the session expiration is updated.
    */
   touch(
     sid: string,

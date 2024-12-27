@@ -106,6 +106,7 @@ export const buildAuthorizationUrl = (
       state: params.state,
     });
 
+    // PKCE handling
     if (params.codeChallenge) {
       searchParams.append('code_challenge', params.codeChallenge);
       searchParams.append(
@@ -114,6 +115,29 @@ export const buildAuthorizationUrl = (
       );
     }
 
+    // OPTIONAL: If your IdP uses prompt, display, responseMode, etc.
+    if (params.prompt) {
+      searchParams.append('prompt', params.prompt);
+    }
+    if (params.display) {
+      searchParams.append('display', params.display);
+    }
+    if (params.responseMode) {
+      searchParams.append('response_mode', params.responseMode);
+    }
+    if (params.nonce) {
+      searchParams.append('nonce', params.nonce);
+    }
+
+    // --- NEW: ACR Values Handling ---
+    if (params.acrValues) {
+      const acrValues = Array.isArray(params.acrValues)
+        ? params.acrValues.join(' ')
+        : params.acrValues;
+      searchParams.append('acr_values', acrValues);
+    }
+
+    // Additional parameters
     if (additionalParams) {
       Object.entries(additionalParams).forEach(([key, value]) => {
         searchParams.append(key, value);

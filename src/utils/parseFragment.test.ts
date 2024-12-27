@@ -112,4 +112,13 @@ describe('parseFragment', () => {
     };
     expect(parseFragment(fragment)).toEqual(expected);
   });
+
+  it('should throw ClientError if key is empty after decoding', () => {
+    // The fragment contains an encoded empty key
+    const fragment = '#%20=value'; // "%20" decodes to a space, which becomes an empty key after trimming
+    expect(() => parseFragment(fragment)).toThrow(ClientError);
+    expect(() => parseFragment(fragment)).toThrow(
+      'Failed to decode fragment segment: "%20=value"',
+    );
+  });
 });

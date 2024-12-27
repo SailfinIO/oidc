@@ -1,3 +1,12 @@
+/**
+ * @fileoverview
+ * Implements the `Store` class, which provides a factory method for creating
+ * session store instances based on a specified storage mechanism. Supports
+ * memory-based and cookie-based storage.
+ *
+ * @module src/classes/Store
+ */
+
 import { ILogger } from '../interfaces/ILogger';
 import { ISessionStore } from '../interfaces/ISessionStore';
 import { MemoryStore } from './MemoryStore';
@@ -6,19 +15,35 @@ import { StorageMechanism } from '../enums';
 import { StoreOptions } from '../interfaces';
 import { SessionStore } from './SessionStore';
 
+/**
+ * Represents the result of the `Store.create` method.
+ *
+ * The object includes a `sessionStore` property that holds the created session
+ * store instance or `null` if none is created.
+ *
+ * @interface StoreInstances
+ */
 export interface StoreInstances {
   sessionStore: ISessionStore | null;
 }
 
+/**
+ * Factory class for creating session stores based on a specified storage mechanism.
+ *
+ * The `Store` class supports memory-based and cookie-based session stores and can
+ * be extended to support additional mechanisms in the future.
+ *
+ * @class
+ */
 export class Store {
   /**
    * Creates a session store instance based on the specified storage mechanism.
-   * Returns an object with the `sessionStore` property.
    *
-   * @param storageType The type of storage mechanism (MEMORY or COOKIE).
-   * @param options     Configuration options for the store.
-   * @param logger      Optional logger.
-   * @returns           An object containing `sessionStore`.
+   * @param {StorageMechanism} storageType - The type of storage mechanism (e.g., MEMORY or COOKIE).
+   * @param {StoreOptions} [options] - Configuration options for the store.
+   * @param {ILogger} [logger] - Optional logger instance for logging store operations.
+   * @returns {StoreInstances} An object containing the `sessionStore` instance.
+   * @throws {Error} Throws an error if the specified storage type is unsupported.
    */
   public static create(
     storageType: StorageMechanism,
@@ -45,7 +70,6 @@ export class Store {
       }
 
       case StorageMechanism.MEMORY: {
-        // Explicitly pass the default TTL so we call the constructor as the test expects
         const ttl = options?.storage?.ttl ?? DEFAULT_TTL;
         const sessionStore = new SessionStore(logger, ttl);
         return { sessionStore };

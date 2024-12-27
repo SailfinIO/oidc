@@ -7,7 +7,7 @@ import {
   generateRandomString,
 } from './urlUtils';
 import { IAuthorizationUrlParams } from '../interfaces/IAuthorizationUrlParams';
-import { Algorithm } from '../enums';
+import { Algorithm, ResponseMode } from '../enums';
 import { ClientError } from '../errors/ClientError';
 import { ILogoutUrlParams } from '../interfaces';
 
@@ -73,6 +73,40 @@ describe('urlUtils', () => {
       scope: 'openid profile',
       state: 'xyz',
     };
+    it('should join acrValues array into a space-separated string', () => {
+      const paramsWithAcrValuesArray = {
+        ...baseParams,
+        acrValues: [
+          'urn:mace:incommon:iap:silver',
+          'urn:mace:incommon:iap:bronze',
+        ],
+      };
+
+      const url = buildAuthorizationUrl(paramsWithAcrValuesArray);
+      const expectedUrl = `https://auth.example.com/oauth2/authorize?response_type=code&client_id=myclientid&redirect_uri=https%3A%2F%2Fexample.com%2Fcallback&scope=openid+profile&state=xyz&acr_values=urn%3Amace%3Aincommon%3Aiap%3Asilver+urn%3Amace%3Aincommon%3Aiap%3Abronze`;
+      expect(url).toBe(expectedUrl);
+    });
+
+    it('should append acrValues as a string if it is not an array', () => {
+      const paramsWithAcrValuesString = {
+        ...baseParams,
+        acrValues: 'urn:mace:incommon:iap:silver',
+      };
+
+      const url = buildAuthorizationUrl(paramsWithAcrValuesString);
+      const expectedUrl = `https://auth.example.com/oauth2/authorize?response_type=code&client_id=myclientid&redirect_uri=https%3A%2F%2Fexample.com%2Fcallback&scope=openid+profile&state=xyz&acr_values=urn%3Amace%3Aincommon%3Aiap%3Asilver`;
+      expect(url).toBe(expectedUrl);
+    });
+
+    it('should not append acr_values if it is undefined', () => {
+      const paramsWithoutAcrValues = {
+        ...baseParams,
+      };
+
+      const url = buildAuthorizationUrl(paramsWithoutAcrValues);
+      const expectedUrl = `https://auth.example.com/oauth2/authorize?response_type=code&client_id=myclientid&redirect_uri=https%3A%2F%2Fexample.com%2Fcallback&scope=openid+profile&state=xyz`;
+      expect(url).toBe(expectedUrl);
+    });
 
     it('should build a valid authorization URL with minimal parameters', () => {
       const url = buildAuthorizationUrl(baseParams);
@@ -118,6 +152,90 @@ describe('urlUtils', () => {
         authorizationEndpoint: 'not a valid url',
       };
       expect(() => buildAuthorizationUrl(invalidParams)).toThrow(ClientError);
+    });
+
+    it('should append prompt to the URL if provided', () => {
+      const paramsWithPrompt = {
+        ...baseParams,
+        prompt: 'consent',
+      };
+
+      const url = buildAuthorizationUrl(paramsWithPrompt);
+      const expectedUrl = `https://auth.example.com/oauth2/authorize?response_type=code&client_id=myclientid&redirect_uri=https%3A%2F%2Fexample.com%2Fcallback&scope=openid+profile&state=xyz&prompt=consent`;
+      expect(url).toBe(expectedUrl);
+    });
+
+    it('should not append prompt to the URL if it is not provided', () => {
+      const paramsWithoutPrompt = {
+        ...baseParams,
+      };
+
+      const url = buildAuthorizationUrl(paramsWithoutPrompt);
+      const expectedUrl = `https://auth.example.com/oauth2/authorize?response_type=code&client_id=myclientid&redirect_uri=https%3A%2F%2Fexample.com%2Fcallback&scope=openid+profile&state=xyz`;
+      expect(url).toBe(expectedUrl);
+    });
+
+    it('should append display to the URL if provided', () => {
+      const paramsWithDisplay = {
+        ...baseParams,
+        display: 'popup',
+      };
+
+      const url = buildAuthorizationUrl(paramsWithDisplay);
+      const expectedUrl = `https://auth.example.com/oauth2/authorize?response_type=code&client_id=myclientid&redirect_uri=https%3A%2F%2Fexample.com%2Fcallback&scope=openid+profile&state=xyz&display=popup`;
+      expect(url).toBe(expectedUrl);
+    });
+
+    it('should not append display to the URL if it is not provided', () => {
+      const paramsWithoutDisplay = {
+        ...baseParams,
+      };
+
+      const url = buildAuthorizationUrl(paramsWithoutDisplay);
+      const expectedUrl = `https://auth.example.com/oauth2/authorize?response_type=code&client_id=myclientid&redirect_uri=https%3A%2F%2Fexample.com%2Fcallback&scope=openid+profile&state=xyz`;
+      expect(url).toBe(expectedUrl);
+    });
+
+    it('should append response_mode to the URL if provided', () => {
+      const paramsWithResponseMode = {
+        ...baseParams,
+        responseMode: ResponseMode.FormPost,
+      };
+
+      const url = buildAuthorizationUrl(paramsWithResponseMode);
+      const expectedUrl = `https://auth.example.com/oauth2/authorize?response_type=code&client_id=myclientid&redirect_uri=https%3A%2F%2Fexample.com%2Fcallback&scope=openid+profile&state=xyz&response_mode=form_post`;
+      expect(url).toBe(expectedUrl);
+    });
+
+    it('should not append response_mode to the URL if it is not provided', () => {
+      const paramsWithoutResponseMode = {
+        ...baseParams,
+      };
+
+      const url = buildAuthorizationUrl(paramsWithoutResponseMode);
+      const expectedUrl = `https://auth.example.com/oauth2/authorize?response_type=code&client_id=myclientid&redirect_uri=https%3A%2F%2Fexample.com%2Fcallback&scope=openid+profile&state=xyz`;
+      expect(url).toBe(expectedUrl);
+    });
+
+    it('should append nonce to the URL if provided', () => {
+      const paramsWithNonce = {
+        ...baseParams,
+        nonce: 'randomNonce123',
+      };
+
+      const url = buildAuthorizationUrl(paramsWithNonce);
+      const expectedUrl = `https://auth.example.com/oauth2/authorize?response_type=code&client_id=myclientid&redirect_uri=https%3A%2F%2Fexample.com%2Fcallback&scope=openid+profile&state=xyz&nonce=randomNonce123`;
+      expect(url).toBe(expectedUrl);
+    });
+
+    it('should not append nonce to the URL if it is not provided', () => {
+      const paramsWithoutNonce = {
+        ...baseParams,
+      };
+
+      const url = buildAuthorizationUrl(paramsWithoutNonce);
+      const expectedUrl = `https://auth.example.com/oauth2/authorize?response_type=code&client_id=myclientid&redirect_uri=https%3A%2F%2Fexample.com%2Fcallback&scope=openid+profile&state=xyz`;
+      expect(url).toBe(expectedUrl);
     });
   });
 

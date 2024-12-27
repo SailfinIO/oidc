@@ -1,14 +1,35 @@
+/**
+ * @fileoverview
+ * Implements the `Mutex` class, a utility for controlling access to asynchronous resources.
+ * The mutex ensures mutual exclusion by allowing only one execution thread to acquire the lock
+ * at a time. It supports timeouts, queueing, and error handling.
+ *
+ * @module src/utils/Mutex
+ */
+
 import { ILogger, IMutex, Resolver, ITimer } from '../interfaces';
 import { MutexError, ClientError } from '../errors';
 
 /**
- * A mutex (mutual exclusion) utility for controlling access to asynchronous resources.
+ * Represents a mutex (mutual exclusion) utility for controlling access to asynchronous resources.
+ *
+ * The `Mutex` class provides a thread-safe mechanism for exclusive access, with support for queueing,
+ * timeouts, and structured logging.
+ *
+ * @class
+ * @implements {IMutex}
  */
 export class Mutex implements IMutex {
   private readonly _queue: Resolver[] = [];
   private readonly timer: ITimer;
   private _locked: boolean = false;
 
+  /**
+   * Creates an instance of `Mutex`.
+   *
+   * @param {ILogger} [logger] - Optional logger instance for logging mutex operations.
+   * @param {ITimer} [timer] - Optional timer implementation for timeouts (defaults to global setTimeout/clearTimeout).
+   */
   constructor(
     private readonly logger?: ILogger,
     timer?: ITimer,
@@ -30,6 +51,13 @@ export class Mutex implements IMutex {
     });
   }
 
+  /**
+   * Acquires the mutex lock, waiting if necessary.
+   *
+   * @param {number} [timeout] - Optional timeout in milliseconds. If specified, the lock will not be acquired after the timeout expires.
+   * @returns {Promise<() => void>} A promise that resolves to a function to release the lock.
+   * @throws {MutexError} If the lock cannot be acquired within the timeout.
+   */
   public async acquire(timeout?: number): Promise<() => void> {
     this.logger.debug('Attempting to acquire mutex', { timeout });
 
@@ -72,7 +100,6 @@ export class Mutex implements IMutex {
         }
       };
 
-      // Set the timeout BEFORE attempting to acquire the lock
       if (timeout !== undefined) {
         timerId = this.timer.setTimeout(() => {
           if (!released) {
@@ -101,13 +128,18 @@ export class Mutex implements IMutex {
     });
   }
 
+  /**
+   * Releases the mutex lock and allows the next queued resolver (if any) to acquire it.
+   *
+   * @private
+   */
   private release(): void {
     this.logger.debug('Releasing mutex lock', {
       currentQueueLength: this._queue.length,
     });
     try {
       if (this._queue.length > 0) {
-        this._locked = false; // Unlock before passing to the next request
+        this._locked = false;
         const nextRequest = this._queue.shift();
         this.logger.info(
           'Mutex lock released, passing to next request in queue',
@@ -115,7 +147,7 @@ export class Mutex implements IMutex {
             remainingQueueLength: this._queue.length,
           },
         );
-        nextRequest?.(); // Now the next request can acquire the lock
+        nextRequest?.(); // Allow the next request to acquire the lock
       } else {
         this._locked = false;
         this.logger.info('Mutex lock released, no pending requests');
@@ -126,6 +158,15 @@ export class Mutex implements IMutex {
     }
   }
 
+  /**
+   * Executes a function exclusively, ensuring it has the mutex lock.
+   *
+   * @param {() => Promise<T> | T} fn - The function to execute.
+   * @param {number} [timeout] - Optional timeout in milliseconds for acquiring the lock.
+   * @returns {Promise<T>} A promise that resolves to the result of the function.
+   * @template T
+   * @throws {MutexError} If the lock cannot be acquired or an error occurs during execution.
+   */
   public async runExclusive<T>(
     fn: () => Promise<T> | T,
     timeout?: number,
@@ -139,7 +180,7 @@ export class Mutex implements IMutex {
       this.logger.error('Failed to acquire mutex lock in runExclusive', {
         error,
       });
-      throw error; // Re-throw to maintain behavior
+      throw error;
     }
 
     try {
@@ -170,11 +211,21 @@ export class Mutex implements IMutex {
     }
   }
 
+  /**
+   * Returns whether the mutex is currently locked.
+   *
+   * @returns {boolean} True if the mutex is locked, false otherwise.
+   */
   public get locked(): boolean {
     this.logger.debug('Getter accessed: locked', { locked: this._locked });
     return this._locked;
   }
 
+  /**
+   * Returns the number of requests waiting in the queue.
+   *
+   * @returns {number} The length of the mutex queue.
+   */
   public get queue(): number {
     this.logger.debug('Getter accessed: queue', {
       queueLength: this._queue.length,
@@ -182,7 +233,14 @@ export class Mutex implements IMutex {
     return this._queue.length;
   }
 
-  // Centralized error handling for acquire
+  /**
+   * Handles errors during the mutex acquisition process.
+   *
+   * @private
+   * @param {any} error - The error encountered.
+   * @param {ReturnType<typeof setTimeout> | null} timerId - The timeout ID to clear.
+   * @param {(reason?: any) => void} reject - The rejection callback.
+   */
   private handleAcquireError(
     error: any,
     timerId: ReturnType<typeof setTimeout> | null,
@@ -192,7 +250,6 @@ export class Mutex implements IMutex {
     try {
       this.logger.error('Error while trying to acquire mutex', { error });
     } catch (loggerError) {
-      // Prevent logger errors from propagating
       console.error('Logger error in handleAcquireError:', loggerError);
     }
     reject(
