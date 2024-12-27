@@ -1,3 +1,11 @@
+## [0.0.9-beta.3](https://github.com/SailfinIO/oidc/compare/v0.0.9-beta.2...v0.0.9-beta.3) (2024-12-27)
+
+### Bug Fixes
+
+* coverage ([f3e2520](https://github.com/SailfinIO/oidc/commit/f3e2520c776a3a56201a0d4137e2555f0d292884))
+* covereage for url and mutex ([16993e9](https://github.com/SailfinIO/oidc/commit/16993e902c15868f1aa990cb41a808bbd6c625e0))
+* covereage for url and mutex ([705c941](https://github.com/SailfinIO/oidc/commit/705c9416d5930bf47903813002eebe418a51d7ae))
+
 ## [0.0.9-beta.2](https://github.com/SailfinIO/oidc/compare/v0.0.9-beta.1...v0.0.9-beta.2) (2024-12-27)
 
 ### Bug Fixes
