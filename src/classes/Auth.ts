@@ -67,7 +67,20 @@ export class Auth implements IAuth {
     // Store state -> nonce mapping
     this.state.addState(state, nonce);
 
-    const { url, codeVerifier } = await this.generateAuthUrl(state, nonce);
+    // 1) Build up any extra query params to pass
+    const additionalParams: Record<string, string> = {};
+
+    // If user has set uiLocales in config, convert array -> space-delimited string
+    if (this.config.uiLocales && this.config.uiLocales.length > 0) {
+      additionalParams.ui_locales = this.config.uiLocales.join(' ');
+    }
+
+    // 2) Pass these extraParams into generateAuthUrl
+    const { url, codeVerifier } = await this.generateAuthUrl(
+      state,
+      nonce,
+      additionalParams,
+    );
 
     if (codeVerifier) {
       this.codeVerifier = codeVerifier;
@@ -85,6 +98,7 @@ export class Auth implements IAuth {
   private async generateAuthUrl(
     state: string,
     nonce?: string,
+    extraParams?: Record<string, string>,
   ): Promise<{ url: string; codeVerifier?: string }> {
     try {
       const client: ClientMetadata = await this.issuer.discover();
@@ -130,19 +144,40 @@ export class Auth implements IAuth {
         }
       }
 
-      const url = buildAuthorizationUrl(
-        {
-          authorizationEndpoint: client.authorization_endpoint,
-          clientId: this.config.clientId,
-          redirectUri: this.config.redirectUri,
-          responseType: this.config.responseType || 'code',
-          scope: this.config.scopes.join(' '),
-          state,
-          codeChallenge,
-          codeChallengeMethod,
-        },
-        nonce ? { nonce } : undefined,
-      );
+      // If you have acr_values logic here, that’s fine; you can keep it as is.
+      let acrValues: string | undefined;
+      if (this.config.acrValues) {
+        if (Array.isArray(this.config.acrValues)) {
+          acrValues = this.config.acrValues.join(' ');
+        } else {
+          acrValues = this.config.acrValues;
+        }
+      }
+
+      // 1) Build the base params for buildAuthorizationUrl
+      const authUrlParams = {
+        authorizationEndpoint: client.authorization_endpoint,
+        clientId: this.config.clientId,
+        redirectUri: this.config.redirectUri,
+        responseType: this.config.responseType || 'code',
+        scope: this.config.scopes.join(' '),
+        state,
+        codeChallenge,
+        codeChallengeMethod,
+        acrValues,
+      };
+
+      // 2) Merge your extraParams (nonce, ui_locales, etc.)
+      const additionalParams: Record<string, string> = {};
+      if (nonce) {
+        additionalParams.nonce = nonce;
+      }
+      if (extraParams) {
+        Object.assign(additionalParams, extraParams);
+      }
+
+      // 3) Finally call buildAuthorizationUrl
+      const url = buildAuthorizationUrl(authUrlParams, additionalParams);
 
       this.logger.debug('Authorization URL generated', { url });
       return { url, codeVerifier };
