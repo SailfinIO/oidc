@@ -138,6 +138,64 @@ describe('SignatureVerifier', () => {
   });
 
   describe('Error Conditions', () => {
+    it('should throw JWK kty mismatch for non-RSA/EC key types', async () => {
+      const unsupportedKeyTypes = ['foo', 'oct', 'OKP']; // Add any other unsupported types as needed
+
+      for (const kty of unsupportedKeyTypes) {
+        jwksMock.getKey.mockResolvedValue({
+          kty,
+          alg: 'RS256', // Ensure the algorithm expects a specific key type
+        } as any);
+
+        await expect(
+          verifier.verify(validHeader, validIdToken),
+        ).rejects.toThrow(
+          new ClientError(
+            `JWK kty mismatch. Expected RSA for alg RS256`,
+            'ID_TOKEN_VALIDATION_ERROR',
+          ),
+        );
+
+        expect(jwksMock.getKey).toHaveBeenCalledWith('validKid');
+      }
+    });
+
+    it('should throw Unsupported or unimplemented algorithm: none', async () => {
+      const unsupportedAlg = 'none' as Algorithm;
+      const unsupportedHeader = { kid: 'validKid', alg: unsupportedAlg };
+      jwksMock.getKey.mockResolvedValue({
+        kty: 'RSA',
+        alg: unsupportedAlg,
+      } as any);
+
+      await expect(
+        verifier.verify(unsupportedHeader, validIdToken),
+      ).rejects.toThrow(
+        new ClientError(
+          `Unsupported algorithm: ${unsupportedAlg}`,
+          'ID_TOKEN_VALIDATION_ERROR',
+        ),
+      );
+
+      expect(jwksMock.getKey).toHaveBeenCalledWith('validKid');
+    });
+
+    it('should throw JWK kty mismatch. Expected RSA for alg RS256', async () => {
+      jwksMock.getKey.mockResolvedValue({
+        kty: 'foo',
+        alg: 'RS256',
+      } as any);
+
+      await expect(verifier.verify(validHeader, validIdToken)).rejects.toThrow(
+        new ClientError(
+          'JWK kty mismatch. Expected RSA for alg RS256',
+          'ID_TOKEN_VALIDATION_ERROR',
+        ),
+      );
+
+      expect(jwksMock.getKey).toHaveBeenCalledWith('validKid');
+    });
+
     it('should throw if kid is missing', async () => {
       const headerWithoutKid = { alg: 'RS256' as Algorithm };
       await expect(
@@ -148,6 +206,57 @@ describe('SignatureVerifier', () => {
           'ID_TOKEN_VALIDATION_ERROR',
         ),
       );
+    });
+
+    const curveTests = [
+      {
+        alg: 'ES384' as Algorithm,
+        crv: 'P-256',
+        expectedError: 'Incorrect curve for ES384',
+      },
+      {
+        alg: 'ES512' as Algorithm,
+        crv: 'P-384',
+        expectedError: 'Incorrect curve for ES512',
+      },
+    ];
+
+    it('should throw on invalid base64 encoding in signature', async () => {
+      // Mock base64UrlDecode to throw an error for invalid input
+      (base64UrlDecode as jest.Mock).mockImplementation((input: string) => {
+        if (input === '@@@') {
+          throw new Error('Input contains invalid Base64URL characters');
+        }
+        return Buffer.from(input);
+      });
+
+      jwksMock.getKey.mockResolvedValue(validRsaJwk);
+      await expect(
+        verifier.verify(validHeader, 'header.payload.@@@'),
+      ).rejects.toThrow(
+        new ClientError(
+          'Input contains invalid Base64URL characters',
+          'ID_TOKEN_VALIDATION_ERROR',
+        ),
+      );
+    });
+
+    curveTests.forEach(({ alg, crv, expectedError }) => {
+      it(`should throw if EC curve is incorrect for ${alg}`, async () => {
+        const incorrectCurveJwk = {
+          ...validEcJwk,
+          alg, // Set jwk.alg to match header.alg
+          crv, // Incorrect curve
+        };
+        const ecHeader = { kid: 'validKid', alg };
+        jwksMock.getKey.mockResolvedValue(incorrectCurveJwk);
+
+        await expect(verifier.verify(ecHeader, validIdToken)).rejects.toThrow(
+          new ClientError(expectedError, 'ID_TOKEN_VALIDATION_ERROR'),
+        );
+
+        expect(jwksMock.getKey).toHaveBeenCalledWith('validKid');
+      });
     });
 
     it('should throw if alg is missing', async () => {
@@ -168,26 +277,6 @@ describe('SignatureVerifier', () => {
         verifier.verify(validHeader, 'invalid.token'),
       ).rejects.toThrow(
         new ClientError('Invalid JWT format', 'ID_TOKEN_VALIDATION_ERROR'),
-      );
-    });
-
-    it('should throw on invalid base64 encoding in signature', async () => {
-      // Mock base64UrlDecode to throw an error for invalid input
-      (base64UrlDecode as jest.Mock).mockImplementation((input: string) => {
-        if (input === '@@@') {
-          throw new Error('Input contains invalid Base64URL characters');
-        }
-        return Buffer.from(input);
-      });
-
-      jwksMock.getKey.mockResolvedValue(validRsaJwk);
-      await expect(
-        verifier.verify(validHeader, 'header.payload.@@@'),
-      ).rejects.toThrow(
-        new ClientError(
-          'Input contains invalid Base64URL characters',
-          'ID_TOKEN_VALIDATION_ERROR',
-        ),
       );
     });
 
@@ -239,18 +328,52 @@ describe('SignatureVerifier', () => {
       );
     });
 
-    it('should throw if key type is unsupported', async () => {
-      jwksMock.getKey.mockResolvedValue({
-        kty: 'foo',
-        alg: 'RS256',
-      } as any);
-      await expect(verifier.verify(validHeader, validIdToken)).rejects.toThrow(
+    it('should throw if signature verification fails for EC', async () => {
+      const ecHeader = { kid: 'validKid', alg: 'ES256' as Algorithm };
+      jwksMock.getKey.mockResolvedValue(validEcJwk);
+      (cryptoVerify as jest.Mock).mockReturnValue(false); // Simulate verification failure
+
+      await expect(verifier.verify(ecHeader, validIdToken)).rejects.toThrow(
         new ClientError(
-          'JWK kty mismatch. Expected RSA for alg RS256',
+          'Invalid ID token signature',
           'ID_TOKEN_VALIDATION_ERROR',
         ),
       );
+
+      expect(jwksMock.getKey).toHaveBeenCalledWith('validKid');
+      expect(ecJwkToPem).toHaveBeenCalledWith('P-256', 'some-x', 'some-y');
+      expect(ecDsaSignatureFromRaw).toHaveBeenCalledWith(
+        Buffer.from('signature'),
+        'ES256',
+      );
+      expect(cryptoVerify).toHaveBeenCalledWith(
+        'sha256',
+        Buffer.from(validSigningInput),
+        { key: 'mockEcPem', dsaEncoding: 'der' },
+        Buffer.from('mockDerSignature'),
+      );
     });
+
+    it('should throw if JWK algorithm does not match JWT header alg', async () => {
+      const mismatchedAlgJwk = {
+        kty: 'RSA',
+        n: 'some-n',
+        e: 'some-e',
+        alg: 'RS384', // Different from header.alg 'RS256'
+      };
+      jwksMock.getKey.mockResolvedValue(mismatchedAlgJwk);
+
+      await expect(verifier.verify(validHeader, validIdToken)).rejects.toThrow(
+        new ClientError(
+          'JWK algorithm does not match JWT header alg. JWK: RS384, JWT: RS256',
+          'ID_TOKEN_VALIDATION_ERROR',
+        ),
+      );
+
+      expect(jwksMock.getKey).toHaveBeenCalledWith('validKid');
+    });
+
+    // New Tests for ES384 and ES512 curves are already included above via curveTests
   });
 
   describe('Branch Coverage', () => {

@@ -137,6 +137,28 @@ describe('Mutex', () => {
       expect(mutex.locked).toBe(false);
     });
 
+    it('should call clearTimeout when timerId is truthy', async () => {
+      const timeout = 1000;
+      const unlock = await mutex.acquire(timeout);
+      expect(mutex.locked).toBe(true);
+      expect(timer.setTimeout).toHaveBeenCalledWith(
+        expect.any(Function),
+        timeout,
+      );
+      expect(timer.clearTimeout).toHaveBeenCalledTimes(1);
+      unlock();
+      expect(mutex.locked).toBe(false);
+    });
+
+    it('should not call clearTimeout when timerId is falsy', async () => {
+      const unlock = await mutex.acquire(); // No timeout provided
+      expect(mutex.locked).toBe(true);
+      expect(timer.clearTimeout).not.toHaveBeenCalled();
+
+      unlock();
+      expect(mutex.locked).toBe(false);
+    });
+
     it('should clear the timeout after successful acquire', async () => {
       const unlock1 = await mutex.acquire(500);
       expect(timer.setTimeout).toHaveBeenCalledTimes(1);
@@ -248,7 +270,29 @@ describe('Mutex', () => {
       unlock2();
       expect(mutex.locked).toBe(false);
     });
+    it('should log error and unlock when release fails', async () => {
+      // Arrange: Acquire the mutex lock
+      const unlock = await mutex.acquire();
 
+      // Mock a logger method within the try block to throw an error.
+      // In the `release` method, `logger.info` is called, so we'll mock it to throw.
+      const releaseError = new Error('Release failed');
+      (logger.info as jest.Mock).mockImplementation(() => {
+        throw releaseError;
+      });
+
+      // Act: Attempt to release the mutex
+      expect(() => unlock()).not.toThrow();
+
+      // Assert: Verify that logger.error was called with the correct arguments
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to release the mutex lock',
+        { error: releaseError },
+      );
+
+      // Assert: Ensure the mutex is unlocked
+      expect(mutex.locked).toBe(false);
+    });
     it('should handle errors during release gracefully', async () => {
       // To simulate an error during release, we'll mock the logger.error to throw
       const originalRelease = (mutex as any).release;
@@ -346,6 +390,38 @@ describe('Mutex', () => {
 
       // Restore original release method
       (mutex as any).release = originalRelease;
+    });
+
+    it('should log error and throw when acquiring the mutex lock fails', async () => {
+      // Arrange: Create a Mutex instance already locked
+      const unlock = await mutex.acquire();
+
+      // Create a MutexError to be thrown
+      const mockError = new MutexError('Acquire failed', 'ACQUIRE_FAILED');
+
+      // Mock the acquire method to throw the MutexError
+      const acquireSpy = jest
+        .spyOn(mutex, 'acquire')
+        .mockRejectedValue(mockError);
+
+      // Act & Assert: runExclusive should throw the same error
+      await expect(
+        mutex.runExclusive(() => Promise.resolve('test')),
+      ).rejects.toThrow(mockError);
+
+      // Assert: logger.error should be called with the correct arguments
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to acquire mutex lock in runExclusive',
+        {
+          error: mockError,
+        },
+      );
+
+      // Clean up: Restore the original acquire method
+      acquireSpy.mockRestore();
+
+      // Release the initially acquired lock
+      unlock();
     });
   });
 

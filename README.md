@@ -16,8 +16,6 @@
 
 This library is built for enterprise-grade TypeScript and Node.js applications, adhering to modern TypeScript practices. It supports multiple grant types, token validation, user information retrieval, and more.
 
-**Status:** This package it under active development and is not yet ready for production use. Please use with caution and report any issues or bugs you encounter.
-
 ## Table of Contents
 
 - [Design Philosophy](#design-philosophy)
