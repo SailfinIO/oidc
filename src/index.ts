@@ -12,3 +12,4 @@ export * from './errors';
 export * from './utils';
 export * from './classes';
 export * from './cache';
+export * from './decorators';
