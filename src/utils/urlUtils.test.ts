@@ -10,6 +10,7 @@ import { IAuthorizationUrlParams } from '../interfaces/IAuthorizationUrlParams';
 import { Algorithm, ResponseMode } from '../enums';
 import { ClientError } from '../errors/ClientError';
 import { ILogoutUrlParams } from '../interfaces';
+import * as crypto from 'crypto';
 
 describe('urlUtils', () => {
   describe('buildUrlEncodedBody', () => {
@@ -350,6 +351,24 @@ describe('urlUtils', () => {
 
           expect(decoded.equals(originalBuffer)).toBe(true);
           expect(decoded.toString('utf8')).toBe(originalStr);
+        });
+
+        it('should throw ClientError if Buffer.from throws an error', () => {
+          const originalBufferFrom = Buffer.from;
+          // Mock Buffer.from to throw an error
+          Buffer.from = jest.fn(() => {
+            throw new Error('Decoding failed');
+          }) as any;
+
+          const validInput = 'SGVsbG8gV29ybGQ'; // "Hello World"
+
+          expect(() => base64UrlDecode(validInput)).toThrow(ClientError);
+          expect(() => base64UrlDecode(validInput)).toThrow(
+            'Failed to decode base64url',
+          );
+
+          // Restore the original Buffer.from method
+          Buffer.from = originalBufferFrom;
         });
 
         it('should handle padding correctly', () => {

@@ -787,6 +787,67 @@ describe('Session', () => {
         },
       );
     });
+    it('should call refreshToken when the token refresh timer fires', async () => {
+      // Arrange
+      const mockTokens = {
+        access_token: 'access-token',
+        token_type: 'Bearer',
+        expires_in: 120, // in seconds
+      };
+      const mockUser: any = { sub: 'user123' };
+      const newSid = 'mock-sid';
+
+      // Mock sessionStore.get to return existing session data
+      (sessionStore.get as jest.Mock).mockResolvedValue({
+        cookie: mockTokens,
+        user: mockUser,
+      });
+
+      // Mock tokenClient.getTokens to return tokens
+      (tokenClient.getTokens as jest.Mock).mockReturnValue(mockTokens);
+
+      // Mock userInfoClient.getUserInfo to return user info
+      (userInfoClient.getUserInfo as jest.Mock).mockResolvedValue(mockUser);
+
+      // Mock sessionStore.set to return a new sid
+      (sessionStore.set as jest.Mock).mockResolvedValue(newSid);
+
+      // Spy on the refreshToken method
+      const refreshTokenSpy = jest
+        .spyOn(session as any, 'refreshToken')
+        .mockResolvedValue(undefined);
+
+      // Create mock Request and Response objects
+      const mockRequest = new Request('http://localhost', {
+        headers: {
+          cookie: `sid=${newSid}`,
+        },
+      });
+
+      const mockResponse = new Response(null, {
+        headers: new Headers(),
+      });
+
+      const context = { request: mockRequest, response: mockResponse };
+
+      // Act: Start the session
+      await session.start(context);
+
+      // Assert that setTimeout was called with the correct refresh time
+      expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 60000); // (120 - 60) * 1000
+
+      // Act: Fast-forward time to trigger the refreshToken
+      jest.advanceTimersByTime(60000); // Advance by 60 seconds
+
+      // Wait for any pending promises
+      await Promise.resolve();
+
+      // Assert that refreshToken was called
+      expect(refreshTokenSpy).toHaveBeenCalledWith(context);
+
+      // Clean up the spy
+      refreshTokenSpy.mockRestore();
+    });
   });
 
   describe('updateSession', () => {

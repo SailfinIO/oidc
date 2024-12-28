@@ -620,4 +620,24 @@ describe('Cookie Class', () => {
     expect(cookie.options?.priority).toBe(Priority.LOW);
     expect(cookie.serialize()).toBe('sessionId=abc123; Priority=Low');
   });
+
+  it('should correctly parse a valid Expires attribute', () => {
+    const cookieString =
+      'sessionId=abc123; Expires=Wed, 21 Oct 2025 07:28:00 GMT';
+    const parsed = Cookie.parse(cookieString);
+
+    expect(parsed.name).toBe('sessionId');
+    expect(parsed.value).toBe('abc123');
+    expect(parsed.options?.expires).toEqual(
+      new Date('Wed, 21 Oct 2025 07:28:00 GMT'),
+    );
+  });
+
+  it('should throw a CookieError for an invalid SameSite value', () => {
+    const cookieString = 'sessionId=abc123; SameSite=InvalidValue';
+
+    expect(() => {
+      Cookie.parse(cookieString);
+    }).toThrow('Invalid SameSite value: InvalidValue');
+  });
 });

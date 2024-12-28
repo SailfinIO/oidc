@@ -544,9 +544,104 @@ describe('TokenClient', () => {
         },
       );
     });
+    describe('introspectToken with clientSecret', () => {
+      beforeEach(() => {
+        // Add clientSecret to the configuration
+        mockConfig.clientSecret = 'test-client-secret';
+        tokenClient = new Token(mockLogger, mockConfig, mockIssuer);
+      });
+
+      it('should include client_secret in the introspection request if provided', async () => {
+        const token = 'active-token-with-secret';
+        const mockIntrospectionResponse: ITokenIntrospectionResponse = {
+          active: true,
+          scope: 'openid profile',
+          client_id: 'test-client-id',
+          username: 'user123',
+          token_type: 'Bearer',
+          exp: 3600,
+          // other claims...
+        };
+
+        // Mock fetch to return the introspection response
+        (global.fetch as jest.Mock).mockResolvedValueOnce(
+          mockFetchSuccess(mockIntrospectionResponse),
+        );
+
+        const result = await tokenClient.introspectToken(token);
+        expect(global.fetch).toHaveBeenCalledWith(
+          'https://example.com/oauth/introspect',
+          {
+            method: 'POST',
+            body: 'token=active-token-with-secret&client_id=test-client-id&client_secret=test-client-secret',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          },
+        );
+        expect(result).toEqual(mockIntrospectionResponse);
+        expect(mockLogger.debug).toHaveBeenCalledWith(
+          'Token introspected successfully',
+          { introspectionResult: mockIntrospectionResponse },
+        );
+      });
+    });
   });
 
   describe('revokeToken', () => {
+    describe('revokeToken with clientSecret', () => {
+      beforeEach(() => {
+        // Add clientSecret to the configuration
+        mockConfig.clientSecret = 'test-client-secret';
+        tokenClient = new Token(mockLogger, mockConfig, mockIssuer);
+      });
+
+      it('should include client_secret in the revocation request if provided', async () => {
+        const token = 'token-to-revoke-with-secret';
+
+        // Mock fetch to simulate successful revocation
+        (global.fetch as jest.Mock).mockResolvedValueOnce(mockFetchSuccess({}));
+
+        // Act
+        await tokenClient.revokeToken(token);
+
+        // Assert
+        expect(global.fetch).toHaveBeenCalledWith(
+          'https://example.com/oauth/revoke',
+          {
+            method: 'POST',
+            body: 'token=token-to-revoke-with-secret&client_id=test-client-id&client_secret=test-client-secret',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          },
+        );
+        expect(mockLogger.info).toHaveBeenCalledWith(
+          'Token revoked successfully',
+        );
+      });
+
+      it('should include client_secret and token_type_hint in the revocation request if provided', async () => {
+        const token = 'token-to-revoke-with-secret-and-hint';
+        const tokenTypeHint = TokenTypeHint.AccessToken;
+
+        // Mock fetch to simulate successful revocation
+        (global.fetch as jest.Mock).mockResolvedValueOnce(mockFetchSuccess({}));
+
+        // Act
+        await tokenClient.revokeToken(token, tokenTypeHint);
+
+        // Assert
+        expect(global.fetch).toHaveBeenCalledWith(
+          'https://example.com/oauth/revoke',
+          {
+            method: 'POST',
+            body: 'token=token-to-revoke-with-secret-and-hint&client_id=test-client-id&client_secret=test-client-secret&token_type_hint=access_token',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          },
+        );
+        expect(mockLogger.info).toHaveBeenCalledWith(
+          'Token revoked successfully',
+        );
+      });
+    });
+
     it('should successfully revoke a token without a token type hint', async () => {
       const token = 'token-to-revoke';
 
@@ -758,6 +853,67 @@ describe('TokenClient', () => {
   });
 
   describe('exchangeCodeForToken', () => {
+    describe('exchangeCodeForToken with clientSecret', () => {
+      beforeEach(() => {
+        // Add clientSecret to the configuration
+        mockConfig.clientSecret = 'test-client-secret';
+        tokenClient = new Token(mockLogger, mockConfig, mockIssuer);
+      });
+
+      it('should include client_secret when exchanging code for token', async () => {
+        // Arrange
+        const code = 'auth-code-with-secret';
+        const codeVerifier = 'code-verifier';
+        const mockTokenResponse: ITokenResponse = {
+          access_token: 'new-access-token-with-secret',
+          refresh_token: 'new-refresh-token-with-secret',
+          expires_in: 3600,
+          token_type: 'Bearer',
+        };
+        mockConfig.grantType = GrantType.AuthorizationCode;
+
+        // Mock fetch to return the token response
+        (global.fetch as jest.Mock).mockResolvedValueOnce(
+          mockFetchSuccess(mockTokenResponse),
+        );
+
+        // Act
+        await tokenClient.exchangeCodeForToken(code, codeVerifier);
+
+        // Build expected body using URLSearchParams
+        const expectedBody = new URLSearchParams({
+          grant_type: GrantType.AuthorizationCode,
+          client_id: 'test-client-id',
+          redirect_uri: 'https://example.com/callback',
+          client_secret: 'test-client-secret',
+          code: code,
+          code_verifier: codeVerifier,
+        }).toString();
+
+        // Assert
+        expect(global.fetch).toHaveBeenCalledWith(
+          'https://example.com/oauth/token',
+          {
+            method: 'POST',
+            body: expectedBody,
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          },
+        );
+        const tokens = tokenClient.getTokens();
+        expect(tokens).toMatchObject({
+          access_token: 'new-access-token-with-secret',
+          refresh_token: 'new-refresh-token-with-secret',
+          token_type: 'Bearer',
+        });
+        expect(mockLogger.info).toHaveBeenCalledWith(
+          'Exchanged grant for tokens',
+          {
+            grantType: GrantType.AuthorizationCode,
+          },
+        );
+      });
+    });
+
     it('should exchange the authorization code for tokens successfully', async () => {
       // Arrange
       const code = 'auth-code';
@@ -838,6 +994,56 @@ describe('TokenClient', () => {
   });
 
   describe('buildTokenRequestParams', () => {
+    describe('buildTokenRequestParams with clientSecret', () => {
+      beforeEach(() => {
+        // Add clientSecret to the configuration
+        mockConfig.clientSecret = 'test-client-secret';
+        tokenClient = new Token(mockLogger, mockConfig, mockIssuer);
+      });
+
+      it('should include client_secret for Authorization Code grant type', () => {
+        // Arrange
+        const code = 'auth-code';
+        const codeVerifier = 'code-verifier';
+        mockConfig.grantType = GrantType.AuthorizationCode;
+
+        // Act
+        // @ts-ignore - testing private method
+        const params = tokenClient.buildTokenRequestParams(code, codeVerifier);
+
+        // Assert
+        expect(params).toEqual({
+          grant_type: GrantType.AuthorizationCode,
+          client_id: 'test-client-id',
+          redirect_uri: 'https://example.com/callback',
+          client_secret: 'test-client-secret',
+          code: 'auth-code',
+          code_verifier: 'code-verifier',
+        });
+      });
+
+      it('should include client_secret for Refresh Token grant type', () => {
+        // Arrange
+        const refreshToken = 'refresh-token';
+        mockConfig.grantType = GrantType.RefreshToken;
+
+        // Act
+        // @ts-ignore - testing private method
+        const params = tokenClient.buildTokenRequestParams(refreshToken);
+
+        // Assert
+        expect(params).toEqual({
+          grant_type: GrantType.RefreshToken,
+          client_id: 'test-client-id',
+          redirect_uri: 'https://example.com/callback',
+          client_secret: 'test-client-secret',
+          refresh_token: 'refresh-token',
+        });
+      });
+
+      // Add similar tests for other grant types if they utilize client_secret
+    });
+
     it('should build correct parameters for Authorization Code grant type', () => {
       // Arrange
       const code = 'auth-code';

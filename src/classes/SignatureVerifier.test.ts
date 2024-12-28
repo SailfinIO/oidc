@@ -373,7 +373,25 @@ describe('SignatureVerifier', () => {
       expect(jwksMock.getKey).toHaveBeenCalledWith('validKid');
     });
 
-    // New Tests for ES384 and ES512 curves are already included above via curveTests
+    it('should throw Unsupported key type: oct when using HS256 algorithm', async () => {
+      const hsHeader = { kid: 'validKid', alg: 'HS256' as Algorithm };
+      const hsJwk = {
+        kty: 'oct', // Supported by the algorithm prefix 'HS'
+        alg: 'HS256',
+        // Add other necessary properties if required
+      } as any;
+
+      jwksMock.getKey.mockResolvedValue(hsJwk);
+
+      await expect(verifier.verify(hsHeader, validIdToken)).rejects.toThrow(
+        new ClientError(
+          'Unsupported key type: oct',
+          'ID_TOKEN_VALIDATION_ERROR',
+        ),
+      );
+
+      expect(jwksMock.getKey).toHaveBeenCalledWith('validKid');
+    });
   });
 
   describe('Branch Coverage', () => {

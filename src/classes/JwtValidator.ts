@@ -9,7 +9,7 @@ import {
   ISignatureVerifier,
   IJwtValidator,
 } from '../interfaces';
-import { Jwks } from '.';
+import { Jwks } from './Jwks';
 import { ClaimsValidator } from './ClaimsValidator';
 import { SignatureVerifier } from './SignatureVerifier';
 import { base64UrlDecode } from '../utils/urlUtils';
