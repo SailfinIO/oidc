@@ -8,6 +8,13 @@ describe('parse', () => {
     expect(result).toEqual({});
   });
 
+  it('should throw an error when the cookie string has an empty name', () => {
+    const invalidCookieString = '=value';
+    expect(() => Cookie.parse(invalidCookieString)).toThrow(
+      'Failed to parse cookie string: Missing name or value.',
+    );
+  });
+
   it('should correctly parse cookie values containing multiple equals signs', () => {
     const header = 'token=a=b=c; sessionId=abc123';
     const result = parse(header);
@@ -310,6 +317,12 @@ describe('serialize', () => {
     expect(result).toBe('sessionId=abc123; Domain=example.com');
   });
 
+  it('should throw an error for invalid SameSite values during serialization', () => {
+    expect(() =>
+      serialize('sessionId', 'abc123', { sameSite: 'invalid' as SameSite }),
+    ).toThrow('Invalid SameSite: invalid');
+  });
+
   it('should serialize with path attribute', () => {
     const result = serialize('sessionId', 'abc123', { path: '/home' });
     expect(result).toBe('sessionId=abc123; Path=/home');
@@ -436,6 +449,13 @@ describe('Cookie Class', () => {
     const cookieString = 'sessionId=abc123; Expires=invalid-date';
     expect(() => Cookie.parse(cookieString)).toThrow(
       'Invalid Expires value: invalid-date',
+    );
+  });
+
+  it('should throw an error when setting an invalid domain using setOptions', () => {
+    const cookie = new Cookie('session', 'abc123');
+    expect(() => cookie.setOptions({ domain: 'invalid domain' })).toThrow(
+      'Invalid domain: invalid domain',
     );
   });
 

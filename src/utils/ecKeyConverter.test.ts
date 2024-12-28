@@ -3,6 +3,7 @@
 import { ecJwkToPem } from './ecKeyConverter';
 import { ClientError } from '../errors';
 import { BinaryToTextEncoding } from '../enums';
+import { CURVE_OIDS } from '../constants/key-converter-constants';
 
 // A known valid P-256 JWK public key for testing:
 // This is just an example. Replace x and y with values from a known P-256 EC key if needed.
@@ -101,21 +102,25 @@ describe('ecJwkToPem', () => {
     }
   });
   it('should throw the default unsupported curve error if curveOid exists but curve is not handled', () => {
-    // Temporarily add a curve with a valid OID but not in the switch
-    let CURVE_OIDS: Record<string, string> = {
-      'P-256': '1.2.840.10045.3.1.7',
-      'P-384': '1.3.132.0.34',
-      'P-521': '1.3.132.0.35',
-    };
-    (CURVE_OIDS as any)['P-256X'] = '1.2.840.10045.3.1.7';
+    const unsupportedCurve = 'P-256X';
+    const unsupportedOid = '1.2.840.10045.3.1.7';
+
+    // Backup the original CURVE_OIDS
+    const originalCurveOids = { ...CURVE_OIDS };
+    // Add the unsupported curve
+    CURVE_OIDS[unsupportedCurve] = unsupportedOid;
+
     try {
-      ecJwkToPem('P-256X', x, y);
+      ecJwkToPem(unsupportedCurve, x, y);
+      throw new Error('Expected ClientError was not thrown');
     } catch (err: any) {
       expect(err).toBeInstanceOf(ClientError);
-      expect(err.message).toContain('Unsupported curve: P-256X');
+      expect(err.message).toContain(`Unsupported curve: ${unsupportedCurve}`);
+      expect(err.code).toBe('ID_TOKEN_VALIDATION_ERROR');
     } finally {
-      // Clean up
-      delete (CURVE_OIDS as any)['P-256X'];
+      // Restore the original CURVE_OIDS
+      Object.keys(CURVE_OIDS).forEach((key) => delete CURVE_OIDS[key]);
+      Object.assign(CURVE_OIDS, originalCurveOids);
     }
   });
 });

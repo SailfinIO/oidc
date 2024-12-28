@@ -16,7 +16,7 @@ export type Resolver = () => void;
 /**
  * Represents the ID of a timer created with `setTimeout`.
  */
-type TimerId = ReturnType<typeof setTimeout>;
+export type TimerId = NodeJS.Timeout;
 
 /**
  * Represents a timer utility with `setTimeout` and `clearTimeout` methods.

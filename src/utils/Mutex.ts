@@ -7,7 +7,7 @@
  * @module src/utils/Mutex
  */
 
-import { ILogger, IMutex, Resolver, ITimer } from '../interfaces';
+import { ILogger, IMutex, Resolver, ITimer, TimerId } from '../interfaces';
 import { MutexError, ClientError } from '../errors';
 
 /**
@@ -63,7 +63,7 @@ export class Mutex implements IMutex {
 
     return new Promise<() => void>((resolve, reject) => {
       let released = false;
-      let timerId: ReturnType<typeof setTimeout> | null = null;
+      let timerId: TimerId | null = null;
 
       const unlock = () => {
         if (!released) {
@@ -238,12 +238,12 @@ export class Mutex implements IMutex {
    *
    * @private
    * @param {any} error - The error encountered.
-   * @param {ReturnType<typeof setTimeout> | null} timerId - The timeout ID to clear.
+   * @param {TimerId | null} timerId - The timeout ID to clear.
    * @param {(reason?: any) => void} reject - The rejection callback.
    */
   private handleAcquireError(
     error: any,
-    timerId: ReturnType<typeof setTimeout> | null,
+    timerId: TimerId | null,
     reject: (reason?: any) => void,
   ): void {
     if (timerId) this.timer.clearTimeout(timerId);
