@@ -1,3 +1,9 @@
+## [0.0.9-beta.4](https://github.com/SailfinIO/oidc/compare/v0.0.9-beta.3...v0.0.9-beta.4) (2024-12-28)
+
+### Bug Fixes
+
+* decorators testing ([0621d72](https://github.com/SailfinIO/oidc/commit/0621d729195ba88f39e59426eff2f526a6a11b33))
+
 ## [0.0.9-beta.3](https://github.com/SailfinIO/oidc/compare/v0.0.9-beta.2...v0.0.9-beta.3) (2024-12-27)
 
 ### Bug Fixes
