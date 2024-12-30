@@ -1,4 +1,5 @@
-import { Scopes } from '../enums';
+import { RouteAction, Scopes } from '../enums';
+import { IStoreContext } from './IStore';
 
 /**
  * Metadata that might be stored at the class level.
@@ -21,4 +22,13 @@ export interface IMethodMetadata {
     claimValue?: any;
   };
   requiredScopes?: Scopes[];
+}
+
+/**
+ * Route metadata that might be stored at the method level.
+ */
+export interface IRouteMetadata {
+  requiresAuth?: boolean;
+  onError?: (error: any, context: IStoreContext) => void;
+  action?: RouteAction;
 }

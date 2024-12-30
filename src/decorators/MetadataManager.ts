@@ -6,7 +6,12 @@
  * @see module:cache/Cache
  * @see module:decorators/KeyFactory
  */
-import { IClassMetadata, IMethodMetadata, ICache } from '../interfaces';
+import {
+  IClassMetadata,
+  IMethodMetadata,
+  ICache,
+  IRouteMetadata,
+} from '../interfaces';
 import { Cache } from '../cache/Cache';
 import { KeyFactory } from './KeyFactory';
 import { ILogger } from '../interfaces'; // Your logger interface
@@ -25,6 +30,11 @@ export class MetadataManager {
   private static methodMetadataCache: ICache<IMethodMetadata> | null = null;
 
   /**
+   * We could store route-level metadata in a Cache keyed by "route:<someKey>:<methodName>".
+   */
+  private static routeMetadataCache: ICache<IRouteMetadata> | null = null;
+
+  /**
    * Initialize (or inject) the caches.
    * You can do this once at app startup or make them lazy-initialized.
    * @param {ILogger} logger - Your logger implementation.
@@ -32,6 +42,7 @@ export class MetadataManager {
   public static init(logger: ILogger) {
     this.classMetadataCache = new Cache<IClassMetadata>(logger);
     this.methodMetadataCache = new Cache<IMethodMetadata>(logger);
+    this.routeMetadataCache = new Cache<IRouteMetadata>(logger);
   }
 
   /**
@@ -157,6 +168,47 @@ export class MetadataManager {
   }
 
   /**
+   * Sets metadata for a specific route.
+   * @param method HTTP method (e.g., 'GET', 'POST').
+   * @param path Route path (e.g., '/login').
+   * @param metadata Metadata to attach.
+   */
+  public static setRouteMetadata(
+    method: string,
+    path: string,
+    metadata: IRouteMetadata,
+  ): void {
+    if (!this.routeMetadataCache) {
+      throw new Error(
+        'MetadataManager caches have not been initialized. Call MetadataManager.init(logger) before using.',
+      );
+    }
+    const cacheKey = `route:${method.toUpperCase()}:${path}`;
+    const existing = this.routeMetadataCache.get(cacheKey) || {};
+    const merged = { ...existing, ...metadata };
+    this.routeMetadataCache.set(cacheKey, merged);
+  }
+
+  /**
+   * Retrieves metadata for a specific route.
+   * @param method HTTP method.
+   * @param path Route path.
+   * @returns Metadata attached to the route.
+   */
+  public static getRouteMetadata(
+    method: string,
+    path: string,
+  ): IRouteMetadata | undefined {
+    if (!this.routeMetadataCache) {
+      throw new Error(
+        'MetadataManager caches have not been initialized. Call MetadataManager.init(logger) before using.',
+      );
+    }
+    const cacheKey = `route:${method.toUpperCase()}:${path}`;
+    return this.routeMetadataCache.get(cacheKey);
+  }
+
+  /**
    * For testing: Clear all metadata from both class-level and method-level caches.
    * @throws {Error} If caches have not been initialized.
    * @returns {void}
@@ -165,6 +217,7 @@ export class MetadataManager {
     if (this.classMetadataCache && this.methodMetadataCache) {
       this.classMetadataCache.clear();
       this.methodMetadataCache.clear();
+      this.routeMetadataCache.clear();
     } else {
       throw new Error(
         'MetadataManager caches have not been initialized. Call MetadataManager.init(logger) before using.',

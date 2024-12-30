@@ -1,5 +1,5 @@
 // src/decorators/AutomaticRefresh.test.ts
-import { AutomaticRefresh } from './AutomaticRefresh';
+import { AutomaticRefresh } from './automaticRefresh';
 import { MetadataManager } from './MetadataManager';
 
 // Mock the MetadataManager

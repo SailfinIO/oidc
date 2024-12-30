@@ -1,5 +1,5 @@
 // src/decorators/RequiresClaim.test.ts
-import { RequiresClaim } from './RequiresClaim';
+import { RequiresClaim } from './requiresClaim';
 import { MetadataManager } from './MetadataManager';
 
 // Mock the MetadataManager

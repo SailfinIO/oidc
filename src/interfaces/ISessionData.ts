@@ -24,7 +24,7 @@ export interface ISessionData {
    *
    * @type {ITokenResponse}
    */
-  cookie: ITokenResponse;
+  cookie?: ITokenResponse;
 
   /**
    * Optionally includes user information associated with the session.
@@ -32,4 +32,11 @@ export interface ISessionData {
    * @type {IUser | undefined}
    */
   user?: IUser;
+
+  /**
+   * Contains the session state for CSRF protection.
+   *
+   * @type {string | undefined}
+   */
+  state?: string;
 }

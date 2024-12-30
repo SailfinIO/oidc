@@ -8,7 +8,13 @@ import { Token } from './Token';
 import { ClientError } from '../errors';
 import { LogLevel, TokenTypeHint, StorageMechanism, GrantType } from '../enums';
 import { Issuer } from './Issuer';
-import { IStoreContext, IStore, ISessionStore } from '../interfaces';
+import {
+  IStore,
+  ISessionStore,
+  IResponse,
+  IRequest,
+  ISessionData,
+} from '../interfaces';
 import { Store } from './Store';
 import * as utils from '../utils';
 import { Session } from './Session';
@@ -24,6 +30,49 @@ jest.mock('../utils');
 jest.mock('./Issuer');
 jest.mock('./Store');
 jest.mock('./Token');
+
+const createMockResponse = (init: Partial<IResponse> = {}): IResponse => {
+  return {
+    // Mock the redirect method
+    redirect: jest.fn(),
+
+    // Mock the status method
+    status: jest.fn().mockReturnThis(),
+
+    // Mock the send method
+    send: jest.fn().mockReturnThis(),
+
+    // Additional properties if needed
+    headers: new Headers(),
+    body: null,
+    bodyUsed: false,
+    ok: true,
+    redirected: false,
+    statusText: 'OK',
+    type: 'basic',
+    url: 'http://localhost',
+    clone: jest.fn(),
+    arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+    blob: jest.fn().mockResolvedValue(new Blob()),
+    formData: jest.fn().mockResolvedValue(new FormData()),
+    json: jest.fn().mockResolvedValue({}),
+    text: jest.fn().mockResolvedValue(''),
+  } as unknown as IResponse;
+};
+
+const createMockRequest = (
+  url: string = 'http://localhost',
+  init: RequestInit = {},
+  query: Record<string, any> = {},
+  session?: ISessionData,
+): IRequest => {
+  const request = new Request(url, init) as IRequest;
+  request.query = query;
+  if (session) {
+    request.session = session;
+  }
+  return request;
+};
 
 // Provide a mock implementation for the 'parse' function
 (utils.parse as jest.Mock).mockImplementation((cookieHeader: string) => {
@@ -161,20 +210,16 @@ const mockLoggerInstance = {
 // Configure the mocked Logger class to return the mockLoggerInstance
 (Logger as jest.Mock).mockImplementation(() => mockLoggerInstance);
 
+const mockRequest = createMockRequest('http://localhost', {
+  headers: {
+    cookie: 'sid=mock_sid',
+  },
+});
+
+const mockResponse = createMockResponse();
+
 // Define a mock context to be used in tests
-const mockContext: IStoreContext = {
-  request: {
-    headers: {
-      get: jest.fn().mockReturnValue('sid=mock_sid'), // Mock the 'get' method
-      cookie: 'sid=mock_sid', // Directly set the 'cookie' property
-    },
-  } as unknown as Request, // Type assertion to satisfy TypeScript
-  response: {
-    setHeader: jest.fn(),
-    writeHead: jest.fn(),
-    end: jest.fn(),
-  } as unknown as Response,
-};
+const mockContext = { request: mockRequest, response: mockResponse };
 
 describe('Client', () => {
   let client: Client;

@@ -1,5 +1,5 @@
 // src/decorators/RequiresAuthentication.test.ts
-import { RequiresAuthentication } from './RequiresAuthentication';
+import { RequiresAuthentication } from './requiresAuthentication';
 import { MetadataManager } from './MetadataManager';
 
 // Mock the MetadataManager

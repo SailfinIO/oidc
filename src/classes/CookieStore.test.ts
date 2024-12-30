@@ -1,8 +1,57 @@
 import { CookieStore } from './CookieStore';
 import { MemoryStore } from './MemoryStore';
-import { IStoreContext, ISessionData, IUser } from '../interfaces';
+import {
+  IStoreContext,
+  ISessionData,
+  IUser,
+  IResponse,
+  IRequest,
+} from '../interfaces';
 import { SameSite } from '../enums';
 import { Cookie } from '../utils/Cookie';
+
+const createMockResponse = (init: Partial<IResponse> = {}): IResponse => {
+  return {
+    // Mock the redirect method
+    redirect: jest.fn(),
+
+    // Mock the status method
+    status: jest.fn().mockReturnThis(),
+
+    // Mock the send method
+    send: jest.fn().mockReturnThis(),
+
+    // Additional properties if needed
+    headers: new Headers(),
+    body: null,
+    bodyUsed: false,
+    ok: true,
+    redirected: false,
+    statusText: 'OK',
+    type: 'basic',
+    url: 'http://localhost',
+    clone: jest.fn(),
+    arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+    blob: jest.fn().mockResolvedValue(new Blob()),
+    formData: jest.fn().mockResolvedValue(new FormData()),
+    json: jest.fn().mockResolvedValue({}),
+    text: jest.fn().mockResolvedValue(''),
+  } as unknown as IResponse;
+};
+
+const createMockRequest = (
+  url: string = 'http://localhost',
+  init: RequestInit = {},
+  query: Record<string, any> = {},
+  session?: ISessionData,
+): IRequest => {
+  const request = new Request(url, init) as IRequest;
+  request.query = query;
+  if (session) {
+    request.session = session;
+  }
+  return request;
+};
 
 describe('CookieStore', () => {
   let cookieStore: CookieStore;
@@ -16,15 +65,13 @@ describe('CookieStore', () => {
     token_type: 'Bearer',
   };
 
-  const mockRequest = new Request('http://localhost', {
+  const mockRequest = createMockRequest('http://localhost', {
     headers: {
       cookie: 'sid=mock-sid',
     },
   });
 
-  const mockResponse = new Response(null, {
-    headers: new Headers(),
-  });
+  const mockResponse = createMockResponse();
 
   beforeEach(() => {
     const memoryStore = new MemoryStore();
@@ -76,7 +123,7 @@ describe('CookieStore', () => {
     const sid = await cookieStore.set(data, context);
 
     // Set the 'test_sid' cookie in the 'Cookie' header
-    context.request = new Request('http://localhost', {
+    context.request = createMockRequest('http://localhost', {
       headers: {
         cookie: `test_sid=${sid}`,
       },
@@ -165,7 +212,7 @@ describe('CookieStore', () => {
     const sid = await cookieStore.set(data, context);
 
     // Remove the cookie header
-    context.request = new Request('http://localhost', {
+    context.request = createMockRequest('http://localhost', {
       headers: {},
     });
 
@@ -192,7 +239,7 @@ describe('CookieStore', () => {
     const sid = await cookieStore.set(data, context);
 
     // Set the 'test_sid' cookie to a different name
-    context.request = new Request('http://localhost', {
+    context.request = createMockRequest('http://localhost', {
       headers: {
         cookie: `other_cookie=${sid}`,
       },

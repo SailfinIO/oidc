@@ -108,6 +108,13 @@ export class Client {
   }
 
   /**
+   * Returns the current configuration.
+   */
+  public getConfig(): IClientConfig {
+    return this.config;
+  }
+
+  /**
    * Centralized config validation.
    */
   private validateConfig(config: IClientConfig): void {

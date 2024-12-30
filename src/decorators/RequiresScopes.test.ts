@@ -1,5 +1,5 @@
 // src/decorators/RequiresScopes.test.ts
-import { RequiresScopes } from './RequiresScopes';
+import { RequiresScopes } from './requiresScopes';
 import { MetadataManager } from './MetadataManager';
 import { Scopes } from '../enums/Scopes';
 

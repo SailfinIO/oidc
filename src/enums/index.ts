@@ -16,3 +16,5 @@ export * from './UILocales';
 export * from './Priority';
 export * from './SameSite';
 export * from './CookieAttribute';
+export * from './RequestMethod';
+export * from './RouteAction';

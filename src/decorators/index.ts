@@ -1,7 +1,7 @@
 // src/decorators/index.ts
 
-export * from './AutomaticRefresh';
-export * from './RequiresAuthentication';
-export * from './RequiresClaim';
-export * from './RequiresScopes';
+export * from './automaticRefresh';
+export * from './requiresAuthentication';
+export * from './requiresClaim';
+export * from './requiresScopes';
 export * from './MetadataManager';

@@ -9,6 +9,17 @@
 
 import { ISessionData } from './ISessionData';
 
+export interface IRequest extends globalThis.Request {
+  query: Record<string, any>;
+  session?: ISessionData;
+}
+
+export interface IResponse extends Omit<globalThis.Response, 'status'> {
+  redirect(url: string): void;
+  status(code: number): this;
+  send(body: string): this;
+}
+
 /**
  * Represents the context for session storage operations.
  *
@@ -23,14 +34,14 @@ export interface IStoreContext {
    *
    * @type {Request | undefined}
    */
-  request?: Request;
+  request?: IRequest;
 
   /**
    * The HTTP response object, if available.
    *
    * @type {Response | undefined}
    */
-  response?: Response;
+  response?: IResponse;
 }
 
 /**
