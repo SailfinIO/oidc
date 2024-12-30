@@ -8,6 +8,7 @@
  */
 
 import { ISessionData } from './ISessionData';
+import { IUser } from './IUser';
 
 export interface IRequest extends globalThis.Request {
   query: Record<string, any>;
@@ -42,6 +43,20 @@ export interface IStoreContext {
    * @type {Response | undefined}
    */
   response?: IResponse;
+
+  /**
+   * Additional context data for the store implementation.
+   *
+   * @type {Record<string, any> | undefined}
+   */
+  extra?: Record<string, any>;
+
+  /**
+   * The User object, if available.
+   *
+   * @type {IUser | undefined}
+   */
+  user?: IUser;
 }
 
 /**

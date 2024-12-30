@@ -52,15 +52,18 @@ export function oidcCallback(client: Client, options?: OidcCallbackOptions) {
         response.status(400).send('State mismatch');
         return;
       }
-      // Retrieve and clear the stored codeVerifier
+
+      // Retrieve codeVerifier from session
       const codeVerifier = request.session?.codeVerifier;
-      if (codeVerifier) {
-        delete request.session.codeVerifier;
+      if (!codeVerifier) {
+        response.status(400).send('Code verifier missing from session');
+        return;
       }
 
-      // Clear the stored state
+      // Clear the stored state and codeVerifier
       if (request.session) {
         delete request.session.state;
+        delete request.session.codeVerifier;
       }
 
       // Create storeContext from request and response
@@ -70,7 +73,7 @@ export function oidcCallback(client: Client, options?: OidcCallbackOptions) {
       };
 
       try {
-        // Handle the redirect (exchange code for tokens, etc.)
+        // Handle the redirect with codeVerifier
         await client.handleRedirect(code, state, codeVerifier, storeContext);
 
         // Retrieve user information
@@ -95,7 +98,7 @@ export function oidcCallback(client: Client, options?: OidcCallbackOptions) {
         }
       }
     } else {
-      // If session is not used, proceed without storing codeVerifier
+      // If session is not used, proceed without codeVerifier
       try {
         await client.handleRedirect(code, state, null, context);
         const user = await client.getUserInfo();

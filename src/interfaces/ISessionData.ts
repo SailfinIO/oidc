@@ -39,4 +39,11 @@ export interface ISessionData {
    * @type {string | undefined}
    */
   state?: string;
+
+  /**
+   * Contains the code verifier for PKCE.
+   *
+   * @type {string | undefined}
+   */
+  codeVerifier?: string;
 }

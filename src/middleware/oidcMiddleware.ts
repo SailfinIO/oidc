@@ -89,12 +89,49 @@ const handleCallbackRoute = async (
     );
   }
 
-  // Handle the redirect by exchanging code for tokens
-  await client.handleRedirect(code, returnedState, context);
+  // Verify state matches the one stored in the session
+  if (client.getConfig().session) {
+    const storedState = request.session?.state;
+    if (returnedState !== storedState) {
+      throw new ClientError('State mismatch', 'STATE_MISMATCH');
+    }
 
-  // Optionally, redirect to a post-login URI
-  const redirectUri = client.getConfig().postLogoutRedirectUri || '/';
-  response.redirect(redirectUri);
+    // Retrieve codeVerifier from session
+    const codeVerifier = request.session?.codeVerifier;
+    if (!codeVerifier) {
+      throw new ClientError(
+        'Code verifier missing from session',
+        'CODE_VERIFIER_MISSING',
+      );
+    }
+
+    // Clear the stored state and codeVerifier
+    delete request.session.state;
+    delete request.session.codeVerifier;
+
+    // Handle the redirect with codeVerifier
+    await client.handleRedirect(code, returnedState, codeVerifier, context);
+
+    // Retrieve user information
+    const user = await client.getUserInfo();
+
+    // Attach user info to the session
+    if (client.getConfig().session) {
+      request.session.user = user;
+    }
+
+    // Determine the redirect URI after successful authentication
+    const redirectUri = metadata.postLoginRedirectUri || '/';
+
+    // Redirect the user
+    response.redirect(redirectUri);
+  } else {
+    // If session is not used, proceed without codeVerifier
+    await client.handleRedirect(code, returnedState, null, context);
+    // Handle user info and redirect as needed
+    const redirectUri = metadata.postLoginRedirectUri || '/';
+    response.redirect(redirectUri);
+  }
 };
 
 // Handler for Protected Routes
@@ -106,7 +143,7 @@ const handleProtectedRoute = async (
 ) => {
   const { response } = context;
 
-  // Check if the user is authenticated
+  // Check if the user is authenticated by verifying the presence of an access token
   const accessToken = await client.getAccessToken();
   if (!accessToken) {
     // Not authenticated, initiate login
@@ -117,16 +154,23 @@ const handleProtectedRoute = async (
     return;
   }
 
-  // Optionally, verify scopes or claims based on metadata
+  // Verify scopes based on the access token
   if (metadata.requiredScopes && metadata.requiredScopes.length > 0) {
-    const userInfo = await client.getUserInfo();
+    const tokenClaims = await client.getClaims();
+    const tokenScopes = tokenClaims['scope']
+      ? tokenClaims['scope'].split(' ')
+      : [];
     const hasAllScopes = metadata.requiredScopes.every((scope) =>
-      userInfo.scope?.includes(scope),
+      tokenScopes.includes(scope),
     );
     if (!hasAllScopes) {
       throw new ClientError('Insufficient scopes', 'INSUFFICIENT_SCOPES');
     }
   }
+
+  // Optionally, attach user info to the context for downstream handlers
+  const userInfo = await client.getUserInfo();
+  context.user = userInfo;
 
   // Proceed to the next middleware or route handler
   await next();

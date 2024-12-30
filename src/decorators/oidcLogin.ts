@@ -37,7 +37,7 @@ export function oidcLogin(client: Client, options?: OidcLoginOptions) {
     }
 
     try {
-      // Get the authorization URL and state
+      // Get the authorization URL, state, and codeVerifier
       const { url, state, codeVerifier } = await client.getAuthorizationUrl();
 
       // Store the state and codeVerifier in the session for CSRF protection and PKCE

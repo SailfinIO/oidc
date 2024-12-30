@@ -31,4 +31,6 @@ export interface IRouteMetadata {
   requiresAuth?: boolean;
   onError?: (error: any, context: IStoreContext) => void;
   action?: RouteAction;
+  postLoginRedirectUri?: string;
+  requiredScopes?: Scopes[];
 }

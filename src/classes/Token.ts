@@ -245,7 +245,7 @@ export class Token implements IToken {
    */
   async exchangeCodeForToken(
     code: string,
-    codeVerifier?: string,
+    codeVerifier?: string | null,
   ): Promise<void> {
     const client = await this.issuer.discover();
     const tokenEndpoint = client.token_endpoint;
@@ -261,6 +261,7 @@ export class Token implements IToken {
         headers,
       });
       const tokenResponse: ITokenResponse = await response.json();
+
       this.setTokens(tokenResponse);
       this.logger.info('Exchanged grant for tokens', {
         grantType: this.config.grantType,
@@ -324,5 +325,51 @@ export class Token implements IToken {
     }
 
     return baseParams;
+  }
+
+  /**
+   * Extracts claims from the access token.
+   * If the access token is a JWT, decode and return its payload.
+   * If opaque, optionally use the UserInfo endpoint to fetch claims.
+   *
+   * @returns A promise that resolves to an array of claim keys.
+   */
+  public async getClaims(): Promise<string[]> {
+    await this.ensureToken();
+    if (!this.accessToken) {
+      throw new ClientError('No access token available', 'NO_ACCESS_TOKEN');
+    }
+
+    if (this.isJwt(this.accessToken)) {
+      try {
+        const claims = this.decodeJwt(this.accessToken);
+        this.logger.debug('Claims extracted from JWT access token', { claims });
+        return Object.keys(claims);
+      } catch (error) {
+        this.logger.error('Failed to decode JWT access token', { error });
+        throw new ClientError('Failed to decode access token', 'DECODE_ERROR', {
+          originalError: error,
+        });
+      }
+    } else {
+      // Access token is opaque; use UserInfo endpoint if available
+      this.logger.debug(
+        'Access token is opaque; fetching claims from UserInfo endpoint',
+      );
+      try {
+        const userInfo = await this.fetchUserInfo();
+        this.logger.debug('Claims fetched from UserInfo endpoint', {
+          userInfo,
+        });
+        return Object.keys(userInfo);
+      } catch (error) {
+        this.logger.error('Failed to fetch claims from UserInfo endpoint', {
+          error,
+        });
+        throw new ClientError('Failed to fetch user info', 'USERINFO_ERROR', {
+          originalError: error,
+        });
+      }
+    }
   }
 }

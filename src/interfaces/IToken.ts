@@ -73,4 +73,10 @@ export interface IToken {
     username?: string,
     password?: string,
   ): Promise<void>;
+
+  /**
+   * Retrieves claims from the access token.
+   * @returns A promise that resolves to an array of claim keys.
+   */
+  getClaims(): Promise<string[]>;
 }
