@@ -12,7 +12,6 @@ import {
 } from '../utils';
 import {
   ILogoutUrlParams,
-  ITokenResponse,
   IIssuer,
   ILogger,
   IToken,
