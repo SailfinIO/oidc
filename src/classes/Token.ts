@@ -362,10 +362,6 @@ export class Token implements IToken {
           logger: this.logger,
           client: await this.issuer.discover(),
           clientId: this.config.clientId,
-          jwks: undefined, // or provide a JWKS instance
-          claimsValidator: undefined, // or provide a ClaimsValidator instance
-          signatureVerifier: undefined, // or provide a SignatureVerifier instance
-          nonce: undefined, // provide nonce if available
         });
         this.logger.debug('Claims extracted from JWT access token', {
           payload: jwtPayload,

@@ -1,4 +1,4 @@
-import { RouteAction, Scopes } from '../enums';
+import { Claims, RouteAction, Scopes } from '../enums';
 import { IStoreContext } from './IStore';
 
 /**
@@ -32,5 +32,5 @@ export interface IRouteMetadata {
   onError?: (error: any, context: IStoreContext) => void;
   action?: RouteAction;
   postLoginRedirectUri?: string;
-  requiredScopes?: Scopes[];
+  requiredClaims?: Claims[];
 }

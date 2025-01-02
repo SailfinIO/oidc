@@ -2,7 +2,7 @@
 
 import { Client } from '../classes/Client';
 import { MetadataManager } from '../decorators/MetadataManager';
-import { IRouteMetadata, IStoreContext } from '../interfaces';
+import { IRequest, IRouteMetadata, IStoreContext } from '../interfaces';
 import { RequestMethod, RouteAction } from '../enums';
 import { ClientError } from '../errors/ClientError';
 import { NextFunction } from '../types';
@@ -97,12 +97,18 @@ const handleProtected = async (
 ) => {
   const { response } = context;
 
-  if (!(await client.getAccessToken())) {
+  const accessToken = await client.getAccessToken();
+  if (!accessToken) {
     response.redirect((await client.getAuthorizationUrl()).url);
     return;
   }
 
-  validateScopes(client, metadata.requiredScopes);
+  // Retrieve all claims
+  const claims = await client.getClaims();
+
+  // Optionally validate specific claims
+  validateSpecificClaims(claims, metadata.requiredClaims);
+
   context.user = await client.getUserInfo();
 
   await next();
@@ -132,10 +138,7 @@ const validateCallbackParams = (code: string | null, state: string | null) => {
   }
 };
 
-const validateSession = (
-  request: IStoreContext['request'],
-  returnedState: string,
-) => {
+const validateSession = (request: IRequest, returnedState: string) => {
   const { session } = request;
   if (!session || session.state !== returnedState) {
     throw new ClientError('State mismatch', 'STATE_MISMATCH');
@@ -154,11 +157,17 @@ const validateSession = (
   return codeVerifier;
 };
 
-const validateScopes = async (client: Client, requiredScopes?: string[]) => {
-  if (!requiredScopes?.length) return;
+const validateSpecificClaims = (
+  claims: Record<string, any>,
+  requiredClaims?: string[],
+) => {
+  if (!requiredClaims?.length) return;
 
-  const tokenScopes = (await client.getClaims())['scope']?.split(' ') || [];
-  if (!requiredScopes.every((scope) => tokenScopes.includes(scope))) {
-    throw new ClientError('Insufficient scopes', 'INSUFFICIENT_SCOPES');
+  const missingClaims = requiredClaims.filter((claim) => !claims[claim]);
+  if (missingClaims.length > 0) {
+    throw new ClientError(
+      `Missing required claims: ${missingClaims.join(', ')}`,
+      'MISSING_CLAIMS',
+    );
   }
 };

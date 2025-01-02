@@ -8,24 +8,16 @@ import {
   ISessionData,
   IRequest,
 } from '../interfaces';
-import { RouteAction, Scopes } from '../enums';
-import { ClientError } from '../errors/ClientError';
+import { Claims, RouteAction } from '../enums';
 
 jest.mock('../classes/Client');
 jest.mock('../decorators/MetadataManager');
 
 const createMockResponse = (init: Partial<IResponse> = {}): IResponse => {
   return {
-    // Mock the redirect method
     redirect: jest.fn(),
-
-    // Mock the status method
     status: jest.fn().mockReturnThis(),
-
-    // Mock the send method
     send: jest.fn().mockReturnThis(),
-
-    // Additional properties if needed
     headers: new Headers(),
     body: null,
     bodyUsed: false,
@@ -80,7 +72,6 @@ describe('OIDC Middleware', () => {
 
     const mockResponse = createMockResponse();
 
-    // Initialize the mock context with request and response
     mockContext = {
       request: mockRequest,
       response: mockResponse,
@@ -158,80 +149,11 @@ describe('OIDC Middleware', () => {
     expect(mockContext.response.redirect).toHaveBeenCalledWith('/dashboard');
   });
 
-  // it('should handle protected action with valid token', async () => {
-  //   const routeMetadata: IRouteMetadata = {
-  //     action: RouteAction.Protected,
-  //     requiredScopes: [Scopes.Email],
-  //   };
-  //   (MetadataManager.getRouteMetadata as jest.Mock).mockReturnValue(
-  //     routeMetadata,
-  //   );
-  //   mockClient.getAccessToken.mockResolvedValue('token');
-  //   mockClient.getClaims.mockResolvedValue({ scope: 'read write' });
-  //   mockClient.getUserInfo.mockResolvedValue({ sub: 'user1' });
-
-  //   const mw = middleware(mockClient);
-  //   await mw(mockContext, mockNext);
-
-  //   expect(mockClient.getAccessToken).toHaveBeenCalled();
-  //   expect(mockClient.getClaims).toHaveBeenCalled();
-  //   expect(mockClient.getUserInfo).toHaveBeenCalled();
-  //   expect(mockNext).toHaveBeenCalled();
-  //   expect(mockContext.user).toEqual({ id: 'user1' });
-  // });
-
-  // it('should redirect to auth if no access token in protected action', async () => {
-  //   const routeMetadata: IRouteMetadata = {
-  //     action: RouteAction.Protected,
-  //     requiredScopes: [Scopes.Admin],
-  //   };
-  //   (MetadataManager.getRouteMetadata as jest.Mock).mockReturnValue(
-  //     routeMetadata,
-  //   );
-  //   mockClient.getAccessToken.mockResolvedValue(null);
-  //   mockClient.getAuthorizationUrl.mockResolvedValue({
-  //     url: 'http://auth.url',
-  //     state: 'abc',
-  //     codeVerifier: '123',
-  //   });
-
-  //   const mw = middleware(mockClient);
-  //   await mw(mockContext, mockNext);
-
-  //   expect(mockClient.getAccessToken).toHaveBeenCalled();
-  //   expect(mockClient.getAuthorizationUrl).toHaveBeenCalled();
-  //   expect(mockContext.response.redirect).toHaveBeenCalledWith(
-  //     'http://auth.url',
-  //   );
-  //   expect(mockNext).not.toHaveBeenCalled();
-  // });
-
-  // it('should handle insufficient scopes', async () => {
-  //   const routeMetadata: IRouteMetadata = {
-  //     action: RouteAction.Protected,
-  //     requiredScopes: [Scopes.Admin],
-  //   };
-  //   (MetadataManager.getRouteMetadata as jest.Mock).mockReturnValue(
-  //     routeMetadata,
-  //   );
-  //   mockClient.getAccessToken.mockResolvedValue('token');
-  //   mockClient.getClaims.mockResolvedValue({ scope: 'read' });
-
-  //   const mw = middleware(mockClient);
-
-  //   await expect(mw(mockContext, mockNext)).rejects.toThrow(
-  //     new ClientError('Insufficient scopes', 'INSUFFICIENT_SCOPES'),
-  //   );
-
-  //   expect(mockClient.getAccessToken).toHaveBeenCalled();
-  //   expect(mockClient.getClaims).toHaveBeenCalled();
-  //   expect(mockNext).not.toHaveBeenCalled();
-  // });
-
   it('should handle errors and call onError if provided', async () => {
+    const mockOnError = jest.fn();
     const routeMetadata: IRouteMetadata = {
       action: RouteAction.Login,
-      onError: jest.fn(),
+      onError: mockOnError,
     };
     (MetadataManager.getRouteMetadata as jest.Mock).mockReturnValue(
       routeMetadata,
@@ -241,8 +163,10 @@ describe('OIDC Middleware', () => {
     const mw = middleware(mockClient);
     await mw(mockContext, mockNext);
 
-    expect(routeMetadata.onError).toHaveBeenCalled();
+    expect(mockClient.getAuthorizationUrl).toHaveBeenCalled();
+    expect(mockOnError).toHaveBeenCalledWith(expect.any(Error), mockContext);
     expect(mockContext.response.status).not.toHaveBeenCalled();
+    expect(mockContext.response.send).not.toHaveBeenCalled();
   });
 
   it('should handle errors and send 500 if onError not provided', async () => {
@@ -255,6 +179,260 @@ describe('OIDC Middleware', () => {
     const mw = middleware(mockClient);
     await mw(mockContext, mockNext);
 
+    expect(mockClient.getAuthorizationUrl).toHaveBeenCalled();
+    expect(mockContext.response.status).toHaveBeenCalledWith(500);
+    expect(mockContext.response.send).toHaveBeenCalledWith(
+      'Authentication failed',
+    );
+  });
+
+  // New Test Cases for Claims Validation
+
+  it('should allow access if all required claims are present', async () => {
+    const routeMetadata: IRouteMetadata = {
+      action: RouteAction.Protected,
+      requiredClaims: [Claims.Email, Claims.Roles],
+    };
+    (MetadataManager.getRouteMetadata as jest.Mock).mockReturnValue(
+      routeMetadata,
+    );
+    mockClient.getAccessToken.mockResolvedValue('valid_token');
+    mockClient.getClaims.mockResolvedValue({
+      email: 'user@example.com',
+      roles: ['admin', 'user'],
+      sub: 'user1',
+    });
+    mockClient.getUserInfo.mockResolvedValue({ sub: 'user1' });
+
+    const mw = middleware(mockClient);
+    await mw(mockContext, mockNext);
+
+    expect(mockClient.getAccessToken).toHaveBeenCalled();
+    expect(mockClient.getClaims).toHaveBeenCalled();
+    expect(mockContext.user).toEqual({ sub: 'user1' });
+    expect(mockNext).toHaveBeenCalled();
+  });
+
+  it('should deny access and send 500 if required claims are missing', async () => {
+    const routeMetadata: IRouteMetadata = {
+      action: RouteAction.Protected,
+      requiredClaims: [Claims.Email, Claims.Roles],
+    };
+    (MetadataManager.getRouteMetadata as jest.Mock).mockReturnValue(
+      routeMetadata,
+    );
+    mockClient.getAccessToken.mockResolvedValue('valid_token');
+    mockClient.getClaims.mockResolvedValue({
+      email: 'user@example.com',
+      // 'roles' claim is missing
+      sub: 'user1',
+    });
+
+    const mw = middleware(mockClient);
+    await mw(mockContext, mockNext);
+
+    expect(mockClient.getAccessToken).toHaveBeenCalled();
+    expect(mockClient.getClaims).toHaveBeenCalled();
+    expect(mockContext.user).toBeUndefined();
+    expect(mockNext).not.toHaveBeenCalled();
+    expect(mockContext.response.redirect).not.toHaveBeenCalled();
+    expect(mockContext.response.status).toHaveBeenCalledWith(500);
+    expect(mockContext.response.send).toHaveBeenCalledWith(
+      'Authentication failed',
+    );
+  });
+
+  it('should allow access if no required claims are specified', async () => {
+    const routeMetadata: IRouteMetadata = {
+      action: RouteAction.Protected,
+      // No requiredClaims
+    };
+    (MetadataManager.getRouteMetadata as jest.Mock).mockReturnValue(
+      routeMetadata,
+    );
+    mockClient.getAccessToken.mockResolvedValue('valid_token');
+    mockClient.getClaims.mockResolvedValue({
+      email: 'user@example.com',
+      roles: ['user'],
+      sub: 'user1',
+    });
+    mockClient.getUserInfo.mockResolvedValue({ sub: 'user1' });
+
+    const mw = middleware(mockClient);
+    await mw(mockContext, mockNext);
+
+    expect(mockClient.getAccessToken).toHaveBeenCalled();
+    expect(mockClient.getClaims).toHaveBeenCalled();
+    expect(mockContext.user).toEqual({ sub: 'user1' });
+    expect(mockNext).toHaveBeenCalled();
+  });
+
+  it('should handle errors during claims retrieval and send 500', async () => {
+    const routeMetadata: IRouteMetadata = {
+      action: RouteAction.Protected,
+      requiredClaims: [Claims.Email],
+    };
+    (MetadataManager.getRouteMetadata as jest.Mock).mockReturnValue(
+      routeMetadata,
+    );
+    mockClient.getAccessToken.mockResolvedValue('valid_token');
+    mockClient.getClaims.mockRejectedValue(
+      new Error('Claims retrieval failed'),
+    );
+
+    const mw = middleware(mockClient);
+    await mw(mockContext, mockNext);
+
+    expect(mockClient.getAccessToken).toHaveBeenCalled();
+    expect(mockClient.getClaims).toHaveBeenCalled();
+    expect(mockContext.user).toBeUndefined();
+    expect(mockNext).not.toHaveBeenCalled();
+    expect(mockContext.response.redirect).not.toHaveBeenCalled();
+    expect(mockContext.response.status).toHaveBeenCalledWith(500);
+    expect(mockContext.response.send).toHaveBeenCalledWith(
+      'Authentication failed',
+    );
+  });
+
+  it('should validate session successfully when session exists and matches state', async () => {
+    // Setup the request with the correct URL containing code and state
+    mockContext.request = createMockRequest(
+      'http://localhost/callback?code=123&state=abc',
+      {
+        headers: {
+          cookie: 'sid=mock_sid',
+        },
+      },
+      {},
+      {
+        state: 'abc',
+        codeVerifier: 'code_verifier_123',
+      },
+    );
+
+    const routeMetadata: IRouteMetadata = {
+      action: RouteAction.Callback,
+      postLoginRedirectUri: '/dashboard',
+    };
+    (MetadataManager.getRouteMetadata as jest.Mock).mockReturnValue(
+      routeMetadata,
+    );
+    mockClient.getConfig = jest.fn().mockReturnValue({ session: true });
+    mockClient.handleRedirect.mockResolvedValue(undefined);
+    mockClient.getUserInfo.mockResolvedValue({ sub: 'user1' });
+
+    const mwInstance = middleware(mockClient);
+    await mwInstance(mockContext, mockNext);
+
+    expect(mockClient.handleRedirect).toHaveBeenCalledWith(
+      '123',
+      'abc',
+      'code_verifier_123',
+      mockContext,
+    );
+    expect(mockContext.request.session?.user).toEqual({ sub: 'user1' });
+    expect(mockContext.request.session?.state).toBeUndefined();
+    expect(mockContext.request.session?.codeVerifier).toBeUndefined();
+  });
+
+  it('should throw ClientError if session is missing', async () => {
+    // Setup the request without a session
+    mockContext.request = createMockRequest(
+      'http://localhost/callback?code=123&state=abc',
+      {
+        headers: {
+          cookie: 'sid=mock_sid',
+        },
+      },
+      {},
+      undefined, // Session is missing
+    );
+
+    const routeMetadata: IRouteMetadata = {
+      action: RouteAction.Callback,
+      postLoginRedirectUri: '/dashboard',
+    };
+    (MetadataManager.getRouteMetadata as jest.Mock).mockReturnValue(
+      routeMetadata,
+    );
+    mockClient.getConfig = jest.fn().mockReturnValue({ session: true });
+
+    const mwInstance = middleware(mockClient);
+    await mwInstance(mockContext, mockNext);
+
+    expect(mockClient.handleRedirect).not.toHaveBeenCalled();
+    expect(mockClient.getUserInfo).not.toHaveBeenCalled();
+    expect(mockContext.response.status).toHaveBeenCalledWith(500);
+    expect(mockContext.response.send).toHaveBeenCalledWith(
+      'Authentication failed',
+    );
+  });
+
+  it('should throw ClientError if state does not match', async () => {
+    // Setup the request with mismatched state
+    mockContext.request = createMockRequest(
+      'http://localhost/callback?code=123&state=abc',
+      {
+        headers: {
+          cookie: 'sid=mock_sid',
+        },
+      },
+      {},
+      {
+        state: 'wrong_state',
+        codeVerifier: 'code_verifier_123',
+      },
+    );
+
+    const routeMetadata: IRouteMetadata = {
+      action: RouteAction.Callback,
+      postLoginRedirectUri: '/dashboard',
+    };
+    (MetadataManager.getRouteMetadata as jest.Mock).mockReturnValue(
+      routeMetadata,
+    );
+    mockClient.getConfig = jest.fn().mockReturnValue({ session: true });
+
+    const mwInstance = middleware(mockClient);
+    await mwInstance(mockContext, mockNext);
+
+    expect(mockClient.handleRedirect).not.toHaveBeenCalled();
+    expect(mockClient.getUserInfo).not.toHaveBeenCalled();
+    expect(mockContext.response.status).toHaveBeenCalledWith(500);
+    expect(mockContext.response.send).toHaveBeenCalledWith(
+      'Authentication failed',
+    );
+  });
+  it('should throw ClientError if codeVerifier is missing', async () => {
+    // Setup the request without codeVerifier
+    mockContext.request = createMockRequest(
+      'http://localhost/callback?code=123&state=abc',
+      {
+        headers: {
+          cookie: 'sid=mock_sid',
+        },
+      },
+      {},
+      {
+        state: 'abc',
+        // codeVerifier is missing
+      },
+    );
+
+    const routeMetadata: IRouteMetadata = {
+      action: RouteAction.Callback,
+      postLoginRedirectUri: '/dashboard',
+    };
+    (MetadataManager.getRouteMetadata as jest.Mock).mockReturnValue(
+      routeMetadata,
+    );
+    mockClient.getConfig = jest.fn().mockReturnValue({ session: true });
+
+    const mwInstance = middleware(mockClient);
+    await mwInstance(mockContext, mockNext);
+
+    expect(mockClient.handleRedirect).not.toHaveBeenCalled();
+    expect(mockClient.getUserInfo).not.toHaveBeenCalled();
     expect(mockContext.response.status).toHaveBeenCalledWith(500);
     expect(mockContext.response.send).toHaveBeenCalledWith(
       'Authentication failed',

@@ -11,6 +11,7 @@ export * from './PkceMethod';
 export * from './ResponseMode';
 export * from './StorageMechanism';
 export * from './Scopes';
+export * from './Claims';
 export * from './Display';
 export * from './UILocales';
 export * from './Priority';
