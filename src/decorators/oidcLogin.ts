@@ -26,7 +26,7 @@ export interface OidcLoginOptions {
  * @param options - Optional settings.
  * @returns A higher-order function that wraps the original route handler.
  */
-export function oidcLogin(client: Client, options?: OidcLoginOptions) {
+export const oidcLogin = (client: Client, options?: OidcLoginOptions) => {
   return async (context: IStoreContext): Promise<void> => {
     const { request, response } = context;
 
@@ -62,4 +62,4 @@ export function oidcLogin(client: Client, options?: OidcLoginOptions) {
       }
     }
   };
-}
+};
