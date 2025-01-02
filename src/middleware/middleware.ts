@@ -12,7 +12,11 @@ export const middleware = (client: Client) => {
     const { request, response } = context;
 
     if (!request || !response) {
-      await next();
+      if (typeof next === 'function') {
+        await next();
+      } else {
+        console.error('Next function is not provided or is not a function');
+      }
       return;
     }
 
@@ -24,7 +28,11 @@ export const middleware = (client: Client) => {
     );
 
     if (!routeMetadata) {
-      await next();
+      if (typeof next === 'function') {
+        await next();
+      } else {
+        console.error('Next function is not provided or is not a function');
+      }
       return;
     }
 

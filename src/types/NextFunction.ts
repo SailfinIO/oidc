@@ -2,11 +2,15 @@
 
 /**
  * NextFunction type definition.
- * @typedef {() => Promise<void>} NextFunction
+ * @typedef {(err?: any) => Promise<void>} NextFunction
+ * @param {any} [err] - Optional error object.
  * @returns {Promise<void>} A promise that resolves when the function completes.
  * @example
- * const next: NextFunction = async () => {
- *  // Do something
+ * const next: NextFunction = async (err) => {
+ *  if (err) {
+ *    // Handle error
+ *  }
+ *  // Proceed to next middleware
  * };
  */
-export type NextFunction = () => Promise<void>;
+export type NextFunction = (err?: any) => Promise<void>;

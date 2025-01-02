@@ -1,4 +1,4 @@
-// src/enums/Scopes.ts
+// src/enums/Claims.ts
 
 /**
  * Enum representing the OpenID Connect and OAuth 2.0 claims.
