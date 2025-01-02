@@ -1,3 +1,12 @@
+## [0.0.10-beta.1](https://github.com/SailfinIO/oidc/compare/v0.0.9...v0.0.10-beta.1) (2025-01-02)
+
+### Bug Fixes
+
+* decorators testing ([0621d72](https://github.com/SailfinIO/oidc/commit/0621d729195ba88f39e59426eff2f526a6a11b33))
+* file name ([4eedaa4](https://github.com/SailfinIO/oidc/commit/4eedaa48d97b812e2c7d5c548322a4a6dce3e4db))
+* remove redundant interface ([7fac0a8](https://github.com/SailfinIO/oidc/commit/7fac0a81557e4e698c98f7c9b4eb763730a65370))
+* work on claims ([8fe05d1](https://github.com/SailfinIO/oidc/commit/8fe05d111c70482c070ad635d94b31256347ee87))
+* work on session state ([6f7c95b](https://github.com/SailfinIO/oidc/commit/6f7c95b2a28daeb0ad1586de2a4ef81347672785))
 
 ## [0.0.9-beta.4](https://github.com/SailfinIO/oidc/compare/v0.0.9-beta.3...v0.0.9-beta.4) (2024-12-28)
 
