@@ -11,10 +11,10 @@ import {
   IMethodMetadata,
   ICache,
   IRouteMetadata,
+  ILogger,
 } from '../interfaces';
 import { Cache } from '../cache/Cache';
 import { KeyFactory } from './KeyFactory';
-import { ILogger } from '../interfaces';
 
 /**
  * Manages class-level and method-level metadata using an in-memory Cache.

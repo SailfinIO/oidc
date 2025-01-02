@@ -9,7 +9,6 @@ import {
   parseFragment,
   sleep,
   generateRandomString,
-  Logger,
 } from '../utils';
 import {
   ILogoutUrlParams,
@@ -534,11 +533,15 @@ export class Auth implements IAuth {
           body,
           headers,
         });
-        const tokenResponse = (await response.json()) as ITokenResponse & {
-          error?: string;
-        };
+        const tokenResponse = await response.json();
         if (tokenResponse.error) {
-          throw { context: { body: JSON.stringify(tokenResponse) } };
+          throw new ClientError(
+            'Error response from token endpoint',
+            'TOKEN_ERROR',
+            {
+              originalError: tokenResponse.error,
+            },
+          );
         }
         this.tokenClient.setTokens(tokenResponse);
         this.logger.info('Device authorized and tokens obtained');

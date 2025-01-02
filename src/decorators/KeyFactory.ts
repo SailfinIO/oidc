@@ -19,7 +19,7 @@
  * }
  */
 export class KeyFactory {
-  private static functionKeyMap = new WeakMap<Function, string>();
+  private static readonly functionKeyMap = new WeakMap<Function, string>();
   private static counter = 0;
 
   /**

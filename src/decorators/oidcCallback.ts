@@ -20,6 +20,103 @@ export interface OidcCallbackOptions {
 }
 
 /**
+ * Validate callback parameters.
+ */
+const validateCallbackParams = (
+  request: any,
+  response: any,
+): { code: string; state: string } | void => {
+  const code = request.query.code as string;
+  const state = request.query.state as string;
+
+  if (!code || !state) {
+    response.status(400).send('Invalid callback parameters');
+    return;
+  }
+
+  return { code, state };
+};
+
+/**
+ * Handle authentication errors.
+ */
+const handleAuthError = (
+  error: any,
+  context: IStoreContext,
+  options?: OidcCallbackOptions,
+) => {
+  console.error('OIDC Callback Error:', error);
+  const { response } = context;
+
+  if (options?.onError) {
+    options.onError(error, context);
+  } else {
+    response.status(500).send('Authentication failed');
+  }
+};
+
+/**
+ * Process the session-based OIDC flow.
+ */
+const processSessionFlow = async (
+  client: Client,
+  context: IStoreContext,
+  code: string,
+  state: string,
+  options?: OidcCallbackOptions,
+) => {
+  const { request, response } = context;
+  const storedState = request.session?.state;
+
+  if (state !== storedState) {
+    response.status(400).send('State mismatch');
+    return;
+  }
+
+  const codeVerifier = request.session?.codeVerifier;
+  if (!codeVerifier) {
+    response.status(400).send('Code verifier missing from session');
+    return;
+  }
+
+  delete request.session.state;
+  delete request.session.codeVerifier;
+
+  const storeContext = { request, response };
+
+  try {
+    await client.handleRedirect(code, state, codeVerifier, storeContext);
+    const user = await client.getUserInfo();
+
+    request.session.user = user;
+    response.redirect(options?.postLoginRedirectUri || '/');
+  } catch (error) {
+    handleAuthError(error, context, options);
+  }
+};
+
+/**
+ * Process the stateless OIDC flow.
+ */
+const processStatelessFlow = async (
+  client: Client,
+  context: IStoreContext,
+  code: string,
+  state: string,
+  options?: OidcCallbackOptions,
+) => {
+  const { response } = context;
+
+  try {
+    await client.handleRedirect(code, state, null, context);
+    await client.getUserInfo();
+    response.redirect(options?.postLoginRedirectUri || '/');
+  } catch (error) {
+    handleAuthError(error, context, options);
+  }
+};
+
+/**
  * Handles the OIDC callback by processing the authorization code,
  * exchanging it for tokens, and establishing a session.
  *
@@ -37,71 +134,16 @@ export const oidcCallback = (client: Client, options?: OidcCallbackOptions) => {
       );
     }
 
-    const code = request.query.code as string;
-    const state = request.query.state as string;
+    const params = validateCallbackParams(request, response);
+    if (!params) return;
 
-    if (!code || !state) {
-      response.status(400).send('Invalid callback parameters');
-      return;
-    }
-
-    // Call getConfig once and store the result
+    const { code, state } = params;
     const config = client.getConfig();
 
     if (config.session) {
-      const storedState = request.session?.state;
-      if (state !== storedState) {
-        response.status(400).send('State mismatch');
-        return;
-      }
-
-      const codeVerifier = request.session?.codeVerifier;
-      if (!codeVerifier) {
-        response.status(400).send('Code verifier missing from session');
-        return;
-      }
-
-      if (request.session) {
-        delete request.session.state;
-        delete request.session.codeVerifier;
-      }
-
-      const storeContext = {
-        request,
-        response,
-      };
-
-      try {
-        await client.handleRedirect(code, state, codeVerifier, storeContext);
-        const user = await client.getUserInfo();
-
-        request.session.user = user;
-
-        const redirectUri = options?.postLoginRedirectUri || '/';
-        response.redirect(redirectUri);
-      } catch (error) {
-        console.error('OIDC Callback Error:', error);
-        if (options?.onError) {
-          options.onError(error, context);
-        } else {
-          response.status(500).send('Authentication failed');
-        }
-      }
+      await processSessionFlow(client, context, code, state, options);
     } else {
-      try {
-        await client.handleRedirect(code, state, null, context);
-        await client.getUserInfo();
-
-        const redirectUri = options?.postLoginRedirectUri || '/';
-        response.redirect(redirectUri);
-      } catch (error) {
-        console.error('OIDC Callback Error:', error);
-        if (options?.onError) {
-          options.onError(error, context);
-        } else {
-          response.status(500).send('Authentication failed');
-        }
-      }
+      await processStatelessFlow(client, context, code, state, options);
     }
   };
 };
