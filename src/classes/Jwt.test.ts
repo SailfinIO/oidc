@@ -19,6 +19,8 @@ import {
 import { base64UrlDecode, base64UrlEncode } from '../utils/urlUtils';
 import { Buffer } from 'buffer';
 import { Algorithm } from '../enums';
+import { ALGORITHM_HASH_MAP } from '../constants/algorithmMap';
+import { constants } from 'crypto';
 
 describe('Jwt', () => {
   // Define mock variables
@@ -194,7 +196,8 @@ describe('Jwt', () => {
   // 6. Static encode Method Tests
   describe('encode', () => {
     let payload: JwtPayload;
-    let options: JwtEncodeOptions;
+    let optionsWithSalt: JwtEncodeOptions;
+    let optionsWithoutSalt: JwtEncodeOptions;
 
     beforeEach(() => {
       payload = {
@@ -204,10 +207,24 @@ describe('Jwt', () => {
         exp: Math.floor(Date.now() / 1000) + 3600,
       };
 
-      options = {
+      optionsWithSalt = {
         algorithm: Algorithm.RS256,
         privateKey: 'privateKey',
         header: { kid: 'key-id-123' },
+      };
+
+      // Correctly set ALGORITHM_HASH_MAP with 'RSA-PSS'
+      ALGORITHM_HASH_MAP[Algorithm.PS256] = {
+        cryptoAlg: 'RSA-PSS', // Correct cryptoAlg
+        hashName: 'sha256',
+        options: { saltLength: 32 }, // Example saltLength
+      };
+
+      optionsWithoutSalt = {
+        algorithm: Algorithm.PS256,
+        privateKey: 'privateKey',
+        header: { kid: 'ps-key-id-123' },
+        // Intentionally omit saltLength in the configuration
       };
     });
 
@@ -222,7 +239,7 @@ describe('Jwt', () => {
       const crypto = require('crypto');
       crypto.sign = jest.fn().mockReturnValue(Buffer.from('signature'));
 
-      const encodedJwt = Jwt.encode(payload, options);
+      const encodedJwt = Jwt.encode(payload, optionsWithSalt);
 
       expect(encodedJwt).toBe('encodedHeader.encodedPayload.encodedSignature');
 
@@ -253,6 +270,87 @@ describe('Jwt', () => {
       expect(() => Jwt.encode(payload, invalidOptions)).toThrow(ClientError);
     });
 
+    it('signs the JWT correctly using RSASSA-PSS', () => {
+      // Prepare a payload and options with a valid RSASSA-PSS configuration
+      const payload: JwtPayload = {
+        iss: client!.issuer!,
+        sub: 'user123',
+        aud: clientId,
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      };
+
+      const optionsWithSalt: JwtEncodeOptions = {
+        algorithm: Algorithm.PS256,
+        privateKey: 'privateKey',
+        header: { kid: 'key-id-123' },
+      };
+
+      // Add a valid configuration for PS256
+      ALGORITHM_HASH_MAP[Algorithm.PS256] = {
+        cryptoAlg: 'RSA-PSS',
+        hashName: 'sha256',
+        options: { saltLength: 32 },
+      };
+
+      // Mock the `crypto.sign` function to ensure it's called
+      const crypto = require('crypto');
+      const mockSign = jest
+        .spyOn(crypto, 'sign')
+        .mockReturnValue(Buffer.from('mockSignature'));
+
+      // Encode the JWT
+      const jwt = Jwt.encode(payload, optionsWithSalt);
+
+      // Verify the resulting JWT structure
+      const parts = jwt.split('.');
+      expect(parts).toHaveLength(3); // header, payload, and signature
+
+      // Check that the `sign` function was called with correct arguments
+      expect(mockSign).toHaveBeenCalledWith(
+        'RSA-PSS',
+        Buffer.from(`${parts[0]}.${parts[1]}`), // signingInput
+        {
+          key: optionsWithSalt.privateKey,
+          padding: constants.RSA_PKCS1_PSS_PADDING,
+          saltLength: 32,
+        },
+      );
+
+      // Ensure the signature matches the mocked return value
+      expect(parts[2]).toBe(Buffer.from('mockSignature').toString('base64url'));
+
+      // Restore the mock
+      mockSign.mockRestore();
+    });
+
+    it('throws ClientError if saltLength is missing for PS algorithms', () => {
+      // Backup the original configuration for PS256
+      const originalConfig = { ...ALGORITHM_HASH_MAP[Algorithm.PS256] };
+
+      try {
+        // Remove saltLength from the configuration
+        delete ALGORITHM_HASH_MAP[Algorithm.PS256].options?.saltLength;
+
+        expect(() => Jwt.encode(payload, optionsWithoutSalt)).toThrow(
+          ClientError,
+        );
+
+        try {
+          Jwt.encode(payload, optionsWithoutSalt);
+        } catch (err) {
+          expect(err).toBeInstanceOf(ClientError);
+          expect(err.message).toBe('Failed to encode JWT');
+          expect(err.context.originalError).toBeInstanceOf(ClientError); // Updated access
+          expect(err.context.originalError.message).toBe(
+            'Missing saltLength for algorithm: PS256',
+          );
+        }
+      } finally {
+        // Restore the original configuration
+        ALGORITHM_HASH_MAP[Algorithm.PS256] = originalConfig;
+      }
+    });
+
     it('throws ClientError if crypto.sign fails', () => {
       // Mock crypto.sign to throw
       const crypto = require('crypto');
@@ -260,13 +358,13 @@ describe('Jwt', () => {
         throw new Error('signing failed');
       });
 
-      expect(() => Jwt.encode(payload, options)).toThrow(ClientError);
+      expect(() => Jwt.encode(payload, optionsWithSalt)).toThrow(ClientError);
     });
 
     // Additional encode tests
     it('includes additional header parameters when provided', () => {
       const extendedOptions: JwtEncodeOptions = {
-        ...options,
+        ...optionsWithSalt,
         header: { kid: 'key-id-123', x5u: 'https://example.com/certs.pem' },
       };
 
@@ -309,7 +407,7 @@ describe('Jwt', () => {
 
     it('throws ClientError if header contains unsupported fields', () => {
       const extendedOptions: JwtEncodeOptions = {
-        ...options,
+        ...optionsWithSalt,
         header: { kid: 'key-id-123', unsupportedField: 'unsupportedValue' },
       };
 

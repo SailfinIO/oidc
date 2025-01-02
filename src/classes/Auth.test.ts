@@ -18,7 +18,7 @@ import {
   parseFragment,
   generateRandomString,
 } from '../utils';
-import { PkceMethod, Scopes, GrantType } from '../enums';
+import { PkceMethod, Scopes, GrantType, UILocales } from '../enums';
 import { Jwt } from './Jwt';
 // Mock utilities
 jest.mock('../utils', () => ({
@@ -657,6 +657,49 @@ describe('Auth', () => {
             );
 
             buildSpy.mockRestore();
+          });
+
+          it('should include ui_locales in additionalParams when uiLocales is set in config', async () => {
+            // Mock the generateRandomString utility for state and nonce
+            const utils = require('../utils');
+            (utils.generateRandomString as jest.Mock)
+              .mockReturnValueOnce('state123')
+              .mockReturnValueOnce('nonce123');
+
+            // Create an instance of Auth with uiLocales set
+            const authWithUiLocales = createAuthInstance(
+              GrantType.AuthorizationCode,
+              {
+                uiLocales: [UILocales.EN_US, UILocales.ES_ES, UILocales.FR_FR], // Set uiLocales to a list of languages
+              },
+            );
+
+            // Spy on buildAuthorizationUrl to verify the URL parameters
+            const buildAuthorizationUrlSpy = jest
+              .spyOn(require('../utils'), 'buildAuthorizationUrl')
+              .mockReturnValue(
+                'https://example.com/oauth2/authorize?client_id=test-client-id',
+              );
+
+            // Call getAuthorizationUrl
+            await authWithUiLocales.getAuthorizationUrl();
+
+            // Verify that buildAuthorizationUrl was called with the correct ui_locales
+            expect(buildAuthorizationUrlSpy).toHaveBeenCalledWith(
+              expect.objectContaining({
+                clientId: MOCK_CLIENT_ID,
+                redirectUri: MOCK_REDIRECT_URI,
+                responseType: 'code',
+                scope: expect.any(String), // Verify other required parameters
+                state: 'state123',
+              }),
+              expect.objectContaining({
+                ui_locales: 'en-US es-ES fr-FR', // Ensure ui_locales is space-separated
+              }),
+            );
+
+            // Clean up the spy
+            buildAuthorizationUrlSpy.mockRestore();
           });
 
           it('should generate an authorization URL without PKCE', async () => {

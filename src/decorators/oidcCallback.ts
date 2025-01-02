@@ -90,7 +90,7 @@ export const oidcCallback = (client: Client, options?: OidcCallbackOptions) => {
     } else {
       try {
         await client.handleRedirect(code, state, null, context);
-        const user = await client.getUserInfo();
+        await client.getUserInfo();
 
         const redirectUri = options?.postLoginRedirectUri || '/';
         response.redirect(redirectUri);

@@ -1206,45 +1206,104 @@ describe('TokenClient', () => {
       MockedJwt.verify = jest.fn();
     });
 
-    it('should successfully extract claims from a valid JWT access token', async () => {
+    it('should correctly identify and process a valid JWT access token', async () => {
       // Arrange
+      const jwtToken = 'header.payload.signature'; // Simulated JWT token with three parts
       const jwtPayload = { sub: 'user123', name: 'John Doe' };
+
+      // Mock JWT verification to return the payload
       (Jwt.verify as jest.Mock).mockResolvedValue(jwtPayload);
 
       tokenClient.setTokens({
-        access_token: 'valid.jwt.token', // Simulate a JWT token
+        access_token: jwtToken,
         refresh_token: 'refresh-token',
         expires_in: 3600,
         token_type: 'Bearer',
       });
 
-      // Spy on the private isJwt method
-      const isJwtSpy = jest
-        .spyOn(tokenClient as any, 'isJwt')
-        .mockReturnValue(true);
+      // Act
+      const claims = await tokenClient.getClaims();
+
+      // Assert
+      expect(claims).toEqual(jwtPayload);
+      expect(Jwt.verify).toHaveBeenCalledWith(jwtToken, expect.any(Object));
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        'Claims extracted from JWT access token',
+        { payload: jwtPayload },
+      );
+    });
+
+    it('should correctly identify and process an opaque access token', async () => {
+      // Arrange
+      const opaqueToken = 'opaque.token'; // Simulated non-JWT token with less than three parts
+      const userInfo = { sub: 'user123', email: 'john.doe@example.com' };
+
+      tokenClient.setTokens({
+        access_token: opaqueToken,
+        refresh_token: 'refresh-token',
+        expires_in: 3600,
+        token_type: 'Bearer',
+      });
+
+      // Mock discovery with userinfo_endpoint
+      (mockIssuer.discover as jest.Mock).mockResolvedValueOnce({
+        token_endpoint: 'https://example.com/oauth/token',
+        introspection_endpoint: 'https://example.com/oauth/introspect',
+        revocation_endpoint: 'https://example.com/oauth/revoke',
+        userinfo_endpoint: 'https://example.com/userinfo',
+      });
+
+      // Mock fetch to UserInfo endpoint
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: jest.fn().mockResolvedValue(userInfo),
+      });
 
       // Act
       const claims = await tokenClient.getClaims();
 
       // Assert
-      expect(isJwtSpy).toHaveBeenCalledWith('valid.jwt.token');
-      expect(MockedJwt.verify).toHaveBeenCalledWith('valid.jwt.token', {
-        logger: mockLogger,
-        client: await mockIssuer.discover(),
-        clientId: mockConfig.clientId,
-        jwks: undefined,
-        claimsValidator: undefined,
-        signatureVerifier: undefined,
-        nonce: undefined,
-      });
-      expect(claims).toEqual(jwtPayload);
-      expect(mockLogger.debug).toHaveBeenCalledWith(
-        'Claims extracted from JWT access token',
-        { payload: jwtPayload },
+      expect(claims).toEqual(userInfo);
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://example.com/userinfo',
+        {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${opaqueToken}`,
+            'Content-Type': 'application/json',
+          },
+        },
       );
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        'Access token is opaque; fetching claims from UserInfo endpoint',
+      );
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        'Claims fetched from UserInfo endpoint',
+        { userInfo },
+      );
+    });
 
-      // Restore the spy
-      isJwtSpy.mockRestore();
+    it('should handle tokens with three parts but invalid JWT format gracefully', async () => {
+      // Arrange
+      const invalidJwtToken = 'part1.part2.part3';
+      const verificationError = new Error('Invalid JWT format');
+
+      // Mock JWT verification to throw an error
+      (Jwt.verify as jest.Mock).mockRejectedValue(verificationError);
+
+      tokenClient.setTokens({
+        access_token: invalidJwtToken,
+        refresh_token: 'refresh-token',
+        expires_in: 3600,
+        token_type: 'Bearer',
+      });
+
+      // Act & Assert
+      await expect(tokenClient.getClaims()).rejects.toThrow(ClientError);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Failed to verify JWT access token',
+        { error: verificationError },
+      );
     });
 
     it('should throw a ClientError if JWT verification fails', async () => {

@@ -447,13 +447,6 @@ export class Token implements IToken {
         headers,
       });
 
-      if (!response.ok) {
-        const errorBody = await response.text();
-        throw new Error(
-          `UserInfo request failed: ${response.status} ${errorBody}`,
-        );
-      }
-
       const userInfo = await response.json();
       return userInfo;
     } catch (error) {
