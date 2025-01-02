@@ -18,6 +18,7 @@ import {
 import { Store } from './Store';
 import * as utils from '../utils';
 import { Session } from './Session';
+import { defaultClientConfig } from '../config/defaultClientConfig';
 
 // Set environment variables if needed
 process.env.OIDC_CLIENT_LOG_LEVEL = 'DEBUG';
@@ -103,6 +104,7 @@ const mockTokenInstance = {
   getAccessToken: jest.fn().mockResolvedValue('access_token'),
   clearTokens: jest.fn(),
   refreshAccessToken: jest.fn().mockResolvedValue(undefined),
+  getClaims: jest.fn(), // Added for getClaims tests
 };
 
 // Configure the mocked Token class to return the mockTokenInstance
@@ -345,11 +347,12 @@ describe('Client', () => {
 
   it('should handle redirect with valid code and state', async () => {
     await expect(
-      client.handleRedirect('auth-code', 'state', mockContext),
+      client.handleRedirect('auth-code', 'state', 'verifier', mockContext),
     ).resolves.toBeUndefined();
     expect(mockAuthInstance.handleRedirect).toHaveBeenCalledWith(
       'auth-code',
       'state',
+      'verifier',
     );
 
     // Now that session logic is handled by Session, we simply ensure it was called:
@@ -521,6 +524,7 @@ describe('Client', () => {
     );
     expect(mockSessionInstance.start).not.toHaveBeenCalled();
   });
+
   it('should handle redirect without silent renew', async () => {
     // Update the config to disable silent renew
     const configWithoutSilentRenew = {
@@ -533,11 +537,12 @@ describe('Client', () => {
     client = new Client(configWithoutSilentRenew);
 
     await expect(
-      client.handleRedirect('auth-code', 'state', mockContext),
+      client.handleRedirect('auth-code', 'state', 'verifier', mockContext),
     ).resolves.toBeUndefined();
     expect(mockAuthInstance.handleRedirect).toHaveBeenCalledWith(
       'auth-code',
       'state',
+      'verifier',
     );
     expect(mockSessionInstance.start).toHaveBeenCalledWith(mockContext);
   });
@@ -566,5 +571,96 @@ describe('Client', () => {
       }),
       mockIssuerInstance,
     );
+  });
+
+  // ------------------ Additional Tests for getConfig ------------------
+
+  describe('getConfig', () => {
+    it('should return the correct configuration', () => {
+      const config = client.getConfig();
+
+      // Expected config is a merge of defaultClientConfig and mockConfig
+      const expectedConfig = { ...defaultClientConfig, ...mockConfig };
+
+      expect(config).toEqual(expectedConfig);
+    });
+
+    it('should correctly merge default config with partial user config', () => {
+      const partialConfig = {
+        clientId: 'partial-client-id',
+        redirectUri: 'https://partial.example.com/callback',
+        discoveryUrl:
+          'https://partial.example.com/.well-known/openid-configuration',
+        scopes: ['openid'],
+      };
+
+      const partialClient = new Client(partialConfig);
+      const config = partialClient.getConfig();
+
+      const expectedConfig = { ...defaultClientConfig, ...partialConfig };
+
+      expect(config).toEqual(expectedConfig);
+    });
+  });
+
+  // ------------------ Additional Tests for getClaims ------------------
+
+  describe('getClaims', () => {
+    it('should retrieve claims successfully', async () => {
+      const mockClaims = { sub: 'user123', email: 'user@example.com' };
+
+      // Mock tokenClient.getClaims to return mockClaims
+      mockTokenInstance.getClaims = jest.fn().mockResolvedValue(mockClaims);
+
+      const claims = await client.getClaims();
+
+      expect(claims).toEqual(mockClaims);
+      expect(mockTokenInstance.getClaims).toHaveBeenCalled();
+      expect(mockLoggerInstance.debug).toHaveBeenCalledWith(
+        'Initializing OIDC Client',
+      );
+    });
+
+    it('should ensure initialization before retrieving claims', async () => {
+      // Spy on ensureInitialized
+      const ensureInitSpy = jest.spyOn(client as any, 'ensureInitialized');
+
+      const mockClaims = { sub: 'user123', email: 'user@example.com' };
+      mockTokenInstance.getClaims = jest.fn().mockResolvedValue(mockClaims);
+
+      await client.getClaims();
+
+      expect(ensureInitSpy).toHaveBeenCalled();
+      expect(mockTokenInstance.getClaims).toHaveBeenCalled();
+    });
+
+    it('should throw an error if initialization fails during getClaims', async () => {
+      const initializationError = new ClientError(
+        'Initialization failed',
+        'INITIALIZATION_ERROR',
+      );
+
+      // Mock ensureInitialized to throw an error
+      jest
+        .spyOn(client as any, 'ensureInitialized')
+        .mockRejectedValueOnce(initializationError);
+
+      await expect(client.getClaims()).rejects.toThrow('Initialization failed');
+
+      // Ensure that getClaims on tokenClient was never called
+      expect(mockTokenInstance.getClaims).not.toHaveBeenCalled();
+    });
+
+    it('should propagate errors from tokenClient.getClaims', async () => {
+      const tokenError = new Error('Failed to retrieve claims');
+
+      mockTokenInstance.getClaims = jest.fn().mockRejectedValueOnce(tokenError);
+
+      await expect(client.getClaims()).rejects.toThrow(
+        'Failed to retrieve claims',
+      );
+
+      expect(mockTokenInstance.getClaims).toHaveBeenCalled();
+    });
   });
 });

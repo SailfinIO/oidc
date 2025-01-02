@@ -78,5 +78,5 @@ export interface IToken {
    * Retrieves claims from the access token.
    * @returns A promise that resolves to an array of claim keys.
    */
-  getClaims(): Promise<string[]>;
+  getClaims(): Promise<Record<string, any>>;
 }

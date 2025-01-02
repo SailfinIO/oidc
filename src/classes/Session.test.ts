@@ -91,6 +91,7 @@ describe('Session', () => {
       introspectToken: jest.fn(),
       revokeToken: jest.fn(),
       exchangeCodeForToken: jest.fn(),
+      getClaims: jest.fn(),
     };
     // Mock IUserInfo
     userInfoClient = {

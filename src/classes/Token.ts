@@ -12,6 +12,7 @@ import { ClientError } from '../errors/ClientError';
 import { buildUrlEncodedBody } from '../utils';
 import { GrantType } from '../enums/GrantType';
 import { TokenTypeHint } from '../enums/TokenTypeHint';
+import { Jwt } from './Jwt';
 
 export class Token implements IToken {
   private readonly logger: ILogger;
@@ -36,7 +37,6 @@ export class Token implements IToken {
       ? Date.now() + tokenResponse.expires_in * 1000
       : null;
     if (tokenResponse.id_token) {
-      // Store it for later validation
       this.idToken = tokenResponse.id_token;
     }
     this.logger.debug('Tokens set successfully', { tokenResponse });
@@ -228,7 +228,13 @@ export class Token implements IToken {
 
     try {
       const response = await fetch(endpoint, { method: 'POST', body, headers });
-      return response.json();
+      const json = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          `Token request failed: ${response.status} ${JSON.stringify(json)}`,
+        );
+      }
+      return json;
     } catch (error) {
       this.logger.error('Token request failed', { endpoint, params, error });
       throw new ClientError('Token request failed', 'TOKEN_REQUEST_ERROR', {
@@ -261,6 +267,12 @@ export class Token implements IToken {
         headers,
       });
       const tokenResponse: ITokenResponse = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          `Token exchange failed: ${response.status} ${JSON.stringify(tokenResponse)}`,
+        );
+      }
 
       this.setTokens(tokenResponse);
       this.logger.info('Exchanged grant for tokens', {
@@ -334,20 +346,34 @@ export class Token implements IToken {
    *
    * @returns A promise that resolves to an array of claim keys.
    */
-  public async getClaims(): Promise<string[]> {
-    await this.ensureToken();
-    if (!this.accessToken) {
+  public async getClaims(): Promise<Record<string, any>> {
+    try {
+      await this.ensureToken();
+    } catch (error) {
+      this.logger.error('No access token available', {
+        error: new ClientError('No access token available', 'NO_ACCESS_TOKEN'),
+      });
       throw new ClientError('No access token available', 'NO_ACCESS_TOKEN');
     }
 
     if (this.isJwt(this.accessToken)) {
       try {
-        const claims = this.decodeJwt(this.accessToken);
-        this.logger.debug('Claims extracted from JWT access token', { claims });
-        return Object.keys(claims);
+        const jwtPayload = await Jwt.verify(this.accessToken, {
+          logger: this.logger,
+          client: await this.issuer.discover(),
+          clientId: this.config.clientId,
+          jwks: undefined, // or provide a JWKS instance
+          claimsValidator: undefined, // or provide a ClaimsValidator instance
+          signatureVerifier: undefined, // or provide a SignatureVerifier instance
+          nonce: undefined, // provide nonce if available
+        });
+        this.logger.debug('Claims extracted from JWT access token', {
+          payload: jwtPayload,
+        });
+        return jwtPayload;
       } catch (error) {
-        this.logger.error('Failed to decode JWT access token', { error });
-        throw new ClientError('Failed to decode access token', 'DECODE_ERROR', {
+        this.logger.error('Failed to verify JWT access token', { error });
+        throw new ClientError('Failed to verify access token', 'DECODE_ERROR', {
           originalError: error,
         });
       }
@@ -361,15 +387,78 @@ export class Token implements IToken {
         this.logger.debug('Claims fetched from UserInfo endpoint', {
           userInfo,
         });
-        return Object.keys(userInfo);
+        return userInfo;
       } catch (error) {
-        this.logger.error('Failed to fetch claims from UserInfo endpoint', {
-          error,
-        });
+        this.logger.error('Failed to fetch user info', { error });
         throw new ClientError('Failed to fetch user info', 'USERINFO_ERROR', {
           originalError: error,
         });
       }
+    }
+  }
+
+  /**
+   * Ensures that the client is initialized and has a valid access token.
+   */
+  private async ensureToken(): Promise<void> {
+    if (this.accessToken && this.isTokenValid()) {
+      return;
+    }
+    if (this.refreshToken) {
+      await this.refreshAccessToken();
+      return;
+    }
+    throw new ClientError('No valid access token available', 'NO_VALID_TOKEN');
+  }
+
+  /**
+   * Determines if a token is a JWT based on its structure.
+   *
+   * @param token The access token to check.
+   * @returns True if the token is a JWT, false otherwise.
+   */
+  private isJwt(token: string): boolean {
+    const parts = token.split('.');
+    return parts.length === 3;
+  }
+
+  /**
+   * Fetches user information from the UserInfo endpoint using the access token.
+   *
+   * @returns A promise that resolves to the user info object.
+   */
+  private async fetchUserInfo(): Promise<Record<string, any>> {
+    const userInfoEndpoint = (await this.issuer.discover()).userinfo_endpoint;
+    if (!userInfoEndpoint) {
+      throw new ClientError(
+        'UserInfo endpoint not available',
+        'USERINFO_UNAVAILABLE',
+      );
+    }
+
+    const headers = {
+      Authorization: `Bearer ${this.accessToken}`,
+      'Content-Type': 'application/json',
+    };
+
+    try {
+      const response = await fetch(userInfoEndpoint, {
+        method: 'GET',
+        headers,
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        throw new Error(
+          `UserInfo request failed: ${response.status} ${errorBody}`,
+        );
+      }
+
+      const userInfo = await response.json();
+      return userInfo;
+    } catch (error) {
+      this.logger.error('Error fetching UserInfo', { error });
+      throw error;
     }
   }
 }

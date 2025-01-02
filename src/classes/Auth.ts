@@ -26,7 +26,7 @@ import {
 } from '../interfaces';
 import { GrantType } from '../enums/GrantType';
 import { PkceMethod } from '../enums';
-import { JwtValidator } from './JwtValidator';
+import { Jwt } from './Jwt';
 import { Pkce } from './Pkce';
 import { State } from './State';
 
@@ -250,11 +250,12 @@ export class Auth implements IAuth {
   /**
    * Handles the redirect callback for authorization code flow.
    * Exchanges the authorization code for tokens and validates the ID token.
-   * Now accepts `codeVerifier` as a parameter instead of using a class variable.
    *
    * @param code - The authorization code received from the provider.
    * @param returnedState - The state returned in the redirect to validate against CSRF.
    * @param codeVerifier - The PKCE code verifier associated with this authorization request.
+   * @returns {Promise<void>}
+   * @throws {ClientError} If state validation fails or token exchange/validation fails.
    */
   public async handleRedirect(
     code: string,
@@ -286,13 +287,13 @@ export class Auth implements IAuth {
       const tokens = this.tokenClient.getTokens();
       const client = await this.getClientMetadata();
       if (tokens?.id_token) {
-        const jwtValidator = new JwtValidator(
-          this.logger as Logger,
-          client,
-          this.config.clientId,
-        );
-        await jwtValidator.validateIdToken(tokens.id_token, expectedNonce);
-        this.logger.info('ID token validated successfully');
+        const payload = await Jwt.verify(tokens.id_token, {
+          logger: this.logger,
+          client: client,
+          clientId: this.config.clientId,
+          nonce: expectedNonce,
+        });
+        this.logger.info('ID token validated successfully', { payload });
       } else {
         this.logger.warn('No ID token returned to validate');
       }
@@ -360,13 +361,14 @@ export class Auth implements IAuth {
     // Optionally handle ID token validation
     if (id_token) {
       const client = await this.getClientMetadata();
-      const jwtValidator = new JwtValidator(
-        this.logger as Logger,
-        client,
-        this.config.clientId,
-      );
-      await jwtValidator.validateIdToken(id_token, expectedNonce);
-      this.logger.info('ID token validated successfully');
+      const payload = await Jwt.verify(id_token, {
+        logger: this.logger,
+        client: client,
+        clientId: this.config.clientId,
+        nonce: expectedNonce,
+        // Optionally pass custom jwks, claimsValidator, signatureVerifier here
+      });
+      this.logger.info('ID token validated successfully', { payload });
     } else {
       this.logger.warn('No ID token returned to validate');
     }

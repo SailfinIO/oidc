@@ -9,7 +9,13 @@
 
 import { constants, verify } from 'crypto';
 import { ClientError } from '../errors/ClientError';
-import { IJwks, ISignatureVerifier, Jwk, JwtHeader } from '../interfaces';
+import {
+  HashAlgorithm,
+  IJwks,
+  ISignatureVerifier,
+  Jwk,
+  JwtHeader,
+} from '../interfaces';
 import { Algorithm } from '../enums';
 import {
   base64UrlDecode,
@@ -17,47 +23,7 @@ import {
   rsaJwkToPem,
   ecJwkToPem,
 } from '../utils';
-
-/**
- * Represents the hash algorithm and optional parameters for a given algorithm.
- *
- * @interface HashAlgorithm
- */
-interface HashAlgorithm {
-  /**
-   * The name of the hash algorithm (e.g., 'sha256').
-   *
-   * @type {string}
-   */
-  name: string;
-
-  /**
-   * Optional parameters for the hash algorithm (e.g., salt length for RSA-PSS).
-   *
-   * @type {{ saltLength?: number }}
-   */
-  options?: { saltLength?: number };
-}
-
-// Centralized algorithm to hash mapping
-const ALGORITHM_HASH_MAP: Record<Algorithm, HashAlgorithm> = {
-  RS256: { name: 'sha256' },
-  RS384: { name: 'sha384' },
-  RS512: { name: 'sha512' },
-  PS256: { name: 'sha256', options: { saltLength: 32 } },
-  PS384: { name: 'sha384', options: { saltLength: 48 } },
-  PS512: { name: 'sha512', options: { saltLength: 64 } },
-  ES256: { name: 'sha256' },
-  ES384: { name: 'sha384' },
-  ES512: { name: 'sha512' },
-  HS256: { name: 'sha256' },
-  HS384: { name: 'sha384' },
-  HS512: { name: 'sha512' },
-  SHA1: { name: 'sha1' },
-  SHA256: { name: 'sha256' },
-  SHA384: { name: 'sha384' },
-  SHA512: { name: 'sha512' },
-};
+import { ALGORITHM_HASH_MAP } from '../constants/algorithmMap';
 
 /**
  * Verifies the signature of a JWT using a public key fetched from a JWKS endpoint.
@@ -97,7 +63,7 @@ export class SignatureVerifier implements ISignatureVerifier {
     const pubKey = this.createPublicKeyFromJwk(jwk);
 
     const { signingInput, sigBuffer } = this.extractSignatureParts(idToken);
-    const { name: hashName, options } = this.getHashAlgorithm(alg);
+    const { hashName, options } = this.getHashAlgorithm(alg);
 
     this.verifySignature(
       alg,
@@ -252,15 +218,15 @@ export class SignatureVerifier implements ISignatureVerifier {
    * @returns {HashAlgorithm} The hash algorithm and options.
    * @throws {ClientError} If the algorithm is unsupported.
    */
-  private getHashAlgorithm(alg: Algorithm): HashAlgorithm {
-    const entry = ALGORITHM_HASH_MAP[alg];
-    if (!entry) {
+  private getHashAlgorithm(alg: Algorithm): Partial<HashAlgorithm> {
+    const config: HashAlgorithm = ALGORITHM_HASH_MAP[alg];
+    if (!config) {
       throw new ClientError(
         `Unsupported or unimplemented algorithm: ${alg}`,
         'ID_TOKEN_VALIDATION_ERROR',
       );
     }
-    return entry;
+    return { hashName: config.hashName, options: config.options };
   }
 
   /**

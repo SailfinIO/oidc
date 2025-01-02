@@ -6,7 +6,7 @@ export * from './UserInfo';
 export * from './Client';
 export * from './Token';
 export * from './Jwks';
-export * from './JwtValidator';
+export * from './Jwt';
 export * from './SignatureVerifier';
 export * from './ClaimsValidator';
 export * from './State';

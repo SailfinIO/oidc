@@ -14,7 +14,7 @@ import {
 } from '../interfaces';
 import { Cache } from '../cache/Cache';
 import { KeyFactory } from './KeyFactory';
-import { ILogger } from '../interfaces'; // Your logger interface
+import { ILogger } from '../interfaces';
 
 /**
  * Manages class-level and method-level metadata using an in-memory Cache.
@@ -172,12 +172,24 @@ export class MetadataManager {
    * @param method HTTP method (e.g., 'GET', 'POST').
    * @param path Route path (e.g., '/login').
    * @param metadata Metadata to attach.
+   * @throws {TypeError} If method or path is not a string.
+   * @throws {Error} If caches have not been initialized.
    */
   public static setRouteMetadata(
     method: string,
     path: string,
     metadata: IRouteMetadata,
   ): void {
+    if (typeof method !== 'string') {
+      throw new TypeError(
+        `setRouteMetadata expects 'method' to be a string, received ${typeof method}.`,
+      );
+    }
+    if (typeof path !== 'string') {
+      throw new TypeError(
+        `setRouteMetadata expects 'path' to be a string, received ${typeof path}.`,
+      );
+    }
     if (!this.routeMetadataCache) {
       throw new Error(
         'MetadataManager caches have not been initialized. Call MetadataManager.init(logger) before using.',
@@ -193,12 +205,24 @@ export class MetadataManager {
    * Retrieves metadata for a specific route.
    * @param method HTTP method.
    * @param path Route path.
+   * @throws {TypeError} If method or path is not a string.
+   * @throws {Error} If caches have not been initialized.
    * @returns Metadata attached to the route.
    */
   public static getRouteMetadata(
     method: string,
     path: string,
   ): IRouteMetadata | undefined {
+    if (typeof method !== 'string') {
+      throw new TypeError(
+        `getRouteMetadata expects 'method' to be a string, received ${typeof method}.`,
+      );
+    }
+    if (typeof path !== 'string') {
+      throw new TypeError(
+        `getRouteMetadata expects 'path' to be a string, received ${typeof path}.`,
+      );
+    }
     if (!this.routeMetadataCache) {
       throw new Error(
         'MetadataManager caches have not been initialized. Call MetadataManager.init(logger) before using.',

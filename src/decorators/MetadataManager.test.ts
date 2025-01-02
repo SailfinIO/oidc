@@ -1,6 +1,6 @@
 // src/decorators/MetadataManager.test.ts
 import { MetadataManager } from './MetadataManager';
-import { IClassMetadata, IMethodMetadata } from '../interfaces';
+import { IClassMetadata, IMethodMetadata, IRouteMetadata } from '../interfaces';
 import { KeyFactory } from './KeyFactory';
 import { Cache } from '../cache/Cache';
 import { ILogger } from '../interfaces';
@@ -11,12 +11,13 @@ jest.mock('../utils/Logger');
 
 const MockedCache = Cache as jest.MockedClass<typeof Cache>;
 
-describe('MetadataManager with Cache', () => {
+describe('MetadataManager', () => {
   class TestClass {}
   class AnotherTestClass {}
   let logger: ILogger;
   let classCacheMock: jest.Mocked<Cache<IClassMetadata>>;
   let methodCacheMock: jest.Mocked<Cache<IMethodMetadata>>;
+  let routeCacheMock: jest.Mocked<Cache<IRouteMetadata>>;
 
   beforeEach(() => {
     // Reset all mocks before each test
@@ -44,10 +45,16 @@ describe('MetadataManager with Cache', () => {
       clear: jest.fn(),
     } as unknown as jest.Mocked<Cache<IMethodMetadata>>;
 
-    // Mock the Cache constructor to return classCacheMock first, then methodCacheMock
-    MockedCache.mockImplementationOnce(
-      () => classCacheMock as any,
-    ).mockImplementationOnce(() => methodCacheMock as any);
+    routeCacheMock = {
+      get: jest.fn(),
+      set: jest.fn(),
+      clear: jest.fn(),
+    } as unknown as jest.Mocked<Cache<IRouteMetadata>>;
+
+    // Mock the Cache constructor to return classCacheMock first, then methodCacheMock, then routeCacheMock
+    MockedCache.mockImplementationOnce(() => classCacheMock as any)
+      .mockImplementationOnce(() => methodCacheMock as any)
+      .mockImplementationOnce(() => routeCacheMock as any);
 
     // Mock KeyFactory.getKeyForFunction to return unique keys
     jest
@@ -307,13 +314,15 @@ describe('MetadataManager with Cache', () => {
   });
 
   describe('Reset Functionality', () => {
-    it('clears all class and method metadata', () => {
+    it('clears all class, method, and route metadata', () => {
       // Set class metadata
       MetadataManager.setClassMetadata(TestClass, { foo: 'bar' });
       // Set method metadata
       MetadataManager.setMethodMetadata(TestClass, 'someMethod', {
         requiresAuth: true,
       });
+      // Set route metadata
+      MetadataManager.setRouteMetadata('GET', '/login', { requiresAuth: true });
 
       // Ensure metadata is set
       expect(classCacheMock.set).toHaveBeenCalledWith('class:ctor_1', {
@@ -323,23 +332,29 @@ describe('MetadataManager with Cache', () => {
         'method:ctor_1:someMethod',
         { requiresAuth: true },
       );
+      expect(routeCacheMock.set).toHaveBeenCalledWith('route:GET:/login', {
+        requiresAuth: true,
+      });
 
       // Mock clear methods
       classCacheMock.clear.mockImplementation(() => {});
       methodCacheMock.clear.mockImplementation(() => {});
+      routeCacheMock.clear.mockImplementation(() => {});
 
       // Reset caches
       MetadataManager.reset();
 
-      // Ensure clear was called on both caches
+      // Ensure clear was called on all caches
       expect(classCacheMock.clear).toHaveBeenCalled();
       expect(methodCacheMock.clear).toHaveBeenCalled();
+      expect(routeCacheMock.clear).toHaveBeenCalled();
     });
 
     it('throws an error if reset is called before initialization', () => {
       // Simulate caches being undefined
       (MetadataManager as any).classMetadataCache = undefined;
       (MetadataManager as any).methodMetadataCache = undefined;
+      (MetadataManager as any).routeMetadataCache = undefined;
 
       expect(() => MetadataManager.reset()).toThrow(
         'MetadataManager caches have not been initialized. Call MetadataManager.init(logger) before using.',
@@ -352,6 +367,7 @@ describe('MetadataManager with Cache', () => {
       // Reset caches to simulate not initialized state
       (MetadataManager as any).classMetadataCache = undefined;
       (MetadataManager as any).methodMetadataCache = undefined;
+      (MetadataManager as any).routeMetadataCache = undefined;
 
       expect(() =>
         MetadataManager.setClassMetadata(TestClass, { foo: 'bar' }),
@@ -374,9 +390,17 @@ describe('MetadataManager with Cache', () => {
       ).toThrow(
         'MetadataManager caches have not been initialized. Call MetadataManager.init(logger) before using.',
       );
+
+      expect(() =>
+        MetadataManager.setRouteMetadata('GET', '/login', {
+          requiresAuth: true,
+        }),
+      ).toThrow(
+        'MetadataManager caches have not been initialized. Call MetadataManager.init(logger) before using.',
+      );
     });
 
-    it('allows re-initialization and retains functionality', () => {
+    it('allows re-initialization and retains functionality for route metadata', () => {
       // Mock a different logger
       const newLogger: ILogger = {
         debug: jest.fn(),
@@ -386,7 +410,7 @@ describe('MetadataManager with Cache', () => {
         setLogLevel: jest.fn(),
       };
 
-      // Set up new Cache mocks
+      // Set up new Cache mocks for class, method, and route metadata
       const newClassCacheMock: jest.Mocked<Cache<IClassMetadata>> = {
         get: jest.fn(),
         set: jest.fn(),
@@ -399,10 +423,16 @@ describe('MetadataManager with Cache', () => {
         clear: jest.fn(),
       } as unknown as jest.Mocked<Cache<IMethodMetadata>>;
 
-      // Mock Cache constructor to return newClassCacheMock first, then newMethodCacheMock
-      MockedCache.mockImplementationOnce(
-        () => newClassCacheMock as any,
-      ).mockImplementationOnce(() => newMethodCacheMock as any);
+      const newRouteCacheMock: jest.Mocked<Cache<IRouteMetadata>> = {
+        get: jest.fn(),
+        set: jest.fn(),
+        clear: jest.fn(),
+      } as unknown as jest.Mocked<Cache<IRouteMetadata>>;
+
+      // Mock Cache constructor to return newClassCacheMock, newMethodCacheMock, and newRouteCacheMock
+      MockedCache.mockImplementationOnce(() => newClassCacheMock as any)
+        .mockImplementationOnce(() => newMethodCacheMock as any)
+        .mockImplementationOnce(() => newRouteCacheMock as any);
 
       // Re-initialize MetadataManager with the new logger
       MetadataManager.init(newLogger);
@@ -444,6 +474,19 @@ describe('MetadataManager with Cache', () => {
         'method:ctor_1:someMethod',
       );
       expect(methodResult).toEqual({ requiresAuth: true });
+
+      // Set and get route metadata
+      MetadataManager.setRouteMetadata('POST', '/submit', {
+        requiresAuth: true,
+      });
+      expect(newRouteCacheMock.set).toHaveBeenCalledWith('route:POST:/submit', {
+        requiresAuth: true,
+      });
+
+      newRouteCacheMock.get.mockReturnValueOnce({ requiresAuth: true });
+      const routeResult = MetadataManager.getRouteMetadata('POST', '/submit');
+      expect(newRouteCacheMock.get).toHaveBeenCalledWith('route:POST:/submit');
+      expect(routeResult).toEqual({ requiresAuth: true });
     });
   });
 
@@ -481,6 +524,309 @@ describe('MetadataManager with Cache', () => {
       expect(classCacheMock.set).toHaveBeenCalledWith('class:ctor_1', {
         fizz: 'buzz',
       });
+    });
+
+    it('generates unique keys for different routes', () => {
+      const routes = [
+        { method: 'GET', path: '/home', metadata: { requiresAuth: false } },
+        { method: 'POST', path: '/submit', metadata: { requiresAuth: true } },
+      ];
+
+      // Set metadata for both routes
+      MetadataManager.setRouteMetadata(
+        routes[0].method,
+        routes[0].path,
+        routes[0].metadata,
+      );
+      MetadataManager.setRouteMetadata(
+        routes[1].method,
+        routes[1].path,
+        routes[1].metadata,
+      );
+
+      // Check that each route was set with its own cache key
+      expect(routeCacheMock.set).toHaveBeenCalledWith(
+        'route:GET:/home',
+        routes[0].metadata,
+      );
+      expect(routeCacheMock.set).toHaveBeenCalledWith(
+        'route:POST:/submit',
+        routes[1].metadata,
+      );
+    });
+
+    it('handles duplicate routes by updating the same cache key', () => {
+      const method = 'PUT';
+      const path = '/update';
+      const metadata1: IRouteMetadata = { requiresAuth: true };
+      const metadata2: IRouteMetadata = {
+        postLoginRedirectUri: 'http://dummy.com',
+      };
+      const mergedMetadata: IRouteMetadata = {
+        requiresAuth: true,
+        postLoginRedirectUri: 'http://dummy.com',
+      };
+
+      // Set initial route metadata
+      MetadataManager.setRouteMetadata(method, path, metadata1);
+      expect(routeCacheMock.set).toHaveBeenCalledWith(
+        'route:PUT:/update',
+        metadata1,
+      );
+
+      // Mock the existing metadata
+      routeCacheMock.get.mockReturnValueOnce(metadata1);
+
+      // Set additional metadata
+      MetadataManager.setRouteMetadata(method, path, metadata2);
+      expect(routeCacheMock.get).toHaveBeenCalledWith('route:PUT:/update');
+      expect(routeCacheMock.set).toHaveBeenCalledWith(
+        'route:PUT:/update',
+        mergedMetadata,
+      );
+
+      // Mock the get to return the merged metadata
+      routeCacheMock.get.mockReturnValueOnce(mergedMetadata);
+
+      // Retrieve the merged route metadata
+      const result = MetadataManager.getRouteMetadata(method, path);
+      expect(routeCacheMock.get).toHaveBeenCalledWith('route:PUT:/update');
+      expect(result).toEqual(mergedMetadata);
+    });
+  });
+
+  describe('Route Metadata', () => {
+    it('sets and retrieves route metadata', () => {
+      const method = 'GET';
+      const path = '/login';
+      const metadata: IRouteMetadata = { requiresAuth: true };
+
+      // Set route metadata
+      MetadataManager.setRouteMetadata(method, path, metadata);
+
+      // Expect the cache to be set with the correct key and metadata
+      expect(routeCacheMock.set).toHaveBeenCalledWith(
+        'route:GET:/login',
+        metadata,
+      );
+
+      // Mock the get to return the metadata
+      routeCacheMock.get.mockReturnValueOnce(metadata);
+
+      // Retrieve the route metadata
+      const result = MetadataManager.getRouteMetadata(method, path);
+      expect(routeCacheMock.get).toHaveBeenCalledWith('route:GET:/login');
+      expect(result).toEqual(metadata);
+    });
+
+    it('merges route metadata correctly', () => {
+      const method = 'POST';
+      const path = '/submit';
+      const initialMetadata: IRouteMetadata = { requiresAuth: true };
+      const additionalMetadata: IRouteMetadata = {
+        postLoginRedirectUri: 'http://dummy.com',
+      };
+      const mergedMetadata: IRouteMetadata = {
+        requiresAuth: true,
+        postLoginRedirectUri: 'http://dummy.com',
+      };
+
+      // Set initial route metadata
+      MetadataManager.setRouteMetadata(method, path, initialMetadata);
+      expect(routeCacheMock.set).toHaveBeenCalledWith(
+        'route:POST:/submit',
+        initialMetadata,
+      );
+
+      // Mock the existing metadata
+      routeCacheMock.get.mockReturnValueOnce(initialMetadata);
+
+      // Set additional metadata
+      MetadataManager.setRouteMetadata(method, path, additionalMetadata);
+      expect(routeCacheMock.get).toHaveBeenCalledWith('route:POST:/submit');
+      expect(routeCacheMock.set).toHaveBeenCalledWith(
+        'route:POST:/submit',
+        mergedMetadata,
+      );
+
+      // Mock the get to return the merged metadata
+      routeCacheMock.get.mockReturnValueOnce(mergedMetadata);
+
+      // Retrieve the merged route metadata
+      const result = MetadataManager.getRouteMetadata(method, path);
+      expect(routeCacheMock.get).toHaveBeenCalledWith('route:POST:/submit');
+      expect(result).toEqual(mergedMetadata);
+    });
+
+    it('handles multiple routes independently', () => {
+      const route1 = {
+        method: 'GET',
+        path: '/home',
+        metadata: { requiresAuth: false },
+      };
+      const route2 = {
+        method: 'POST',
+        path: '/submit',
+        metadata: { requiresAuth: true },
+      };
+
+      // Set metadata for both routes
+      MetadataManager.setRouteMetadata(
+        route1.method,
+        route1.path,
+        route1.metadata,
+      );
+      MetadataManager.setRouteMetadata(
+        route2.method,
+        route2.path,
+        route2.metadata,
+      );
+
+      // Check that each route was set with its own cache key
+      expect(routeCacheMock.set).toHaveBeenCalledWith(
+        'route:GET:/home',
+        route1.metadata,
+      );
+      expect(routeCacheMock.set).toHaveBeenCalledWith(
+        'route:POST:/submit',
+        route2.metadata,
+      );
+
+      // Mock get to return respective metadata
+      routeCacheMock.get.mockImplementation((key: string) => {
+        if (key === 'route:GET:/home') return route1.metadata;
+        if (key === 'route:POST:/submit') return route2.metadata;
+        return undefined;
+      });
+
+      // Retrieve metadata for both routes
+      const result1 = MetadataManager.getRouteMetadata(
+        route1.method,
+        route1.path,
+      );
+      const result2 = MetadataManager.getRouteMetadata(
+        route2.method,
+        route2.path,
+      );
+
+      expect(result1).toEqual(route1.metadata);
+      expect(result2).toEqual(route2.metadata);
+    });
+
+    it('returns undefined for routes with no metadata', () => {
+      expect(
+        MetadataManager.getRouteMetadata('DELETE', '/remove'),
+      ).toBeUndefined();
+    });
+
+    it('handles HTTP methods case-insensitively', () => {
+      const methodLower = 'get';
+      const methodUpper = 'GET';
+      const path = '/status';
+      const metadata: IRouteMetadata = { requiresAuth: false };
+
+      // Set route metadata with lowercase method
+      MetadataManager.setRouteMetadata(methodLower, path, metadata);
+      expect(routeCacheMock.set).toHaveBeenCalledWith(
+        'route:GET:/status',
+        metadata,
+      );
+
+      // Mock the get to return the metadata
+      routeCacheMock.get.mockReturnValueOnce(metadata);
+
+      // Retrieve using uppercase method
+      const result = MetadataManager.getRouteMetadata(methodUpper, path);
+      expect(routeCacheMock.get).toHaveBeenCalledWith('route:GET:/status');
+      expect(result).toEqual(metadata);
+    });
+
+    it('throws an error if caches have not been initialized when setting route metadata', () => {
+      // Simulate caches being undefined
+      (MetadataManager as any).routeMetadataCache = undefined;
+
+      expect(() =>
+        MetadataManager.setRouteMetadata('GET', '/login', {
+          requiresAuth: true,
+        }),
+      ).toThrow(
+        'MetadataManager caches have not been initialized. Call MetadataManager.init(logger) before using.',
+      );
+    });
+
+    it('throws an error if caches have not been initialized when getting route metadata', () => {
+      // Simulate caches being undefined
+      (MetadataManager as any).routeMetadataCache = undefined;
+
+      expect(() => MetadataManager.getRouteMetadata('GET', '/login')).toThrow(
+        'MetadataManager caches have not been initialized. Call MetadataManager.init(logger) before using.',
+      );
+    });
+
+    it('handles invalid inputs gracefully when setting route metadata', () => {
+      // Test with null as method
+      expect(() =>
+        MetadataManager.setRouteMetadata(null as any, '/login', {
+          requiresAuth: true,
+        }),
+      ).toThrow(
+        "setRouteMetadata expects 'method' to be a string, received object.",
+      );
+
+      // Test with undefined as method
+      expect(() =>
+        MetadataManager.setRouteMetadata(undefined as any, '/login', {
+          requiresAuth: true,
+        }),
+      ).toThrow(
+        "setRouteMetadata expects 'method' to be a string, received undefined.",
+      );
+
+      // Test with non-string path
+      expect(() =>
+        MetadataManager.setRouteMetadata('GET', null as any, {
+          requiresAuth: true,
+        }),
+      ).toThrow(
+        "setRouteMetadata expects 'path' to be a string, received object.",
+      );
+
+      // Test with non-string path type
+      expect(() =>
+        MetadataManager.setRouteMetadata('GET', 123 as any, {
+          requiresAuth: true,
+        }),
+      ).toThrow(
+        "setRouteMetadata expects 'path' to be a string, received number.",
+      );
+    });
+
+    it('handles invalid inputs gracefully when getting route metadata', () => {
+      // Test with null as method
+      expect(() =>
+        MetadataManager.getRouteMetadata(null as any, '/login'),
+      ).toThrow(
+        "getRouteMetadata expects 'method' to be a string, received object.",
+      );
+
+      // Test with undefined as method
+      expect(() =>
+        MetadataManager.getRouteMetadata(undefined as any, '/login'),
+      ).toThrow(
+        "getRouteMetadata expects 'method' to be a string, received undefined.",
+      );
+
+      // Test with non-string path
+      expect(() =>
+        MetadataManager.getRouteMetadata('GET', null as any),
+      ).toThrow(
+        "getRouteMetadata expects 'path' to be a string, received object.",
+      );
+
+      // Test with non-string path type
+      expect(() => MetadataManager.getRouteMetadata('GET', 123 as any)).toThrow(
+        "getRouteMetadata expects 'path' to be a string, received number.",
+      );
     });
   });
 });

@@ -252,6 +252,7 @@ export class Client {
     await this.ensureInitialized();
     return this.tokenClient.getClaims();
   }
+
   public async clearTokens(context: IStoreContext): Promise<void> {
     await this.ensureInitialized();
     this.tokenClient.clearTokens();
