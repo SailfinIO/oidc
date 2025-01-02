@@ -1,3 +1,9 @@
+## [0.0.10-beta.3](https://github.com/SailfinIO/oidc/compare/v0.0.10-beta.2...v0.0.10-beta.3) (2025-01-02)
+
+### Bug Fixes
+
+* change to claims instead of scopes ([0b90bc6](https://github.com/SailfinIO/oidc/commit/0b90bc6ab5268523f34539266c70168b27490320))
+
 ## [0.0.10-beta.2](https://github.com/SailfinIO/oidc/compare/v0.0.10-beta.1...v0.0.10-beta.2) (2025-01-02)
 
 ### Bug Fixes
