@@ -1,3 +1,9 @@
+## [0.0.10-beta.2](https://github.com/SailfinIO/oidc/compare/v0.0.10-beta.1...v0.0.10-beta.2) (2025-01-02)
+
+### Bug Fixes
+
+* code smells ([0536fde](https://github.com/SailfinIO/oidc/commit/0536fde9f6ce0389d7f0832b75fb34f9a7b3f0d7))
+
 ## [0.0.10-beta.1](https://github.com/SailfinIO/oidc/compare/v0.0.9...v0.0.10-beta.1) (2025-01-02)
 
 ### Bug Fixes
