@@ -1,113 +1,175 @@
-// src/middleware/middleware.ts
-
 import { Client } from '../classes/Client';
 import { MetadataManager } from '../decorators/MetadataManager';
-import { IRequest, IRouteMetadata, IStoreContext } from '../interfaces';
+import {
+  IRequest,
+  IResponse,
+  IRouteMetadata,
+  IStoreContext,
+} from '../interfaces';
 import { RequestMethod, RouteAction } from '../enums';
 import { ClientError } from '../errors/ClientError';
 import { NextFunction } from '../types';
 
+/**
+ * Middleware function compatible with Express.
+ *
+ * @param {Client} client - The OIDC client instance.
+ * @returns {Function} Express-compatible middleware function.
+ */
 export const middleware = (client: Client) => {
-  return async (context: IStoreContext, next: NextFunction) => {
-    const { request, response } = context;
+  return async (req?: IRequest, res?: IResponse, next?: NextFunction) => {
+    if (!req || !res) {
+      if (next) next();
+      return;
+    }
+    // Construct route metadata
+    const { method, url } = req;
+    let pathname: string;
 
-    if (!request || !response) {
-      if (typeof next === 'function') {
-        await next();
-      } else {
-        console.error('Next function is not provided or is not a function');
-      }
+    try {
+      pathname = new URL(url, `http://${req.headers.get('host')}`).pathname;
+    } catch (error) {
+      console.error('Invalid URL:', url);
+      await next(error);
       return;
     }
 
-    const { method, url } = request;
-    const { pathname } = new URL(url, `http://${request.headers.get('host')}`);
     const routeMetadata = MetadataManager.getRouteMetadata(
       method as RequestMethod,
       pathname,
     );
 
     if (!routeMetadata) {
-      if (typeof next === 'function') {
-        await next();
-      } else {
-        console.error('Next function is not provided or is not a function');
-      }
+      await next();
       return;
     }
 
     try {
-      await handleRoute(client, context, routeMetadata, next);
+      const context: IStoreContext = {
+        request: req,
+        response: res,
+        extra: {}, // Populate as needed
+        user: undefined,
+      };
+      await handleRoute(client, req, res, routeMetadata, next, context);
     } catch (error) {
-      handleError(error, routeMetadata, context);
+      await handleError(error, routeMetadata, req, res, next);
     }
   };
 };
 
+/**
+ * Handles routing based on route metadata.
+ *
+ * @param {Client} client
+ * @param {IRequest} req
+ * @param {IResponse} res
+ * @param {IRouteMetadata} metadata
+ * @param {NextFunction} next
+ * @param {IStoreContext} context
+ */
 const handleRoute = async (
   client: Client,
-  context: IStoreContext,
+  req: IRequest,
+  res: IResponse,
   metadata: IRouteMetadata,
   next: NextFunction,
+  context: IStoreContext,
 ) => {
   switch (metadata.action) {
     case RouteAction.Login:
-      await handleLogin(client, context);
+      await handleLogin(client, res);
       break;
     case RouteAction.Callback:
-      await handleCallback(client, context, metadata);
+      await handleCallback(client, req, res, metadata, next, context);
       break;
     case RouteAction.Protected:
-      await handleProtected(client, context, metadata, next);
+      await handleProtected(client, req, res, metadata, next, context);
       break;
     default:
       await next();
   }
 };
 
-const handleLogin = async (client: Client, context: IStoreContext) => {
-  const { response } = context;
+/**
+ * Handles login action.
+ *
+ * @param {Client} client
+ * @param {IResponse} res
+ */
+const handleLogin = async (client: Client, res: IResponse) => {
   const { url: authUrl } = await client.getAuthorizationUrl();
-  response.redirect(authUrl);
+  res.redirect(authUrl);
 };
 
+/**
+ * Handles callback action.
+ *
+ * @param {Client} client
+ * @param {IRequest} req
+ * @param {IResponse} res
+ * @param {IRouteMetadata} metadata
+ * @param {NextFunction} next
+ * @param {IStoreContext} context
+ */
 const handleCallback = async (
   client: Client,
-  context: IStoreContext,
+  req: IRequest,
+  res: IResponse,
   metadata: IRouteMetadata,
+  next: NextFunction,
+  context: IStoreContext,
 ) => {
-  const { request, response } = context;
-  const urlParams = new URL(
-    request.url,
-    `http://${request.headers.get('host')}`,
-  ).searchParams;
+  const urlParams = new URL(req.url, `http://${req.headers.get('host')}`)
+    .searchParams;
 
   const code = urlParams.get('code');
   const state = urlParams.get('state');
   validateCallbackParams(code, state);
 
   const codeVerifier = client.getConfig().session
-    ? validateSession(request, state)
+    ? validateSession(req, state)
     : null;
-  await client.handleRedirect(code, state, codeVerifier, context);
+
+  await client.handleRedirect(code!, state!, codeVerifier, context);
 
   const user = await client.getUserInfo();
-  if (client.getConfig().session) request.session.user = user;
+  if (client.getConfig().session) {
+    context.user = user;
+    req.session = {
+      ...req.session,
+      user,
+      // Remove state and codeVerifier if they exist
+      state: undefined,
+      codeVerifier: undefined,
+    };
+  }
 
-  response.redirect(metadata.postLoginRedirectUri || '/');
+  res.redirect(metadata.postLoginRedirectUri || '/');
 };
 
+/**
+ * Handles protected routes.
+ *
+ * @param {Client} client
+ * @param {IRequest} req
+ * @param {IResponse} res
+ * @param {IRouteMetadata} metadata
+ * @param {NextFunction} next
+ * @param {IStoreContext} context
+ */
 const handleProtected = async (
   client: Client,
-  context: IStoreContext,
+  req: IRequest,
+  res: IResponse,
   metadata: IRouteMetadata,
   next: NextFunction,
+  context: IStoreContext,
 ) => {
-  const { response } = context;
-
   const accessToken = await client.getAccessToken();
   if (!accessToken) {
-    response.redirect((await client.getAuthorizationUrl()).url);
+    const authUrl = (await client.getAuthorizationUrl()).url;
+    res.redirect(authUrl);
     return;
   }
 
@@ -117,26 +179,50 @@ const handleProtected = async (
   // Optionally validate specific claims
   validateSpecificClaims(claims, metadata.requiredClaims);
 
-  context.user = await client.getUserInfo();
+  const user = await client.getUserInfo();
+  context.user = user;
+  req.session = {
+    ...req.session,
+    user,
+  };
 
   await next();
 };
 
-const handleError = (
+/**
+ * Handles errors in middleware.
+ *
+ * @param {unknown} error
+ * @param {IRouteMetadata} metadata
+ * @param {IRequest} req
+ * @param {IResponse} res
+ * @param {NextFunction} next
+ */
+const handleError = async (
   error: unknown,
   metadata: IRouteMetadata,
-  context: IStoreContext,
+  req: IRequest,
+  res: IResponse,
+  next: NextFunction,
 ) => {
-  const { response } = context;
   console.error('OIDC Middleware Error:', error);
 
   if (metadata.onError) {
-    metadata.onError(error, context);
+    metadata.onError(error, req, res);
   } else {
-    response.status(500).send('Authentication failed');
+    res.status(500).send('Authentication failed');
   }
+
+  // Pass the error to the next middleware
+  await next(error);
 };
 
+/**
+ * Validates callback parameters.
+ *
+ * @param {string | null} code
+ * @param {string | null} state
+ */
 const validateCallbackParams = (code: string | null, state: string | null) => {
   if (!code || !state) {
     throw new ClientError(
@@ -146,8 +232,15 @@ const validateCallbackParams = (code: string | null, state: string | null) => {
   }
 };
 
-const validateSession = (request: IRequest, returnedState: string) => {
-  const { session } = request;
+/**
+ * Validates session data.
+ *
+ * @param {IRequest} req
+ * @param {string} returnedState
+ * @returns {string}
+ */
+const validateSession = (req: IRequest, returnedState: string): string => {
+  const { session } = req;
   if (!session || session.state !== returnedState) {
     throw new ClientError('State mismatch', 'STATE_MISMATCH');
   }
@@ -160,11 +253,19 @@ const validateSession = (request: IRequest, returnedState: string) => {
     );
   }
 
-  delete session.state;
-  delete session.codeVerifier;
+  // Remove state and codeVerifier from session
+  delete req.session!.state;
+  delete req.session!.codeVerifier;
+
   return codeVerifier;
 };
 
+/**
+ * Validates specific claims.
+ *
+ * @param {Record<string, any>} claims
+ * @param {string[] | undefined} requiredClaims
+ */
 const validateSpecificClaims = (
   claims: Record<string, any>,
   requiredClaims?: string[],

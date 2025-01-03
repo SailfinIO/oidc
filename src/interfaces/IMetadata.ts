@@ -1,5 +1,5 @@
 import { Claims, RouteAction, Scopes } from '../enums';
-import { IStoreContext } from './IStore';
+import { IRequest, IResponse, IStoreContext } from './IStore';
 
 /**
  * Metadata that might be stored at the class level.
@@ -29,7 +29,7 @@ export interface IMethodMetadata {
  */
 export interface IRouteMetadata {
   requiresAuth?: boolean;
-  onError?: (error: any, context: IStoreContext) => void;
+  onError?: (error: any, req: IRequest, res: IResponse) => void;
   action?: RouteAction;
   postLoginRedirectUri?: string;
   requiredClaims?: Claims[];
