@@ -2,7 +2,7 @@
 
 import { OidcCallback } from './oidcCallback';
 import { Client } from '../classes/Client';
-import { IStoreContext, IClientConfig } from '../interfaces';
+import { IClientConfig } from '../interfaces';
 import { StorageMechanism } from '../enums';
 
 // Dummy class to apply the decorator

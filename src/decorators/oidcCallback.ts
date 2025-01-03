@@ -1,7 +1,7 @@
 // src/decorators/oidcCallback.ts
 
 import { Client } from '../classes/Client';
-import { IRequest, IResponse, IStoreContext } from '../interfaces';
+import { IStoreContext } from '../interfaces';
 import { MetadataManager } from './MetadataManager';
 
 /**
