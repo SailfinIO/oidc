@@ -1,3 +1,9 @@
+## [0.0.10-beta.5](https://github.com/SailfinIO/oidc/compare/v0.0.10-beta.4...v0.0.10-beta.5) (2025-01-03)
+
+### Bug Fixes
+
+* middleware handling ([0af7430](https://github.com/SailfinIO/oidc/commit/0af7430144f05e4a8cda14388baa02ff033bf479))
+
 ## [0.0.10-beta.4](https://github.com/SailfinIO/oidc/compare/v0.0.10-beta.3...v0.0.10-beta.4) (2025-01-02)
 
 ### Bug Fixes
