@@ -1,3 +1,9 @@
+## [0.0.10-beta.7](https://github.com/SailfinIO/oidc/compare/v0.0.10-beta.6...v0.0.10-beta.7) (2025-01-03)
+
+### Bug Fixes
+
+* export oidc login and callback ([335b3ff](https://github.com/SailfinIO/oidc/commit/335b3ff435153654a37df7673c8631ee112c8b6f))
+
 ## [0.0.10-beta.6](https://github.com/SailfinIO/oidc/compare/v0.0.10-beta.5...v0.0.10-beta.6) (2025-01-03)
 
 ### Bug Fixes
