@@ -1,7 +1,8 @@
 // src/decorators/oidcCallback.ts
 
 import { Client } from '../classes/Client';
-import { IStoreContext } from '../interfaces';
+import { IRequest, IResponse, IStoreContext } from '../interfaces';
+import { MetadataManager } from './MetadataManager';
 
 /**
  * Options for the oidcCallback decorator.
@@ -26,11 +27,24 @@ const validateCallbackParams = (
   request: any,
   response: any,
 ): { code: string; state: string } | void => {
+  if (!request || !request.query) {
+    if (response) {
+      response
+        .status(400)
+        .send('Invalid callback parameters: Missing request or query.');
+    }
+    return;
+  }
+
   const code = request.query.code as string;
   const state = request.query.state as string;
 
   if (!code || !state) {
-    response.status(400).send('Invalid callback parameters');
+    if (response) {
+      response
+        .status(400)
+        .send('Invalid callback parameters: Missing code or state.');
+    }
     return;
   }
 
@@ -124,26 +138,73 @@ const processStatelessFlow = async (
  * @param options - Optional settings.
  * @returns A higher-order function that wraps the original route handler.
  */
-export const OidcCallback = (client: Client, options?: OidcCallbackOptions) => {
-  return async (context: IStoreContext): Promise<void> => {
-    const { request, response } = context;
+export const OidcCallback = (
+  options?: OidcCallbackOptions,
+): MethodDecorator => {
+  return (
+    target: any,
+    propertyKey: string | symbol,
+    descriptor: PropertyDescriptor,
+  ) => {
+    const originalMethod = descriptor.value;
 
-    if (!request || !response) {
-      throw new Error(
-        'Request and Response objects are required in IStoreContext',
-      );
-    }
+    MetadataManager.setMethodMetadata(
+      target.constructor,
+      propertyKey as string,
+      {
+        isOidcCallback: true,
+        ...options,
+      },
+    );
 
-    const params = validateCallbackParams(request, response);
-    if (!params) return;
+    descriptor.value = async function (
+      this: { client: Client },
+      ...args: any[]
+    ) {
+      const req: any = args[0];
+      const res: any = args[1];
 
-    const { code, state } = params;
-    const config = client.getConfig();
+      if (!req || !res) {
+        if (res) {
+          res
+            .status(400)
+            .send('Invalid callback parameters: Missing request or response.');
+        }
+        return;
+      }
 
-    if (config.session) {
-      await processSessionFlow(client, context, code, state, options);
-    } else {
-      await processStatelessFlow(client, context, code, state, options);
-    }
+      // Retrieve the injected OIDC client from 'this' (the controller instance).
+      const client: Client = this.client;
+
+      // Build the store context for your dryness helpers:
+      const context: IStoreContext = { request: req, response: res };
+
+      // 1) Validate the callback params (code & state).
+      const params = validateCallbackParams(req, res);
+      if (!params) {
+        // If validateCallbackParams returned void, it already sent a 400 response.
+        return;
+      }
+
+      // 2) Extract the code and state.
+      const { code, state } = params;
+
+      try {
+        // 3) Check if sessions are configured. If so, do a session-based flow.
+        if (client.getConfig().session) {
+          await processSessionFlow(client, context, code, state, options);
+        } else {
+          await processStatelessFlow(client, context, code, state, options);
+        }
+      } catch (error) {
+        // If an error escaped the dryness flows, handle it here:
+        handleAuthError(error, context, options);
+      }
+
+      // Optionally call the original method if you want to do something after:
+      return originalMethod.apply(this, args);
+    };
+
+    return descriptor;
   };
 };

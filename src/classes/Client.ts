@@ -9,7 +9,7 @@ import {
   IClientConfig,
   ILogger,
   ITokenIntrospectionResponse,
-  ITokenResponse,
+  TokenSet,
   IUserInfo,
   IUser,
   IIssuer,
@@ -238,7 +238,7 @@ export class Client {
     return this.tokenClient.getAccessToken();
   }
 
-  public async getTokens(): Promise<ITokenResponse | null> {
+  public async getTokens(): Promise<TokenSet | null> {
     await this.ensureInitialized();
     return this.tokenClient.getTokens();
   }

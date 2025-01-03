@@ -3,18 +3,19 @@ import { MetadataManager } from './MetadataManager';
 import { IClassMetadata, IMethodMetadata, IRouteMetadata } from '../interfaces';
 import { KeyFactory } from './KeyFactory';
 import { Cache } from '../cache/Cache';
+import { Logger } from '../utils';
 import { ILogger } from '../interfaces';
 
 // Mock the Cache and Logger
 jest.mock('../cache/Cache');
 jest.mock('../utils/Logger');
 
-const MockedCache = Cache as jest.MockedClass<typeof Cache>;
+const MockedLogger = Logger as jest.MockedClass<typeof Logger>;
 
 describe('MetadataManager', () => {
   class TestClass {}
   class AnotherTestClass {}
-  let logger: ILogger;
+  let loggerMock: jest.Mocked<ILogger>;
   let classCacheMock: jest.Mocked<Cache<IClassMetadata>>;
   let methodCacheMock: jest.Mocked<Cache<IMethodMetadata>>;
   let routeCacheMock: jest.Mocked<Cache<IRouteMetadata>>;
@@ -23,16 +24,7 @@ describe('MetadataManager', () => {
     // Reset all mocks before each test
     jest.resetAllMocks();
 
-    // Create a mocked logger
-    logger = {
-      debug: jest.fn(),
-      info: jest.fn(),
-      warn: jest.fn(),
-      error: jest.fn(),
-      setLogLevel: jest.fn(),
-    };
-
-    // Set up mocked Cache instances for class and method metadata
+    // Create mocked Cache instances for class, method, and route metadata
     classCacheMock = {
       get: jest.fn(),
       set: jest.fn(),
@@ -51,10 +43,22 @@ describe('MetadataManager', () => {
       clear: jest.fn(),
     } as unknown as jest.Mocked<Cache<IRouteMetadata>>;
 
-    // Mock the Cache constructor to return classCacheMock first, then methodCacheMock, then routeCacheMock
-    MockedCache.mockImplementationOnce(() => classCacheMock as any)
-      .mockImplementationOnce(() => methodCacheMock as any)
-      .mockImplementationOnce(() => routeCacheMock as any);
+    // Create a mocked logger
+    loggerMock = {
+      debug: jest.fn(),
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+      setLogLevel: jest.fn(),
+    };
+
+    // Mock the Logger constructor to return the mocked logger
+    MockedLogger.mockImplementation(() => loggerMock as unknown as Logger);
+
+    // Assign the mocked caches directly to MetadataManager's private static properties
+    (MetadataManager as any)._classMetadataCache = classCacheMock;
+    (MetadataManager as any)._methodMetadataCache = methodCacheMock;
+    (MetadataManager as any)._routeMetadataCache = routeCacheMock;
 
     // Mock KeyFactory.getKeyForFunction to return unique keys
     jest
@@ -64,9 +68,6 @@ describe('MetadataManager', () => {
         if (target === AnotherTestClass) return 'ctor_2';
         return 'unknown_ctor';
       });
-
-    // Initialize MetadataManager with the mocked logger
-    MetadataManager.init(logger);
   });
 
   afterEach(() => {
@@ -104,6 +105,7 @@ describe('MetadataManager', () => {
 
       classCacheMock.get.mockReturnValueOnce({ foo: 'newBar' });
       const result = MetadataManager.getClassMetadata(TestClass);
+      expect(classCacheMock.get).toHaveBeenCalledWith('class:ctor_1');
       expect(result).toEqual({ foo: 'newBar' });
     });
 
@@ -218,6 +220,9 @@ describe('MetadataManager', () => {
 
       methodCacheMock.get.mockReturnValueOnce({ automaticRefresh: false });
       const result = MetadataManager.getMethodMetadata(TestClass, 'someMethod');
+      expect(methodCacheMock.get).toHaveBeenCalledWith(
+        'method:ctor_1:someMethod',
+      );
       expect(result).toEqual({ automaticRefresh: false });
     });
 
@@ -350,143 +355,13 @@ describe('MetadataManager', () => {
       expect(routeCacheMock.clear).toHaveBeenCalled();
     });
 
-    it('throws an error if reset is called before initialization', () => {
-      // Simulate caches being undefined
-      (MetadataManager as any).classMetadataCache = undefined;
-      (MetadataManager as any).methodMetadataCache = undefined;
-      (MetadataManager as any).routeMetadataCache = undefined;
+    it('does not throw an error if reset is called before caches are initialized', () => {
+      // Ensure caches are not initialized by resetting them to null
+      (MetadataManager as any)._classMetadataCache = null;
+      (MetadataManager as any)._methodMetadataCache = null;
+      (MetadataManager as any)._routeMetadataCache = null;
 
-      expect(() => MetadataManager.reset()).toThrow(
-        'MetadataManager caches have not been initialized. Call MetadataManager.init(logger) before using.',
-      );
-    });
-  });
-
-  describe('Initialization Behavior', () => {
-    it('throws an error if init is not called before using MetadataManager', () => {
-      // Reset caches to simulate not initialized state
-      (MetadataManager as any).classMetadataCache = undefined;
-      (MetadataManager as any).methodMetadataCache = undefined;
-      (MetadataManager as any).routeMetadataCache = undefined;
-
-      expect(() =>
-        MetadataManager.setClassMetadata(TestClass, { foo: 'bar' }),
-      ).toThrow(
-        'MetadataManager caches have not been initialized. Call MetadataManager.init(logger) before using.',
-      );
-      expect(() => MetadataManager.getClassMetadata(TestClass)).toThrow(
-        'MetadataManager caches have not been initialized. Call MetadataManager.init(logger) before using.',
-      );
-
-      expect(() =>
-        MetadataManager.setMethodMetadata(TestClass, 'someMethod', {
-          requiresAuth: true,
-        }),
-      ).toThrow(
-        'MetadataManager caches have not been initialized. Call MetadataManager.init(logger) before using.',
-      );
-      expect(() =>
-        MetadataManager.getMethodMetadata(TestClass, 'someMethod'),
-      ).toThrow(
-        'MetadataManager caches have not been initialized. Call MetadataManager.init(logger) before using.',
-      );
-
-      expect(() =>
-        MetadataManager.setRouteMetadata('GET', '/login', {
-          requiresAuth: true,
-        }),
-      ).toThrow(
-        'MetadataManager caches have not been initialized. Call MetadataManager.init(logger) before using.',
-      );
-    });
-
-    it('allows re-initialization and retains functionality for route metadata', () => {
-      // Mock a different logger
-      const newLogger: ILogger = {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
-        setLogLevel: jest.fn(),
-      };
-
-      // Set up new Cache mocks for class, method, and route metadata
-      const newClassCacheMock: jest.Mocked<Cache<IClassMetadata>> = {
-        get: jest.fn(),
-        set: jest.fn(),
-        clear: jest.fn(),
-      } as unknown as jest.Mocked<Cache<IClassMetadata>>;
-
-      const newMethodCacheMock: jest.Mocked<Cache<IMethodMetadata>> = {
-        get: jest.fn(),
-        set: jest.fn(),
-        clear: jest.fn(),
-      } as unknown as jest.Mocked<Cache<IMethodMetadata>>;
-
-      const newRouteCacheMock: jest.Mocked<Cache<IRouteMetadata>> = {
-        get: jest.fn(),
-        set: jest.fn(),
-        clear: jest.fn(),
-      } as unknown as jest.Mocked<Cache<IRouteMetadata>>;
-
-      // Mock Cache constructor to return newClassCacheMock, newMethodCacheMock, and newRouteCacheMock
-      MockedCache.mockImplementationOnce(() => newClassCacheMock as any)
-        .mockImplementationOnce(() => newMethodCacheMock as any)
-        .mockImplementationOnce(() => newRouteCacheMock as any);
-
-      // Re-initialize MetadataManager with the new logger
-      MetadataManager.init(newLogger);
-
-      // Mock KeyFactory.getKeyForFunction to return 'ctor_1' for TestClass
-      jest
-        .spyOn(KeyFactory, 'getKeyForFunction')
-        .mockImplementation((target: Function) => {
-          if (target === TestClass) return 'ctor_1';
-          return 'unknown_ctor';
-        });
-
-      // Set and get class metadata
-      MetadataManager.setClassMetadata(TestClass, { foo: 'bar' });
-      expect(newClassCacheMock.set).toHaveBeenCalledWith('class:ctor_1', {
-        foo: 'bar',
-      });
-
-      newClassCacheMock.get.mockReturnValueOnce({ foo: 'bar' });
-      const classResult = MetadataManager.getClassMetadata(TestClass);
-      expect(newClassCacheMock.get).toHaveBeenCalledWith('class:ctor_1');
-      expect(classResult).toEqual({ foo: 'bar' });
-
-      // Set and get method metadata
-      MetadataManager.setMethodMetadata(TestClass, 'someMethod', {
-        requiresAuth: true,
-      });
-      expect(newMethodCacheMock.set).toHaveBeenCalledWith(
-        'method:ctor_1:someMethod',
-        { requiresAuth: true },
-      );
-
-      newMethodCacheMock.get.mockReturnValueOnce({ requiresAuth: true });
-      const methodResult = MetadataManager.getMethodMetadata(
-        TestClass,
-        'someMethod',
-      );
-      expect(newMethodCacheMock.get).toHaveBeenCalledWith(
-        'method:ctor_1:someMethod',
-      );
-      expect(methodResult).toEqual({ requiresAuth: true });
-
-      // Set and get route metadata
-      MetadataManager.setRouteMetadata('POST', '/submit', {
-        requiresAuth: true,
-      });
-      expect(newRouteCacheMock.set).toHaveBeenCalledWith('route:POST:/submit', {
-        requiresAuth: true,
-      });
-
-      newRouteCacheMock.get.mockReturnValueOnce({ requiresAuth: true });
-      const routeResult = MetadataManager.getRouteMetadata('POST', '/submit');
-      expect(newRouteCacheMock.get).toHaveBeenCalledWith('route:POST:/submit');
-      expect(routeResult).toEqual({ requiresAuth: true });
+      expect(() => MetadataManager.reset()).not.toThrow();
     });
   });
 
@@ -739,28 +614,6 @@ describe('MetadataManager', () => {
       const result = MetadataManager.getRouteMetadata(methodUpper, path);
       expect(routeCacheMock.get).toHaveBeenCalledWith('route:GET:/status');
       expect(result).toEqual(metadata);
-    });
-
-    it('throws an error if caches have not been initialized when setting route metadata', () => {
-      // Simulate caches being undefined
-      (MetadataManager as any).routeMetadataCache = undefined;
-
-      expect(() =>
-        MetadataManager.setRouteMetadata('GET', '/login', {
-          requiresAuth: true,
-        }),
-      ).toThrow(
-        'MetadataManager caches have not been initialized. Call MetadataManager.init(logger) before using.',
-      );
-    });
-
-    it('throws an error if caches have not been initialized when getting route metadata', () => {
-      // Simulate caches being undefined
-      (MetadataManager as any).routeMetadataCache = undefined;
-
-      expect(() => MetadataManager.getRouteMetadata('GET', '/login')).toThrow(
-        'MetadataManager caches have not been initialized. Call MetadataManager.init(logger) before using.',
-      );
     });
 
     it('handles invalid inputs gracefully when setting route metadata', () => {

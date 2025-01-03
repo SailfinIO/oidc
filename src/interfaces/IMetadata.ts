@@ -1,5 +1,5 @@
 import { Claims, RouteAction, Scopes } from '../enums';
-import { IRequest, IResponse, IStoreContext } from './IStore';
+import { IRequest, IResponse } from './IStore';
 
 /**
  * Metadata that might be stored at the class level.
@@ -22,6 +22,8 @@ export interface IMethodMetadata {
     claimValue?: any;
   };
   requiredScopes?: Scopes[];
+  isOidcCallback?: boolean;
+  isOidcLogin?: boolean;
 }
 
 /**

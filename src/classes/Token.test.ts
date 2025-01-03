@@ -4,7 +4,7 @@ import {
   ILogger,
   IClientConfig,
   IIssuer,
-  ITokenResponse,
+  TokenSet,
   ITokenIntrospectionResponse,
 } from '../interfaces';
 import { ClientError } from '../errors/ClientError';
@@ -109,7 +109,7 @@ describe('TokenClient', () => {
         token_type: 'Bearer',
       });
 
-      const mockTokenResponse: ITokenResponse = {
+      const mockTokenResponse: TokenSet = {
         access_token: 'new-access-token',
         refresh_token: 'new-refresh-token',
         expires_in: 3600, // 1 hour
@@ -157,7 +157,7 @@ describe('TokenClient', () => {
         token_type: 'Bearer',
       });
 
-      const mockTokenResponse: ITokenResponse = {
+      const mockTokenResponse: TokenSet = {
         access_token: 'new-access-token',
         refresh_token: 'new-refresh-token',
         expires_in: 3600, // 1 hour
@@ -248,7 +248,7 @@ describe('TokenClient', () => {
 
   describe('setTokens', () => {
     it('should set all tokens correctly when all fields are provided', () => {
-      const tokenResponse: ITokenResponse = {
+      const tokenResponse: TokenSet = {
         access_token: 'access123',
         refresh_token: 'refresh123',
         expires_in: 3600,
@@ -272,7 +272,7 @@ describe('TokenClient', () => {
     });
 
     it('should set tokens correctly without a refresh token', () => {
-      const tokenResponse: ITokenResponse = {
+      const tokenResponse: TokenSet = {
         access_token: 'access123',
         expires_in: 3600,
         token_type: 'Bearer',
@@ -293,7 +293,7 @@ describe('TokenClient', () => {
     });
 
     it('should set tokens correctly without an ID token', () => {
-      const tokenResponse: ITokenResponse = {
+      const tokenResponse: TokenSet = {
         access_token: 'access123',
         refresh_token: 'refresh123',
         expires_in: 3600,
@@ -342,7 +342,7 @@ describe('TokenClient', () => {
       // Advance time by 4000 * 1000 ms (4000 seconds = 1 hour 6 minutes 40 seconds)
       advanceTimeBy(4000 * 1000);
 
-      const mockTokenResponse: ITokenResponse = {
+      const mockTokenResponse: TokenSet = {
         access_token: 'new-access-token',
         refresh_token: 'new-refresh-token',
         expires_in: 3600,
@@ -868,7 +868,7 @@ describe('TokenClient', () => {
         // Arrange
         const code = 'auth-code-with-secret';
         const codeVerifier = 'code-verifier';
-        const mockTokenResponse: ITokenResponse = {
+        const mockTokenResponse: TokenSet = {
           access_token: 'new-access-token-with-secret',
           refresh_token: 'new-refresh-token-with-secret',
           expires_in: 3600,
@@ -922,7 +922,7 @@ describe('TokenClient', () => {
       // Arrange
       const code = 'auth-code';
       const codeVerifier = 'code-verifier';
-      const mockTokenResponse: ITokenResponse = {
+      const mockTokenResponse: TokenSet = {
         access_token: 'new-access-token',
         refresh_token: 'new-refresh-token',
         expires_in: 3600,
@@ -1490,7 +1490,7 @@ describe('TokenClient', () => {
       // Advance time to make the token expired
       advanceTimeBy(4000 * 1000); // Advance by more than the expiration time
 
-      const mockTokenResponse: ITokenResponse = {
+      const mockTokenResponse: TokenSet = {
         access_token: 'new-access-token',
         refresh_token: 'new-refresh-token',
         expires_in: 3600,

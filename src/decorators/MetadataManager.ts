@@ -22,48 +22,50 @@ import { Logger } from '../utils';
  */
 export class MetadataManager {
   /**
-   * We store class-level metadata in a Cache keyed by "class:<someKey>".
-   */
-  private static classMetadataCache: ICache<IClassMetadata> | null = null;
-  /**
-   * We store method-level metadata in a Cache keyed by "method:<someKey>:<methodName>".
-   */
-  private static methodMetadataCache: ICache<IMethodMetadata> | null = null;
-
-  /**
-   * We could store route-level metadata in a Cache keyed by "route:<someKey>:<methodName>".
-   */
-  private static routeMetadataCache: ICache<IRouteMetadata> | null = null;
-
-  /**
    * Logger implementation for logging metadata operations.
    */
   private static logger: ILogger = new Logger(MetadataManager.name);
 
   /**
-   * Initialize (or inject) the caches.
-   * You can do this once at app startup or make them lazy-initialized.
-   * @param {ILogger} logger - Your logger implementation.
+   * Private getter for class metadata cache with lazy initialization.
    */
-  public static init(logger?: ILogger) {
-    this.logger = logger ?? {
-      debug: console.debug.bind(console),
-      info: console.info.bind(console),
-      warn: console.warn.bind(console),
-      error: console.error.bind(console),
-      setLogLevel: () => {},
-    };
-    this.classMetadataCache = new Cache<IClassMetadata>(this.logger);
-    this.methodMetadataCache = new Cache<IMethodMetadata>(this.logger);
-    this.routeMetadataCache = new Cache<IRouteMetadata>(this.logger);
+  private static get classMetadataCache(): ICache<IClassMetadata> {
+    if (!this._classMetadataCache) {
+      this._classMetadataCache = new Cache<IClassMetadata>(this.logger);
+    }
+    return this._classMetadataCache;
   }
+
+  /**
+   * Private getter for method metadata cache with lazy initialization.
+   */
+  private static get methodMetadataCache(): ICache<IMethodMetadata> {
+    if (!this._methodMetadataCache) {
+      this._methodMetadataCache = new Cache<IMethodMetadata>(this.logger);
+    }
+    return this._methodMetadataCache;
+  }
+
+  /**
+   * Private getter for route metadata cache with lazy initialization.
+   */
+  private static get routeMetadataCache(): ICache<IRouteMetadata> {
+    if (!this._routeMetadataCache) {
+      this._routeMetadataCache = new Cache<IRouteMetadata>(this.logger);
+    }
+    return this._routeMetadataCache;
+  }
+
+  // Private static properties to hold the caches
+  private static _classMetadataCache: ICache<IClassMetadata> | null = null;
+  private static _methodMetadataCache: ICache<IMethodMetadata> | null = null;
+  private static _routeMetadataCache: ICache<IRouteMetadata> | null = null;
 
   /**
    * Attach (merge) metadata to a class (constructor function).
    * @param {Function} target - The constructor function.
    * @param {Partial<IClassMetadata>} metadata - The metadata to attach.
    * @throws {TypeError} If target is not a constructor function.
-   * @throws {Error} If caches have not been initialized.
    * @returns {void}
    */
   public static setClassMetadata(
@@ -75,11 +77,7 @@ export class MetadataManager {
         'setClassMetadata expects a constructor function as the target.',
       );
     }
-    if (!this.classMetadataCache) {
-      throw new Error(
-        'MetadataManager caches have not been initialized. Call MetadataManager.init(logger) before using.',
-      );
-    }
+
     const ctorKey = KeyFactory.getKeyForFunction(target);
     const cacheKey = `class:${ctorKey}`;
     const existing = this.classMetadataCache.get(cacheKey) || {};
@@ -91,7 +89,6 @@ export class MetadataManager {
    * Retrieve metadata attached to a class constructor.
    * @param {Function} target - The constructor function.
    * @throws {TypeError} If target is not a constructor function.
-   * @throws {Error} If caches have not been initialized.
    * @returns {IClassMetadata | undefined} The metadata attached to the class.
    */
   public static getClassMetadata(target: Function): IClassMetadata | undefined {
@@ -100,11 +97,7 @@ export class MetadataManager {
         'getClassMetadata expects a constructor function as the target.',
       );
     }
-    if (!this.classMetadataCache) {
-      throw new Error(
-        'MetadataManager caches have not been initialized. Call MetadataManager.init(logger) before using.',
-      );
-    }
+
     const ctorKey = KeyFactory.getKeyForFunction(target);
     const cacheKey = `class:${ctorKey}`;
     return this.classMetadataCache.get(cacheKey);
@@ -117,7 +110,6 @@ export class MetadataManager {
    * @param {Partial<IMethodMetadata>} metadata - The metadata to attach.
    * @throws {TypeError} If targetConstructor is not a constructor function.
    * @throws {TypeError} If propertyKey is not a string.
-   * @throws {Error} If caches have not been initialized.
    * @returns {void}
    */
   public static setMethodMetadata(
@@ -135,11 +127,7 @@ export class MetadataManager {
         'setMethodMetadata expects a string as the propertyKey.',
       );
     }
-    if (!this.methodMetadataCache) {
-      throw new Error(
-        'MetadataManager caches have not been initialized. Call MetadataManager.init(logger) before using.',
-      );
-    }
+
     const ctorKey = KeyFactory.getKeyForFunction(targetConstructor);
     const cacheKey = `method:${ctorKey}:${propertyKey}`;
     const existing = this.methodMetadataCache.get(cacheKey) || {};
@@ -153,7 +141,6 @@ export class MetadataManager {
    * @param {string} propertyKey - The method name.
    * @throws {TypeError} If targetConstructor is not a constructor function.
    * @throws {TypeError} If propertyKey is not a string.
-   * @throws {Error} If caches have not been initialized.
    * @returns {IMethodMetadata | undefined} The metadata attached to the method.
    */
   public static getMethodMetadata(
@@ -170,11 +157,7 @@ export class MetadataManager {
         'getMethodMetadata expects a string as the propertyKey.',
       );
     }
-    if (!this.methodMetadataCache) {
-      throw new Error(
-        'MetadataManager caches have not been initialized. Call MetadataManager.init(logger) before using.',
-      );
-    }
+
     const ctorKey = KeyFactory.getKeyForFunction(targetConstructor);
     const cacheKey = `method:${ctorKey}:${propertyKey}`;
     return this.methodMetadataCache.get(cacheKey);
@@ -186,7 +169,6 @@ export class MetadataManager {
    * @param path Route path (e.g., '/login').
    * @param metadata Metadata to attach.
    * @throws {TypeError} If method or path is not a string.
-   * @throws {Error} If caches have not been initialized.
    */
   public static setRouteMetadata(
     method: string,
@@ -203,11 +185,7 @@ export class MetadataManager {
         `setRouteMetadata expects 'path' to be a string, received ${typeof path}.`,
       );
     }
-    if (!this.routeMetadataCache) {
-      throw new Error(
-        'MetadataManager caches have not been initialized. Call MetadataManager.init(logger) before using.',
-      );
-    }
+
     const cacheKey = `route:${method.toUpperCase()}:${path}`;
     const existing = this.routeMetadataCache.get(cacheKey) || {};
     const merged = { ...existing, ...metadata };
@@ -219,7 +197,6 @@ export class MetadataManager {
    * @param method HTTP method.
    * @param path Route path.
    * @throws {TypeError} If method or path is not a string.
-   * @throws {Error} If caches have not been initialized.
    * @returns Metadata attached to the route.
    */
   public static getRouteMetadata(
@@ -236,29 +213,26 @@ export class MetadataManager {
         `getRouteMetadata expects 'path' to be a string, received ${typeof path}.`,
       );
     }
-    if (!this.routeMetadataCache) {
-      throw new Error(
-        'MetadataManager caches have not been initialized. Call MetadataManager.init(logger) before using.',
-      );
-    }
+
     const cacheKey = `route:${method.toUpperCase()}:${path}`;
     return this.routeMetadataCache.get(cacheKey);
   }
 
   /**
-   * For testing: Clear all metadata from both class-level and method-level caches.
-   * @throws {Error} If caches have not been initialized.
+   * For testing: Clear all metadata from class-level, method-level, and route-level caches.
    * @returns {void}
    */
   public static reset(): void {
-    if (this.classMetadataCache && this.methodMetadataCache) {
-      this.classMetadataCache.clear();
-      this.methodMetadataCache.clear();
-      this.routeMetadataCache.clear();
+    if (
+      this._classMetadataCache &&
+      this._methodMetadataCache &&
+      this._routeMetadataCache
+    ) {
+      this._classMetadataCache.clear();
+      this._methodMetadataCache.clear();
+      this._routeMetadataCache.clear();
     } else {
-      throw new Error(
-        'MetadataManager caches have not been initialized. Call MetadataManager.init(logger) before using.',
-      );
+      this.logger.warn('MetadataManager caches are already cleared.');
     }
   }
 }

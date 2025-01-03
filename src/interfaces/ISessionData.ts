@@ -7,7 +7,7 @@
  * @module src/interfaces/ISessionData
  */
 
-import { ITokenResponse } from './ITokenResponse';
+import { TokenSet } from './TokenSet';
 import { IUser } from './IUser';
 
 /**
@@ -22,9 +22,9 @@ export interface ISessionData {
   /**
    * Contains the token response details, such as access and refresh tokens.
    *
-   * @type {ITokenResponse}
+   * @type {TokenSet}
    */
-  cookie?: ITokenResponse;
+  cookie?: TokenSet;
 
   /**
    * Optionally includes user information associated with the session.

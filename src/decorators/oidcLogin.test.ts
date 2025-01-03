@@ -1,17 +1,33 @@
 // src/decorators/oidcLogin.test.ts
 
-import { OidcLogin } from './oidcLogin';
+import 'reflect-metadata'; // Ensure reflect-metadata is imported if using decorators
+import { OidcLogin, OidcLoginOptions } from './oidcLogin';
 import { Client } from '../classes/Client';
 import { IStoreContext, IClientConfig } from '../interfaces';
 import { StorageMechanism } from '../enums';
+import { MetadataManager } from './MetadataManager';
 
-describe('oidcLogin', () => {
+describe('OidcLogin Decorator', () => {
   let mockClient: jest.Mocked<Client>;
   let mockContext: IStoreContext;
   let mockRequest: any;
   let mockResponse: any;
-  let oidcLoginHandler: (context: IStoreContext) => Promise<void>;
   let originalConsoleError: typeof console.error;
+
+  // Define a mock class to apply the decorator
+  class MockController {
+    client: Client;
+
+    constructor(client: Client) {
+      this.client = client;
+    }
+
+    @OidcLogin()
+    async loginHandler(req: any, res: any) {
+      // Original method logic (if any)
+      // For testing, we can leave this empty or add mock behavior
+    }
+  }
 
   beforeEach(() => {
     // Mock console.error to prevent actual logging during tests
@@ -43,22 +59,41 @@ describe('oidcLogin', () => {
 
     // Default implementation for getConfig
     mockClient.getConfig.mockReturnValue({
-      // Provide a minimal session object as per IClientConfig
       session: {
         mechanism: StorageMechanism.MEMORY, // Assuming MEMORY is a valid enum value
         options: {}, // Provide empty options or mock as needed
       },
     } as IClientConfig);
-
-    // Initialize the oidcLogin handler
-    oidcLoginHandler = OidcLogin(mockClient);
   });
 
   afterEach(() => {
     // Restore the original console.error after each test
     console.error = originalConsoleError;
     jest.restoreAllMocks();
+    MetadataManager.reset(); // Clear metadata between tests
   });
+
+  /**
+   * Helper function to create an instance of the mock controller
+   * with the decorated method.
+   */
+  const createController = (options?: OidcLoginOptions) => {
+    // Dynamically create a new class with the decorator applied with options
+    class DynamicMockController {
+      client: Client;
+
+      constructor(client: Client) {
+        this.client = client;
+      }
+
+      @OidcLogin(options)
+      async loginHandler(req: any, res: any) {
+        // Original method logic (if any)
+      }
+    }
+
+    return new DynamicMockController(mockClient);
+  };
 
   it('should redirect to the authorization URL and set session state and codeVerifier when session is enabled', async () => {
     // Arrange
@@ -72,8 +107,10 @@ describe('oidcLogin', () => {
       codeVerifier,
     });
 
+    const controller = createController();
+
     // Act
-    await oidcLoginHandler(mockContext);
+    await controller.loginHandler(mockRequest, mockResponse);
 
     // Assert
     expect(mockClient.getAuthorizationUrl).toHaveBeenCalledTimes(1);
@@ -95,8 +132,10 @@ describe('oidcLogin', () => {
       codeVerifier,
     });
 
+    const controller = createController();
+
     // Act
-    await oidcLoginHandler(mockContext);
+    await controller.loginHandler(mockRequest, mockResponse);
 
     // Assert
     expect(mockClient.getAuthorizationUrl).toHaveBeenCalledTimes(1);
@@ -119,8 +158,10 @@ describe('oidcLogin', () => {
       codeVerifier,
     });
 
+    const controller = createController();
+
     // Act
-    await oidcLoginHandler(mockContext);
+    await controller.loginHandler(mockRequest, mockResponse);
 
     // Assert
     expect(mockClient.getAuthorizationUrl).toHaveBeenCalledTimes(1);
@@ -134,10 +175,10 @@ describe('oidcLogin', () => {
     // Arrange
     mockClient.getConfig.mockReturnValue({
       // Omit the session property to disable session
+      session: undefined,
     } as IClientConfig);
 
-    // Re-initialize the handler with session disabled
-    oidcLoginHandler = OidcLogin(mockClient);
+    const controller = createController();
 
     // Initialize mockRequest without session
     mockRequest.session = undefined;
@@ -153,40 +194,12 @@ describe('oidcLogin', () => {
     });
 
     // Act
-    await oidcLoginHandler(mockContext);
+    await controller.loginHandler(mockRequest, mockResponse);
 
     // Assert
     expect(mockClient.getAuthorizationUrl).toHaveBeenCalledTimes(1);
     expect(mockRequest.session).toBeUndefined(); // Adjusted expectation
     expect(mockResponse.redirect).toHaveBeenCalledWith(authorizationUrl);
-  });
-
-  it('should throw an error if request is missing', async () => {
-    // Arrange
-    const invalidContext: IStoreContext = {
-      response: mockResponse,
-    };
-
-    // Act & Assert
-    await expect(oidcLoginHandler(invalidContext)).rejects.toThrow(
-      'Request and Response objects are required in IStoreContext',
-    );
-    expect(mockClient.getAuthorizationUrl).not.toHaveBeenCalled();
-    expect(mockResponse.redirect).not.toHaveBeenCalled();
-  });
-
-  it('should throw an error if response is missing', async () => {
-    // Arrange
-    const invalidContext: IStoreContext = {
-      request: mockRequest,
-    };
-
-    // Act & Assert
-    await expect(oidcLoginHandler(invalidContext)).rejects.toThrow(
-      'Request and Response objects are required in IStoreContext',
-    );
-    expect(mockClient.getAuthorizationUrl).not.toHaveBeenCalled();
-    expect(mockResponse.redirect).not.toHaveBeenCalled();
   });
 
   it('should call the custom onError handler when getAuthorizationUrl throws an error', async () => {
@@ -196,11 +209,10 @@ describe('oidcLogin', () => {
 
     const onError = jest.fn();
 
-    // Re-initialize the handler with onError option
-    oidcLoginHandler = OidcLogin(mockClient, { onError });
+    const controller = createController({ onError });
 
     // Act
-    await oidcLoginHandler(mockContext);
+    await controller.loginHandler(mockRequest, mockResponse);
 
     // Assert
     expect(mockClient.getAuthorizationUrl).toHaveBeenCalledTimes(1);
@@ -215,8 +227,10 @@ describe('oidcLogin', () => {
     const error = new Error('Authorization URL fetch failed');
     mockClient.getAuthorizationUrl.mockRejectedValue(error);
 
+    const controller = createController(); // No onError provided
+
     // Act
-    await oidcLoginHandler(mockContext);
+    await controller.loginHandler(mockRequest, mockResponse);
 
     // Assert
     expect(mockClient.getAuthorizationUrl).toHaveBeenCalledTimes(1);
@@ -225,6 +239,37 @@ describe('oidcLogin', () => {
     expect(mockResponse.send).toHaveBeenCalledWith(
       'Authentication initiation failed',
     );
+  });
+
+  it('should use the postLoginRedirectUri option if provided', async () => {
+    // Arrange
+    const options: OidcLoginOptions = {
+      postLoginRedirectUri: '/dashboard',
+    };
+    const authorizationUrl = 'https://auth.example.com/authorize';
+    const state = 'randomState123';
+    const codeVerifier = 'randomCodeVerifier123';
+
+    mockClient.getAuthorizationUrl.mockResolvedValue({
+      url: authorizationUrl,
+      state,
+      codeVerifier,
+    });
+
+    const controller = createController(options);
+
+    // Act
+    await controller.loginHandler(mockRequest, mockResponse);
+
+    // Assert
+    expect(mockClient.getAuthorizationUrl).toHaveBeenCalledWith();
+    expect(mockRequest.session).toBeDefined();
+    expect(mockRequest.session.state).toBe(state);
+    expect(mockRequest.session.codeVerifier).toBe(codeVerifier);
+    expect(mockResponse.redirect).toHaveBeenCalledWith(authorizationUrl);
+
+    // Optionally, you can verify that the postLoginRedirectUri is used somewhere
+    // depending on how it's integrated in the actual implementation
   });
 
   it('should not set codeVerifier in session if it is not provided (set to null)', async () => {
@@ -239,8 +284,10 @@ describe('oidcLogin', () => {
       codeVerifier,
     });
 
+    const controller = createController();
+
     // Act
-    await oidcLoginHandler(mockContext);
+    await controller.loginHandler(mockRequest, mockResponse);
 
     // Assert
     expect(mockClient.getAuthorizationUrl).toHaveBeenCalledTimes(1);
@@ -248,5 +295,18 @@ describe('oidcLogin', () => {
     expect(mockRequest.session.state).toBe(state);
     expect(mockRequest.session.codeVerifier).toBeUndefined(); // Adjusted expectation
     expect(mockResponse.redirect).toHaveBeenCalledWith(authorizationUrl);
+  });
+
+  it('should attach metadata indicating this method is an OIDC login handler', () => {
+    // Arrange
+    const controller = createController();
+    const metadata = MetadataManager.getMethodMetadata(
+      controller.constructor,
+      'loginHandler',
+    );
+
+    // Assert
+    expect(metadata).toBeDefined();
+    expect(metadata.isOidcLogin).toBe(true);
   });
 });

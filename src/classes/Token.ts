@@ -2,7 +2,7 @@
 
 import {
   IClientConfig,
-  ITokenResponse,
+  TokenSet,
   ITokenIntrospectionResponse,
   IIssuer,
   ILogger,
@@ -30,7 +30,7 @@ export class Token implements IToken {
     this.issuer = issuer;
   }
 
-  public setTokens(tokenResponse: ITokenResponse): void {
+  public setTokens(tokenResponse: TokenSet): void {
     this.accessToken = tokenResponse.access_token;
     this.refreshToken = tokenResponse.refresh_token || null;
     this.expiresAt = tokenResponse.expires_in
@@ -98,7 +98,7 @@ export class Token implements IToken {
     }
   }
 
-  public getTokens(): ITokenResponse | null {
+  public getTokens(): TokenSet | null {
     if (!this.accessToken) {
       return null;
     }
@@ -266,7 +266,7 @@ export class Token implements IToken {
         body,
         headers,
       });
-      const tokenResponse: ITokenResponse = await response.json();
+      const tokenResponse: TokenSet = await response.json();
 
       if (!response.ok) {
         throw new Error(

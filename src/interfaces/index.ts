@@ -2,7 +2,7 @@
 
 export * from './ILogger';
 export * from './IClientConfig';
-export * from './ITokenResponse';
+export * from './TokenSet';
 export * from './IUser';
 export * from './ISessionData';
 export * from './IStore';
