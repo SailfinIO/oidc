@@ -1,3 +1,9 @@
+## [0.0.10-beta.6](https://github.com/SailfinIO/oidc/compare/v0.0.10-beta.5...v0.0.10-beta.6) (2025-01-03)
+
+### Bug Fixes
+
+* headers as plain object ([2deca91](https://github.com/SailfinIO/oidc/commit/2deca91b36ae2e3c222c924b34ee9df496430835))
+
 ## [0.0.10-beta.5](https://github.com/SailfinIO/oidc/compare/v0.0.10-beta.4...v0.0.10-beta.5) (2025-01-03)
 
 ### Bug Fixes
