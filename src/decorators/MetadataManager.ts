@@ -15,6 +15,7 @@ import {
 } from '../interfaces';
 import { Cache } from '../cache/Cache';
 import { KeyFactory } from './KeyFactory';
+import { Logger } from '../utils';
 
 /**
  * Manages class-level and method-level metadata using an in-memory Cache.
@@ -35,14 +36,26 @@ export class MetadataManager {
   private static routeMetadataCache: ICache<IRouteMetadata> | null = null;
 
   /**
+   * Logger implementation for logging metadata operations.
+   */
+  private static logger: ILogger = new Logger(MetadataManager.name);
+
+  /**
    * Initialize (or inject) the caches.
    * You can do this once at app startup or make them lazy-initialized.
    * @param {ILogger} logger - Your logger implementation.
    */
-  public static init(logger: ILogger) {
-    this.classMetadataCache = new Cache<IClassMetadata>(logger);
-    this.methodMetadataCache = new Cache<IMethodMetadata>(logger);
-    this.routeMetadataCache = new Cache<IRouteMetadata>(logger);
+  public static init(logger?: ILogger) {
+    this.logger = logger ?? {
+      debug: console.debug.bind(console),
+      info: console.info.bind(console),
+      warn: console.warn.bind(console),
+      error: console.error.bind(console),
+      setLogLevel: () => {},
+    };
+    this.classMetadataCache = new Cache<IClassMetadata>(this.logger);
+    this.methodMetadataCache = new Cache<IMethodMetadata>(this.logger);
+    this.routeMetadataCache = new Cache<IRouteMetadata>(this.logger);
   }
 
   /**
