@@ -1,3 +1,9 @@
+## [0.0.10-beta.8](https://github.com/SailfinIO/oidc/compare/v0.0.10-beta.7...v0.0.10-beta.8) (2025-01-03)
+
+### Bug Fixes
+
+* optional logger ([b82e53b](https://github.com/SailfinIO/oidc/commit/b82e53bfb604170d76d0686c66e9f111fd7ec359))
+
 ## [0.0.10-beta.7](https://github.com/SailfinIO/oidc/compare/v0.0.10-beta.6...v0.0.10-beta.7) (2025-01-03)
 
 ### Bug Fixes
