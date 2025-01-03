@@ -1,3 +1,9 @@
+## [0.0.10-beta.9](https://github.com/SailfinIO/oidc/compare/v0.0.10-beta.8...v0.0.10-beta.9) (2025-01-03)
+
+### Bug Fixes
+
+* metadata manager initialization and login/callback decorators ([9b2256c](https://github.com/SailfinIO/oidc/commit/9b2256c3dcac2531e123e05a28fbb5120726e1e3))
+
 ## [0.0.10-beta.8](https://github.com/SailfinIO/oidc/compare/v0.0.10-beta.7...v0.0.10-beta.8) (2025-01-03)
 
 ### Bug Fixes
