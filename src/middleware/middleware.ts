@@ -27,7 +27,7 @@ export const middleware = (client: Client) => {
     let pathname: string;
 
     try {
-      pathname = new URL(url, `http://${req.headers.get('host')}`).pathname;
+      pathname = new URL(url, `http://${req.headers['host']}`).pathname;
     } catch (error) {
       console.error('Invalid URL:', url);
       await next(error);
