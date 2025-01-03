@@ -1,6 +1,6 @@
-// src/interfaces/ITokenResponse.ts
+// src/interfaces/TokenSet.ts
 
-export interface ITokenResponse {
+export interface TokenSet {
   /**
    * The access token issued by the authorization server. This value is REQUIRED.
    * The access token MUST be a Bearer Token as defined in RFC 6750.

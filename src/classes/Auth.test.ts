@@ -18,8 +18,8 @@ import {
   parseFragment,
   generateRandomString,
 } from '../utils';
-import { PkceMethod, Scopes, GrantType } from '../enums';
-import { JwtValidator } from './JwtValidator';
+import { PkceMethod, Scopes, GrantType, UILocales } from '../enums';
+import { Jwt } from './Jwt';
 // Mock utilities
 jest.mock('../utils', () => ({
   ...jest.requireActual('../utils'),
@@ -105,6 +105,7 @@ describe('Auth', () => {
       introspectToken: jest.fn(),
       revokeToken: jest.fn(),
       exchangeCodeForToken: jest.fn(),
+      getClaims: jest.fn(),
     };
 
     // Mock TokenClient methods
@@ -658,6 +659,49 @@ describe('Auth', () => {
             buildSpy.mockRestore();
           });
 
+          it('should include ui_locales in additionalParams when uiLocales is set in config', async () => {
+            // Mock the generateRandomString utility for state and nonce
+            const utils = require('../utils');
+            (utils.generateRandomString as jest.Mock)
+              .mockReturnValueOnce('state123')
+              .mockReturnValueOnce('nonce123');
+
+            // Create an instance of Auth with uiLocales set
+            const authWithUiLocales = createAuthInstance(
+              GrantType.AuthorizationCode,
+              {
+                uiLocales: [UILocales.EN_US, UILocales.ES_ES, UILocales.FR_FR], // Set uiLocales to a list of languages
+              },
+            );
+
+            // Spy on buildAuthorizationUrl to verify the URL parameters
+            const buildAuthorizationUrlSpy = jest
+              .spyOn(require('../utils'), 'buildAuthorizationUrl')
+              .mockReturnValue(
+                'https://example.com/oauth2/authorize?client_id=test-client-id',
+              );
+
+            // Call getAuthorizationUrl
+            await authWithUiLocales.getAuthorizationUrl();
+
+            // Verify that buildAuthorizationUrl was called with the correct ui_locales
+            expect(buildAuthorizationUrlSpy).toHaveBeenCalledWith(
+              expect.objectContaining({
+                clientId: MOCK_CLIENT_ID,
+                redirectUri: MOCK_REDIRECT_URI,
+                responseType: 'code',
+                scope: expect.any(String), // Verify other required parameters
+                state: 'state123',
+              }),
+              expect.objectContaining({
+                ui_locales: 'en-US es-ES fr-FR', // Ensure ui_locales is space-separated
+              }),
+            );
+
+            // Clean up the spy
+            buildAuthorizationUrlSpy.mockRestore();
+          });
+
           it('should generate an authorization URL without PKCE', async () => {
             auth = createAuthInstance(GrantType.AuthorizationCode, {
               pkce: false,
@@ -748,12 +792,14 @@ describe('Auth', () => {
             );
           });
 
+          // Example updated test for handleRedirect
           it('should handle redirect successfully and validate ID token', async () => {
             const code = 'auth-code';
             const returnedState = 'valid-state';
             const expectedNonce = 'generated-nonce';
 
-            // Mock state retrieval
+            // Mock state and codeVerifier generation
+            const { codeVerifier } = await authInstance.getAuthorizationUrl();
             (authInstance as Auth)['state'].addState(
               returnedState,
               expectedNonce,
@@ -784,36 +830,39 @@ describe('Auth', () => {
             };
 
             // Mock JWT validation
-            jest
-              .spyOn(JwtValidator.prototype, 'validateIdToken')
-              .mockResolvedValueOnce(jwtPayload);
+            jest.spyOn(Jwt, 'verify').mockResolvedValueOnce(jwtPayload);
 
-            await authInstance.handleRedirect(code, returnedState);
+            await authInstance.handleRedirect(
+              code,
+              returnedState,
+              codeVerifier,
+            );
 
             expect(mockTokenClient.exchangeCodeForToken).toHaveBeenCalledWith(
               code,
-              // Accessing private method via type assertion
-              (authInstance as Auth).getCodeVerifier(),
+              codeVerifier,
             );
             expect(mockTokenClient.getTokens).toHaveBeenCalled();
             expect(mockIssuer.discover).toHaveBeenCalled();
-            expect(JwtValidator.prototype.validateIdToken).toHaveBeenCalledWith(
-              'id-token',
-              expectedNonce,
-            );
+            expect(Jwt.verify).toHaveBeenCalledWith('id-token', {
+              logger: mockLogger,
+              client: MOCK_CLIENT_METADATA,
+              clientId: MOCK_CLIENT_ID,
+              nonce: expectedNonce,
+            });
             expect(mockLogger.info).toHaveBeenCalledWith(
               'ID token validated successfully',
+              { payload: jwtPayload },
             );
-            // Verify code verifier is cleared
-            expect((authInstance as Auth).getCodeVerifier()).toBeNull();
           });
 
           it('should throw ClientError if state does not match', async () => {
             const code = 'auth-code';
             const returnedState = 'invalid-state';
+            const codeVerifier = 'test-code-verifier'; // Mocked codeVerifier
 
             await expect(
-              authInstance.handleRedirect(code, returnedState),
+              authInstance.handleRedirect(code, returnedState, codeVerifier),
             ).rejects.toThrow(ClientError);
 
             expect(mockLogger.error).not.toHaveBeenCalled();
@@ -824,6 +873,7 @@ describe('Auth', () => {
             const code = 'auth-code';
             const returnedState = 'valid-state';
             const expectedNonce = 'generated-nonce';
+            const codeVerifier = 'test-code-verifier'; // Mocked codeVerifier
 
             (authInstance as Auth)['state'].addState(
               returnedState,
@@ -835,7 +885,7 @@ describe('Auth', () => {
             );
 
             await expect(
-              authInstance.handleRedirect(code, returnedState),
+              authInstance.handleRedirect(code, returnedState, codeVerifier),
             ).rejects.toThrow(ClientError);
 
             expect(mockLogger.error).toHaveBeenCalledWith(
@@ -848,6 +898,7 @@ describe('Auth', () => {
             const code = 'auth-code';
             const returnedState = 'valid-state';
             const expectedNonce = 'generated-nonce';
+            const codeVerifier = 'test-code-verifier'; // Mocked codeVerifier
 
             (authInstance as Auth)['state'].addState(
               returnedState,
@@ -862,18 +913,23 @@ describe('Auth', () => {
             mockTokenClient.exchangeCodeForToken.mockResolvedValueOnce();
             mockTokenClient.getTokens.mockReturnValueOnce(tokenResponse);
 
-            await authInstance.handleRedirect(code, returnedState);
+            await authInstance.handleRedirect(
+              code,
+              returnedState,
+              codeVerifier,
+            );
 
             expect(mockLogger.warn).toHaveBeenCalledWith(
               'No ID token returned to validate',
             );
-            expect((authInstance as Auth).getCodeVerifier()).toBeNull();
+            // No need to check getCodeVerifier
           });
 
           it('should throw ClientError if ID token validation fails', async () => {
             const code = 'auth-code';
             const returnedState = 'valid-state';
             const expectedNonce = 'generated-nonce';
+            const codeVerifier = 'test-code-verifier'; // Mocked codeVerifier
 
             (authInstance as Auth)['state'].addState(
               returnedState,
@@ -893,11 +949,11 @@ describe('Auth', () => {
               MOCK_CLIENT_METADATA as ClientMetadata,
             );
             jest
-              .spyOn(JwtValidator.prototype, 'validateIdToken')
+              .spyOn(Jwt, 'verify')
               .mockRejectedValueOnce(new Error('Invalid ID token'));
 
             await expect(
-              authInstance.handleRedirect(code, returnedState),
+              authInstance.handleRedirect(code, returnedState, codeVerifier),
             ).rejects.toThrow();
 
             expect(mockLogger.error).toHaveBeenCalledWith(
@@ -916,11 +972,12 @@ describe('Auth', () => {
     });
 
     describe('handleRedirectForImplicitFlow', () => {
-      it('should handle redirect successfully with id_token', async () => {
+      it('should handle redirect successfully and validate ID token', async () => {
+        // 1. Define the mock URL fragment
         const fragment =
           '#access_token=access-token&id_token=id-token&state=valid-state&token_type=Bearer&expires_in=3600';
 
-        // Mock parseFragment
+        // 2. Mock the parseFragment utility to return the expected parameters
         (parseFragment as jest.Mock).mockReturnValue({
           access_token: 'access-token',
           id_token: 'id-token',
@@ -929,55 +986,76 @@ describe('Auth', () => {
           expires_in: '3600',
         });
 
-        // Mock state retrieval
+        // 3. Mock the state retrieval to return the expected nonce
         (auth as Auth)['state'].addState('valid-state', 'expected-nonce');
         jest
           .spyOn((auth as Auth)['state'], 'getNonce')
           .mockResolvedValue('expected-nonce');
 
-        // Mock issuer discovery
+        // 4. Mock issuer discovery to return client metadata
         mockIssuer.discover.mockResolvedValueOnce(
           MOCK_CLIENT_METADATA as ClientMetadata,
         );
 
-        // Mock JWT validation
-        jest
-          .spyOn(JwtValidator.prototype, 'validateIdToken')
-          .mockResolvedValueOnce({
-            sub: '12345',
-            iss: 'https://example.com/',
-            aud: MOCK_CLIENT_ID,
-            nonce: 'expected-nonce',
-            exp: Math.floor(Date.now() / 1000) + 3600,
-          });
+        // 5. Define the JWT payload expected after verification
+        const jwtPayload = {
+          sub: '12345',
+          iss: 'https://example.com/',
+          aud: MOCK_CLIENT_ID,
+          nonce: 'expected-nonce',
+          exp: Math.floor(Date.now() / 1000) + 3600,
+        };
 
-        // Mock token exchange
+        // 6. Mock the JWT verification to return the payload
+        jest.spyOn(Jwt, 'verify').mockResolvedValueOnce(jwtPayload);
+
+        // 7. Mock token storage
         mockTokenClient.setTokens.mockImplementation();
 
+        // 8. Invoke the method under test with the mock fragment
         await auth.handleRedirectForImplicitFlow(fragment);
 
+        // 9. Assertions
+
+        // Ensure parseFragment was called with the correct fragment
         expect(parseFragment).toHaveBeenCalledWith(fragment);
+
+        // Ensure the nonce was retrieved correctly
         expect((auth as Auth)['state'].getNonce).toHaveBeenCalledWith(
           'valid-state',
         );
+
+        // Ensure issuer discovery was called
         expect(mockIssuer.discover).toHaveBeenCalledTimes(1);
-        expect(JwtValidator.prototype.validateIdToken).toHaveBeenCalledWith(
-          'id-token',
-          'expected-nonce',
+
+        // Ensure JWT.verify was called with the correct parameters
+        expect(Jwt.verify).toHaveBeenCalledWith('id-token', {
+          logger: mockLogger,
+          client: MOCK_CLIENT_METADATA,
+          clientId: MOCK_CLIENT_ID,
+          nonce: 'expected-nonce',
+        });
+
+        // 10. Assert that 'ID token validated successfully' was logged with payload
+        expect(mockLogger.info).toHaveBeenNthCalledWith(
+          1,
+          'ID token validated successfully',
+          { payload: jwtPayload },
         );
+
+        // 11. Assert that 'Tokens obtained and stored successfully' was logged
+        expect(mockLogger.info).toHaveBeenNthCalledWith(
+          2,
+          'Tokens obtained and stored successfully',
+        );
+
+        // 12. Ensure tokens were stored correctly
         expect(mockTokenClient.setTokens).toHaveBeenCalledWith({
           access_token: 'access-token',
           id_token: 'id-token',
           token_type: 'Bearer',
           expires_in: 3600,
         });
-        expect(mockLogger.info).toHaveBeenCalledWith(
-          'ID token validated successfully',
-        );
-        expect(mockLogger.info).toHaveBeenCalledWith(
-          'Tokens obtained and stored successfully',
-        );
-        expect((auth as Auth).getCodeVerifier()).toBeNull();
       });
 
       it('should handle redirect successfully without id_token', async () => {
@@ -1008,7 +1086,7 @@ describe('Auth', () => {
           'valid-state',
         );
         expect(mockIssuer.discover).not.toHaveBeenCalled();
-        expect(JwtValidator.prototype.validateIdToken).not.toHaveBeenCalled();
+        expect(Jwt.verify).not.toHaveBeenCalled();
         expect(mockTokenClient.setTokens).toHaveBeenCalledWith({
           access_token: 'access-token',
           id_token: undefined,
@@ -1021,7 +1099,6 @@ describe('Auth', () => {
         expect(mockLogger.info).toHaveBeenCalledWith(
           'Tokens obtained and stored successfully',
         );
-        expect((auth as Auth).getCodeVerifier()).toBeNull();
       });
 
       it('should throw ClientError if fragment contains an error', async () => {
@@ -1160,18 +1237,18 @@ describe('Auth', () => {
         authorization_endpoint: 'https://example.com/oauth2/authorize',
       } as ClientMetadata);
 
-      // 3) Call the method that triggers PKCE generation (getAuthorizationUrl)
-      const { url, state } = await authWithPkce.getAuthorizationUrl();
+      // 3) Call the method that triggers PKCE generation (getAuthorizationUrl) on authWithPkce
+      const { url, state, codeVerifier } =
+        await authWithPkce.getAuthorizationUrl();
 
       // 4) Assertions
       expect(state).toBeDefined();
-      expect(url).toContain('test_challenge'); // optional: depends on your buildAuthorizationUrl logic
-      expect(mockLogger.warn).not.toHaveBeenCalled(); // We expect no warning since pkceMethod is valid
+      expect(url).toContain('test_challenge'); // Adjust based on your buildAuthorizationUrl implementation
+      expect(mockLogger.warn).not.toHaveBeenCalled(); // No warning expected since pkceMethod is valid
 
-      // Check that the codeVerifier was set internally
-      expect(authWithPkce.getCodeVerifier()).toBe('test_verifier');
+      // Check that the codeVerifier was returned correctly
+      expect(codeVerifier).toBe('test_verifier');
     });
-
     it('should log a warning and omit code_challenge_method if pkceMethod is invalid', async () => {
       // Re-instantiate Auth with an invalid pkceMethod
       authWithPkce = new Auth(

@@ -9,11 +9,9 @@ import {
   parseFragment,
   sleep,
   generateRandomString,
-  Logger,
 } from '../utils';
 import {
   ILogoutUrlParams,
-  ITokenResponse,
   IIssuer,
   ILogger,
   IToken,
@@ -22,10 +20,11 @@ import {
   IAuth,
   IPkce,
   IState,
+  IAuthorizationUrlResponse,
 } from '../interfaces';
 import { GrantType } from '../enums/GrantType';
 import { PkceMethod } from '../enums';
-import { JwtValidator } from './JwtValidator';
+import { Jwt } from './Jwt';
 import { Pkce } from './Pkce';
 import { State } from './State';
 
@@ -37,7 +36,6 @@ export class Auth implements IAuth {
   private readonly pkceService: IPkce;
   private readonly state: IState;
 
-  private codeVerifier: string | null = null;
   private clientMetadata: ClientMetadata | null = null;
 
   constructor(
@@ -66,9 +64,9 @@ export class Auth implements IAuth {
   /**
    * Generates the authorization URL to initiate the OAuth2/OIDC flow.
    * Generates and stores state and nonce internally.
-   * @returns The authorization URL and the generated state.
+   * @returns The authorization URL and the generated state and codeVerifier.
    */
-  public async getAuthorizationUrl(): Promise<{ url: string; state: string }> {
+  public async getAuthorizationUrl(): Promise<IAuthorizationUrlResponse> {
     const state = generateRandomString();
     const nonce = generateRandomString();
 
@@ -90,11 +88,7 @@ export class Auth implements IAuth {
       additionalParams,
     );
 
-    if (codeVerifier) {
-      this.codeVerifier = codeVerifier;
-    }
-
-    return { url, state };
+    return { url, state, codeVerifier };
   }
 
   /**
@@ -254,12 +248,17 @@ export class Auth implements IAuth {
   /**
    * Handles the redirect callback for authorization code flow.
    * Exchanges the authorization code for tokens and validates the ID token.
-   * @param code The authorization code received from the provider.
-   * @param returnedState The state returned in the redirect to validate against CSRF.
+   *
+   * @param code - The authorization code received from the provider.
+   * @param returnedState - The state returned in the redirect to validate against CSRF.
+   * @param codeVerifier - The PKCE code verifier associated with this authorization request.
+   * @returns {Promise<void>}
+   * @throws {ClientError} If state validation fails or token exchange/validation fails.
    */
   public async handleRedirect(
     code: string,
     returnedState: string,
+    codeVerifier: string | null,
   ): Promise<void> {
     const expectedNonce = await this.state.getNonce(returnedState);
     if (!expectedNonce) {
@@ -270,8 +269,8 @@ export class Auth implements IAuth {
     }
 
     try {
-      // Exchange code for tokens
-      await this.tokenClient.exchangeCodeForToken(code, this.codeVerifier);
+      // Exchange code for tokens using the provided codeVerifier
+      await this.tokenClient.exchangeCodeForToken(code, codeVerifier);
     } catch (error) {
       this.logger.error('Failed to exchange authorization code for tokens', {
         error,
@@ -281,20 +280,18 @@ export class Auth implements IAuth {
       });
     }
 
-    this.codeVerifier = null;
-
     try {
       // Validate ID token if present
       const tokens = this.tokenClient.getTokens();
       const client = await this.getClientMetadata();
       if (tokens?.id_token) {
-        const jwtValidator = new JwtValidator(
-          this.logger as Logger,
-          client,
-          this.config.clientId,
-        );
-        await jwtValidator.validateIdToken(tokens.id_token, expectedNonce);
-        this.logger.info('ID token validated successfully');
+        const payload = await Jwt.verify(tokens.id_token, {
+          logger: this.logger,
+          client: client,
+          clientId: this.config.clientId,
+          nonce: expectedNonce,
+        });
+        this.logger.info('ID token validated successfully', { payload });
       } else {
         this.logger.warn('No ID token returned to validate');
       }
@@ -362,13 +359,14 @@ export class Auth implements IAuth {
     // Optionally handle ID token validation
     if (id_token) {
       const client = await this.getClientMetadata();
-      const jwtValidator = new JwtValidator(
-        this.logger as Logger,
-        client,
-        this.config.clientId,
-      );
-      await jwtValidator.validateIdToken(id_token, expectedNonce);
-      this.logger.info('ID token validated successfully');
+      const payload = await Jwt.verify(id_token, {
+        logger: this.logger,
+        client: client,
+        clientId: this.config.clientId,
+        nonce: expectedNonce,
+        // Optionally pass custom jwks, claimsValidator, signatureVerifier here
+      });
+      this.logger.info('ID token validated successfully', { payload });
     } else {
       this.logger.warn('No ID token returned to validate');
     }
@@ -384,8 +382,6 @@ export class Auth implements IAuth {
     });
 
     this.logger.info('Tokens obtained and stored successfully');
-
-    this.codeVerifier = null;
   }
 
   /**
@@ -404,14 +400,6 @@ export class Auth implements IAuth {
         'INVALID_GRANT_TYPE',
       );
     }
-  }
-
-  /**
-   * Retrieves the previously generated code verifier.
-   * @returns The code verifier if available.
-   */
-  public getCodeVerifier(): string | null {
-    return this.codeVerifier;
   }
 
   /**
@@ -544,7 +532,16 @@ export class Auth implements IAuth {
           body,
           headers,
         });
-        const tokenResponse: ITokenResponse = await response.json();
+        const tokenResponse = await response.json();
+        if (tokenResponse.error) {
+          throw new ClientError(
+            'Error response from token endpoint',
+            'TOKEN_ERROR',
+            {
+              originalError: tokenResponse.error,
+            },
+          );
+        }
         this.tokenClient.setTokens(tokenResponse);
         this.logger.info('Device authorized and tokens obtained');
         return;

@@ -2,7 +2,7 @@
 
 import {
   IClientConfig,
-  ITokenResponse,
+  TokenSet,
   ITokenIntrospectionResponse,
   IIssuer,
   ILogger,
@@ -12,6 +12,7 @@ import { ClientError } from '../errors/ClientError';
 import { buildUrlEncodedBody } from '../utils';
 import { GrantType } from '../enums/GrantType';
 import { TokenTypeHint } from '../enums/TokenTypeHint';
+import { Jwt } from './Jwt';
 
 export class Token implements IToken {
   private readonly logger: ILogger;
@@ -29,14 +30,13 @@ export class Token implements IToken {
     this.issuer = issuer;
   }
 
-  public setTokens(tokenResponse: ITokenResponse): void {
+  public setTokens(tokenResponse: TokenSet): void {
     this.accessToken = tokenResponse.access_token;
     this.refreshToken = tokenResponse.refresh_token || null;
     this.expiresAt = tokenResponse.expires_in
       ? Date.now() + tokenResponse.expires_in * 1000
       : null;
     if (tokenResponse.id_token) {
-      // Store it for later validation
       this.idToken = tokenResponse.id_token;
     }
     this.logger.debug('Tokens set successfully', { tokenResponse });
@@ -98,7 +98,7 @@ export class Token implements IToken {
     }
   }
 
-  public getTokens(): ITokenResponse | null {
+  public getTokens(): TokenSet | null {
     if (!this.accessToken) {
       return null;
     }
@@ -228,7 +228,13 @@ export class Token implements IToken {
 
     try {
       const response = await fetch(endpoint, { method: 'POST', body, headers });
-      return response.json();
+      const json = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          `Token request failed: ${response.status} ${JSON.stringify(json)}`,
+        );
+      }
+      return json;
     } catch (error) {
       this.logger.error('Token request failed', { endpoint, params, error });
       throw new ClientError('Token request failed', 'TOKEN_REQUEST_ERROR', {
@@ -245,7 +251,7 @@ export class Token implements IToken {
    */
   async exchangeCodeForToken(
     code: string,
-    codeVerifier?: string,
+    codeVerifier?: string | null,
   ): Promise<void> {
     const client = await this.issuer.discover();
     const tokenEndpoint = client.token_endpoint;
@@ -260,7 +266,14 @@ export class Token implements IToken {
         body,
         headers,
       });
-      const tokenResponse: ITokenResponse = await response.json();
+      const tokenResponse: TokenSet = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          `Token exchange failed: ${response.status} ${JSON.stringify(tokenResponse)}`,
+        );
+      }
+
       this.setTokens(tokenResponse);
       this.logger.info('Exchanged grant for tokens', {
         grantType: this.config.grantType,
@@ -324,5 +337,117 @@ export class Token implements IToken {
     }
 
     return baseParams;
+  }
+
+  /**
+   * Extracts claims from the access token.
+   * If the access token is a JWT, decode and return its payload.
+   * If opaque, optionally use the UserInfo endpoint to fetch claims.
+   *
+   * @returns A promise that resolves to an array of claim keys.
+   */
+  public async getClaims(): Promise<Record<string, any>> {
+    try {
+      await this.ensureToken();
+    } catch (error) {
+      this.logger.error('No access token available', {
+        error: new ClientError('No access token available', 'NO_ACCESS_TOKEN'),
+      });
+      throw new ClientError('No access token available', 'NO_ACCESS_TOKEN');
+    }
+
+    if (this.isJwt(this.accessToken)) {
+      try {
+        const jwtPayload = await Jwt.verify(this.accessToken, {
+          logger: this.logger,
+          client: await this.issuer.discover(),
+          clientId: this.config.clientId,
+        });
+        this.logger.debug('Claims extracted from JWT access token', {
+          payload: jwtPayload,
+        });
+        return jwtPayload;
+      } catch (error) {
+        this.logger.error('Failed to verify JWT access token', { error });
+        throw new ClientError('Failed to verify access token', 'DECODE_ERROR', {
+          originalError: error,
+        });
+      }
+    } else {
+      // Access token is opaque; use UserInfo endpoint if available
+      this.logger.debug(
+        'Access token is opaque; fetching claims from UserInfo endpoint',
+      );
+      try {
+        const userInfo = await this.fetchUserInfo();
+        this.logger.debug('Claims fetched from UserInfo endpoint', {
+          userInfo,
+        });
+        return userInfo;
+      } catch (error) {
+        this.logger.error('Failed to fetch user info', { error });
+        throw new ClientError('Failed to fetch user info', 'USERINFO_ERROR', {
+          originalError: error,
+        });
+      }
+    }
+  }
+
+  /**
+   * Ensures that the client is initialized and has a valid access token.
+   */
+  private async ensureToken(): Promise<void> {
+    if (this.accessToken && this.isTokenValid()) {
+      return;
+    }
+    if (this.refreshToken) {
+      await this.refreshAccessToken();
+      return;
+    }
+    throw new ClientError('No valid access token available', 'NO_VALID_TOKEN');
+  }
+
+  /**
+   * Determines if a token is a JWT based on its structure.
+   *
+   * @param token The access token to check.
+   * @returns True if the token is a JWT, false otherwise.
+   */
+  private isJwt(token: string): boolean {
+    const parts = token.split('.');
+    return parts.length === 3;
+  }
+
+  /**
+   * Fetches user information from the UserInfo endpoint using the access token.
+   *
+   * @returns A promise that resolves to the user info object.
+   */
+  private async fetchUserInfo(): Promise<Record<string, any>> {
+    const userInfoEndpoint = (await this.issuer.discover()).userinfo_endpoint;
+    if (!userInfoEndpoint) {
+      throw new ClientError(
+        'UserInfo endpoint not available',
+        'USERINFO_UNAVAILABLE',
+      );
+    }
+
+    const headers = {
+      Authorization: `Bearer ${this.accessToken}`,
+      'Content-Type': 'application/json',
+    };
+
+    try {
+      const response = await fetch(userInfoEndpoint, {
+        method: 'GET',
+        headers,
+      });
+
+      const userInfo = await response.json();
+      return userInfo;
+    } catch (error) {
+      this.logger.error('Error fetching UserInfo', { error });
+      throw error;
+    }
   }
 }

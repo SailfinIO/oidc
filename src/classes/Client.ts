@@ -9,7 +9,7 @@ import {
   IClientConfig,
   ILogger,
   ITokenIntrospectionResponse,
-  ITokenResponse,
+  TokenSet,
   IUserInfo,
   IUser,
   IIssuer,
@@ -18,6 +18,7 @@ import {
   ISession,
   IStoreContext,
   ISessionStore,
+  IAuthorizationUrlResponse,
 } from '../interfaces';
 import { ClientError } from '../errors';
 import { Token } from './Token';
@@ -108,6 +109,13 @@ export class Client {
   }
 
   /**
+   * Returns the current configuration.
+   */
+  public getConfig(): IClientConfig {
+    return this.config;
+  }
+
+  /**
    * Centralized config validation.
    */
   private validateConfig(config: IClientConfig): void {
@@ -149,7 +157,7 @@ export class Client {
     this.logger.setLogLevel(level);
   }
 
-  public async getAuthorizationUrl(): Promise<{ url: string; state: string }> {
+  public async getAuthorizationUrl(): Promise<IAuthorizationUrlResponse> {
     await this.ensureInitialized();
     return this.auth.getAuthorizationUrl();
   }
@@ -157,10 +165,11 @@ export class Client {
   public async handleRedirect(
     code: string,
     returnedState: string,
+    codeVerifier: string | null,
     context: IStoreContext,
   ): Promise<void> {
     await this.ensureInitialized();
-    await this.auth.handleRedirect(code, returnedState);
+    await this.auth.handleRedirect(code, returnedState, codeVerifier);
 
     if (this.session) {
       await this.session.start(context);
@@ -229,9 +238,19 @@ export class Client {
     return this.tokenClient.getAccessToken();
   }
 
-  public async getTokens(): Promise<ITokenResponse | null> {
+  public async getTokens(): Promise<TokenSet | null> {
     await this.ensureInitialized();
     return this.tokenClient.getTokens();
+  }
+
+  /**
+   * Retrieves claims from the access token.
+   *
+   * @returns A promise that resolves to an array of claim keys.
+   */
+  public async getClaims(): Promise<Record<string, any>> {
+    await this.ensureInitialized();
+    return this.tokenClient.getClaims();
   }
 
   public async clearTokens(context: IStoreContext): Promise<void> {

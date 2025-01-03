@@ -335,13 +335,5 @@ export const generateRandomString = (length = 32): string => {
     );
   }
 
-  try {
-    return randomBytes(length).toString(BinaryToTextEncoding.HEX);
-  } catch (error) {
-    throw new ClientError(
-      'Failed to generate random string',
-      'RANDOM_GENERATION_ERROR',
-      { originalError: error },
-    );
-  }
+  return randomBytes(length).toString(BinaryToTextEncoding.HEX);
 };

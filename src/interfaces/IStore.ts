@@ -8,6 +8,18 @@
  */
 
 import { ISessionData } from './ISessionData';
+import { IUser } from './IUser';
+
+export interface IRequest extends globalThis.Request {
+  query: Record<string, any>;
+  session?: ISessionData;
+}
+
+export interface IResponse extends Omit<globalThis.Response, 'status'> {
+  redirect(url: string): void;
+  status(code: number): this;
+  send(body: string): this;
+}
 
 /**
  * Represents the context for session storage operations.
@@ -23,14 +35,28 @@ export interface IStoreContext {
    *
    * @type {Request | undefined}
    */
-  request?: Request;
+  request?: IRequest;
 
   /**
    * The HTTP response object, if available.
    *
    * @type {Response | undefined}
    */
-  response?: Response;
+  response?: IResponse;
+
+  /**
+   * Additional context data for the store implementation.
+   *
+   * @type {Record<string, any> | undefined}
+   */
+  extra?: Record<string, any>;
+
+  /**
+   * The User object, if available.
+   *
+   * @type {IUser | undefined}
+   */
+  user?: IUser;
 }
 
 /**

@@ -2,7 +2,7 @@
 
 export * from './ILogger';
 export * from './IClientConfig';
-export * from './ITokenResponse';
+export * from './TokenSet';
 export * from './IUser';
 export * from './ISessionData';
 export * from './IStore';
@@ -21,7 +21,7 @@ export * from './IAuth';
 export * from './IJwks';
 export * from './IClaimsValidator';
 export * from './ISignatureVerifier';
-export * from './IJwtValidator';
+export * from './IJwt';
 export * from './IMutex';
 export * from './IPkce';
 export * from './IState';
@@ -30,3 +30,6 @@ export * from './ParseOptions';
 export * from './CookieOptions';
 export * from './StoreOptions';
 export * from './ISessionStore';
+export * from './IMetadata';
+export * from './JwtOptions';
+export * from './HashAlgorithm';

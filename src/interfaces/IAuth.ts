@@ -23,6 +23,11 @@ export interface IAuthorizationUrlResponse {
    * The state parameter used for CSRF protection.
    */
   state: string;
+
+  /**
+   * The code verifier used for PKCE.
+   */
+  codeVerifier: string | null;
 }
 
 /**
@@ -108,7 +113,11 @@ export interface IAuth {
    * await authClient.handleRedirect(code, returnedState);
    * ```
    */
-  handleRedirect(code: string, returnedState: string): Promise<void>;
+  handleRedirect(
+    code: string,
+    returnedState: string,
+    codeVerifier: string | null,
+  ): Promise<void>;
 
   /**
    * Handles the redirect callback for implicit flow.

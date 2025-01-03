@@ -1,6 +1,6 @@
 // src/interfaces/IToken.ts
 
-import { ITokenResponse } from './ITokenResponse';
+import { TokenSet } from './TokenSet';
 import { ITokenIntrospectionResponse } from './ITokenIntrospectionResponse';
 import { TokenTypeHint } from '../enums/TokenTypeHint';
 
@@ -9,7 +9,7 @@ export interface IToken {
    * Sets the tokens based on the token response.
    * @param tokenResponse The response containing tokens.
    */
-  setTokens(tokenResponse: ITokenResponse): void;
+  setTokens(tokenResponse: TokenSet): void;
 
   /**
    * Retrieves the current access token, refreshing it if necessary.
@@ -26,7 +26,7 @@ export interface IToken {
    * Retrieves the current token response.
    * @returns The token response or null if no tokens are set.
    */
-  getTokens(): ITokenResponse | null;
+  getTokens(): TokenSet | null;
 
   /**
    * Clears all stored tokens.
@@ -73,4 +73,10 @@ export interface IToken {
     username?: string,
     password?: string,
   ): Promise<void>;
+
+  /**
+   * Retrieves claims from the access token.
+   * @returns A promise that resolves to an array of claim keys.
+   */
+  getClaims(): Promise<Record<string, any>>;
 }

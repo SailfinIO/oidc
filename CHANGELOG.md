@@ -1,15 +1,66 @@
-## [0.0.9](https://github.com/SailfinIO/oidc/compare/v0.0.8...v0.0.9) (2024-12-27)
+## [0.0.10-beta.9](https://github.com/SailfinIO/oidc/compare/v0.0.10-beta.8...v0.0.10-beta.9) (2025-01-03)
 
 ### Bug Fixes
 
-* acr and uilocales support ([a24c4ff](https://github.com/SailfinIO/oidc/commit/a24c4ff846a6ffad7acacaa186a64580768bc481))
-* auth tests ([2a84a90](https://github.com/SailfinIO/oidc/commit/2a84a90570830b17981844408e24e87369c2c87f))
-* code smells ([2431889](https://github.com/SailfinIO/oidc/commit/2431889d7ab1b61ebafd6046874a365d03d1a546))
-* coverage ([f3e2520](https://github.com/SailfinIO/oidc/commit/f3e2520c776a3a56201a0d4137e2555f0d292884))
-* coverage for quality gate ([4e78493](https://github.com/SailfinIO/oidc/commit/4e78493a78fe909f3d1bdfbfa37933e72ce1df9f))
-* covereage for url and mutex ([16993e9](https://github.com/SailfinIO/oidc/commit/16993e902c15868f1aa990cb41a808bbd6c625e0))
-* covereage for url and mutex ([705c941](https://github.com/SailfinIO/oidc/commit/705c9416d5930bf47903813002eebe418a51d7ae))
-* testing auth ([947a9aa](https://github.com/SailfinIO/oidc/commit/947a9aa495d3ccba9ed5f144a60e48c950f72578))
+* metadata manager initialization and login/callback decorators ([9b2256c](https://github.com/SailfinIO/oidc/commit/9b2256c3dcac2531e123e05a28fbb5120726e1e3))
+
+## [0.0.10-beta.8](https://github.com/SailfinIO/oidc/compare/v0.0.10-beta.7...v0.0.10-beta.8) (2025-01-03)
+
+### Bug Fixes
+
+* optional logger ([b82e53b](https://github.com/SailfinIO/oidc/commit/b82e53bfb604170d76d0686c66e9f111fd7ec359))
+
+## [0.0.10-beta.7](https://github.com/SailfinIO/oidc/compare/v0.0.10-beta.6...v0.0.10-beta.7) (2025-01-03)
+
+### Bug Fixes
+
+* export oidc login and callback ([335b3ff](https://github.com/SailfinIO/oidc/commit/335b3ff435153654a37df7673c8631ee112c8b6f))
+
+## [0.0.10-beta.6](https://github.com/SailfinIO/oidc/compare/v0.0.10-beta.5...v0.0.10-beta.6) (2025-01-03)
+
+### Bug Fixes
+
+* headers as plain object ([2deca91](https://github.com/SailfinIO/oidc/commit/2deca91b36ae2e3c222c924b34ee9df496430835))
+
+## [0.0.10-beta.5](https://github.com/SailfinIO/oidc/compare/v0.0.10-beta.4...v0.0.10-beta.5) (2025-01-03)
+
+### Bug Fixes
+
+* middleware handling ([0af7430](https://github.com/SailfinIO/oidc/commit/0af7430144f05e4a8cda14388baa02ff033bf479))
+
+## [0.0.10-beta.4](https://github.com/SailfinIO/oidc/compare/v0.0.10-beta.3...v0.0.10-beta.4) (2025-01-02)
+
+### Bug Fixes
+
+* add error handling for middleware ([17998cd](https://github.com/SailfinIO/oidc/commit/17998cde96c400e9812058e2b4266c661f936847))
+
+## [0.0.10-beta.3](https://github.com/SailfinIO/oidc/compare/v0.0.10-beta.2...v0.0.10-beta.3) (2025-01-02)
+
+### Bug Fixes
+
+* change to claims instead of scopes ([0b90bc6](https://github.com/SailfinIO/oidc/commit/0b90bc6ab5268523f34539266c70168b27490320))
+
+## [0.0.10-beta.2](https://github.com/SailfinIO/oidc/compare/v0.0.10-beta.1...v0.0.10-beta.2) (2025-01-02)
+
+### Bug Fixes
+
+* code smells ([0536fde](https://github.com/SailfinIO/oidc/commit/0536fde9f6ce0389d7f0832b75fb34f9a7b3f0d7))
+
+## [0.0.10-beta.1](https://github.com/SailfinIO/oidc/compare/v0.0.9...v0.0.10-beta.1) (2025-01-02)
+
+### Bug Fixes
+
+* decorators testing ([0621d72](https://github.com/SailfinIO/oidc/commit/0621d729195ba88f39e59426eff2f526a6a11b33))
+* file name ([4eedaa4](https://github.com/SailfinIO/oidc/commit/4eedaa48d97b812e2c7d5c548322a4a6dce3e4db))
+* remove redundant interface ([7fac0a8](https://github.com/SailfinIO/oidc/commit/7fac0a81557e4e698c98f7c9b4eb763730a65370))
+* work on claims ([8fe05d1](https://github.com/SailfinIO/oidc/commit/8fe05d111c70482c070ad635d94b31256347ee87))
+* work on session state ([6f7c95b](https://github.com/SailfinIO/oidc/commit/6f7c95b2a28daeb0ad1586de2a4ef81347672785))
+
+## [0.0.9-beta.4](https://github.com/SailfinIO/oidc/compare/v0.0.9-beta.3...v0.0.9-beta.4) (2024-12-28)
+
+### Bug Fixes
+
+* decorators testing ([0621d72](https://github.com/SailfinIO/oidc/commit/0621d729195ba88f39e59426eff2f526a6a11b33))
 
 ## [0.0.9-beta.3](https://github.com/SailfinIO/oidc/compare/v0.0.9-beta.2...v0.0.9-beta.3) (2024-12-27)
 
