@@ -1,6 +1,6 @@
 // src/decorators/oidcLogin.test.ts
 
-import { oidcLogin, OidcLoginOptions } from './oidcLogin';
+import { OidcLogin } from './oidcLogin';
 import { Client } from '../classes/Client';
 import { IStoreContext, IClientConfig } from '../interfaces';
 import { StorageMechanism } from '../enums';
@@ -51,7 +51,7 @@ describe('oidcLogin', () => {
     } as IClientConfig);
 
     // Initialize the oidcLogin handler
-    oidcLoginHandler = oidcLogin(mockClient);
+    oidcLoginHandler = OidcLogin(mockClient);
   });
 
   afterEach(() => {
@@ -137,7 +137,7 @@ describe('oidcLogin', () => {
     } as IClientConfig);
 
     // Re-initialize the handler with session disabled
-    oidcLoginHandler = oidcLogin(mockClient);
+    oidcLoginHandler = OidcLogin(mockClient);
 
     // Initialize mockRequest without session
     mockRequest.session = undefined;
@@ -197,7 +197,7 @@ describe('oidcLogin', () => {
     const onError = jest.fn();
 
     // Re-initialize the handler with onError option
-    oidcLoginHandler = oidcLogin(mockClient, { onError });
+    oidcLoginHandler = OidcLogin(mockClient, { onError });
 
     // Act
     await oidcLoginHandler(mockContext);

@@ -1,6 +1,6 @@
 // src/decorators/oidcCallback.test.ts
 
-import { oidcCallback } from './oidcCallback';
+import { OidcCallback } from './oidcCallback';
 import { Client } from '../classes/Client';
 import { IStoreContext, IClientConfig } from '../interfaces';
 import { StorageMechanism } from '../enums';
@@ -53,7 +53,7 @@ describe('oidcCallback', () => {
     } as IClientConfig);
 
     // Initialize the oidcCallback handler
-    oidcCallbackHandler = oidcCallback(mockClient);
+    oidcCallbackHandler = OidcCallback(mockClient);
   });
 
   afterEach(() => {
@@ -119,7 +119,7 @@ describe('oidcCallback', () => {
     mockClient.getUserInfo.mockResolvedValue(userInfo);
 
     // Initialize the oidcCallback handler with postLoginRedirectUri option
-    oidcCallbackHandler = oidcCallback(mockClient, { postLoginRedirectUri });
+    oidcCallbackHandler = OidcCallback(mockClient, { postLoginRedirectUri });
 
     // Act
     await oidcCallbackHandler(mockContext);
@@ -156,7 +156,7 @@ describe('oidcCallback', () => {
     } as IClientConfig);
 
     // Re-initialize the handler with session disabled
-    oidcCallbackHandler = oidcCallback(mockClient, { postLoginRedirectUri });
+    oidcCallbackHandler = OidcCallback(mockClient, { postLoginRedirectUri });
 
     // Mock client.handleRedirect and getUserInfo
     mockClient.handleRedirect.mockResolvedValue();
@@ -286,7 +286,7 @@ describe('oidcCallback', () => {
 
     // Initialize the oidcCallback handler with onError option
     const onError = jest.fn();
-    oidcCallbackHandler = oidcCallback(mockClient, { onError });
+    oidcCallbackHandler = OidcCallback(mockClient, { onError });
 
     // Act
     await oidcCallbackHandler(mockContext);
@@ -364,7 +364,7 @@ describe('oidcCallback', () => {
 
     // Initialize the oidcCallback handler with onError option
     const onError = jest.fn();
-    oidcCallbackHandler = oidcCallback(mockClient, { onError });
+    oidcCallbackHandler = OidcCallback(mockClient, { onError });
 
     // Act
     await oidcCallbackHandler(mockContext);
@@ -507,7 +507,7 @@ describe('oidcCallback', () => {
     } as IClientConfig);
 
     // Re-initialize the handler with postLoginRedirectUri option
-    oidcCallbackHandler = oidcCallback(mockClient, { postLoginRedirectUri });
+    oidcCallbackHandler = OidcCallback(mockClient, { postLoginRedirectUri });
 
     // Mock client.handleRedirect and getUserInfo
     mockClient.handleRedirect.mockResolvedValue();

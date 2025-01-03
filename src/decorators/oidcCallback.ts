@@ -124,7 +124,7 @@ const processStatelessFlow = async (
  * @param options - Optional settings.
  * @returns A higher-order function that wraps the original route handler.
  */
-export const oidcCallback = (client: Client, options?: OidcCallbackOptions) => {
+export const OidcCallback = (client: Client, options?: OidcCallbackOptions) => {
   return async (context: IStoreContext): Promise<void> => {
     const { request, response } = context;
 
