@@ -1,8 +1,28 @@
+
 ## [0.0.10-beta.10](https://github.com/SailfinIO/oidc/compare/v0.0.10-beta.9...v0.0.10-beta.10) (2025-01-04)
 
 ### Bug Fixes
 
 * token authentication methods needed ([6a053d1](https://github.com/SailfinIO/oidc/commit/6a053d10d3fbde9f3ff661347522e37a04a20079))
+
+## [0.0.10](https://github.com/SailfinIO/oidc/compare/v0.0.9...v0.0.10) (2025-01-03)
+
+### Bug Fixes
+
+* add error handling for middleware ([17998cd](https://github.com/SailfinIO/oidc/commit/17998cde96c400e9812058e2b4266c661f936847))
+* change to claims instead of scopes ([0b90bc6](https://github.com/SailfinIO/oidc/commit/0b90bc6ab5268523f34539266c70168b27490320))
+* code smells ([0536fde](https://github.com/SailfinIO/oidc/commit/0536fde9f6ce0389d7f0832b75fb34f9a7b3f0d7))
+* decorators testing ([0621d72](https://github.com/SailfinIO/oidc/commit/0621d729195ba88f39e59426eff2f526a6a11b33))
+* export oidc login and callback ([335b3ff](https://github.com/SailfinIO/oidc/commit/335b3ff435153654a37df7673c8631ee112c8b6f))
+* file name ([4eedaa4](https://github.com/SailfinIO/oidc/commit/4eedaa48d97b812e2c7d5c548322a4a6dce3e4db))
+* headers as plain object ([2deca91](https://github.com/SailfinIO/oidc/commit/2deca91b36ae2e3c222c924b34ee9df496430835))
+* metadata manager initialization and login/callback decorators ([9b2256c](https://github.com/SailfinIO/oidc/commit/9b2256c3dcac2531e123e05a28fbb5120726e1e3))
+* middleware handling ([0af7430](https://github.com/SailfinIO/oidc/commit/0af7430144f05e4a8cda14388baa02ff033bf479))
+* optional logger ([b82e53b](https://github.com/SailfinIO/oidc/commit/b82e53bfb604170d76d0686c66e9f111fd7ec359))
+* remove redundant interface ([7fac0a8](https://github.com/SailfinIO/oidc/commit/7fac0a81557e4e698c98f7c9b4eb763730a65370))
+* work on claims ([8fe05d1](https://github.com/SailfinIO/oidc/commit/8fe05d111c70482c070ad635d94b31256347ee87))
+* work on session state ([6f7c95b](https://github.com/SailfinIO/oidc/commit/6f7c95b2a28daeb0ad1586de2a4ef81347672785))
+
 
 ## [0.0.10-beta.9](https://github.com/SailfinIO/oidc/compare/v0.0.10-beta.8...v0.0.10-beta.9) (2025-01-03)
 
