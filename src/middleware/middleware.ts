@@ -9,6 +9,7 @@ import {
 import { RequestMethod, RouteAction } from '../enums';
 import { ClientError } from '../errors/ClientError';
 import { NextFunction } from '../types';
+import { parseCookies } from './cookieUtils';
 
 /**
  * Middleware function compatible with Express.
@@ -17,17 +18,23 @@ import { NextFunction } from '../types';
  * @returns {Function} Express-compatible middleware function.
  */
 export const middleware = (client: Client) => {
-  return async (req?: IRequest, res?: IResponse, next?: NextFunction) => {
+  return async (
+    req: IRequest,
+    res: IResponse,
+    next: NextFunction,
+  ): Promise<void> => {
     if (!req || !res) {
-      if (next) next();
+      await next();
       return;
     }
-    // Construct route metadata
+    req.cookies = parseCookies(req.headers);
+
+    // Continue with existing middleware logic
     const { method, url } = req;
     let pathname: string;
 
     try {
-      pathname = new URL(url, `http://${req.headers['host']}`).pathname;
+      pathname = new URL(url, `http://${req.headers.get('host')}`).pathname;
     } catch (error) {
       console.error('Invalid URL:', url);
       await next(error);

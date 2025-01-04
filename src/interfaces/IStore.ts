@@ -7,12 +7,14 @@
  * @module src/interfaces/IStore
  */
 
+import { ParsedCookies } from '../utils';
 import { ISessionData } from './ISessionData';
 import { IUser } from './IUser';
 
 export interface IRequest extends globalThis.Request {
   query: Record<string, any>;
   session?: ISessionData;
+  cookies?: ParsedCookies;
 }
 
 export interface IResponse extends Omit<globalThis.Response, 'status'> {
