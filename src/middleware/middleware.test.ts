@@ -1,3 +1,5 @@
+// src/middleware/middleware.test.ts
+
 import { middleware } from './middleware';
 import { Client } from '../classes/Client';
 import { MetadataManager } from '../decorators/MetadataManager';
@@ -18,15 +20,27 @@ jest.mock('../classes/Client');
 jest.mock('../decorators/MetadataManager');
 
 const createMockResponse = (init: Partial<IResponse> = {}): IResponse => {
+  const headers = new Headers(init.headers);
+  let redirected = false;
+
   return {
-    redirect: jest.fn(),
+    redirect: jest.fn().mockImplementation((url: string) => {
+      redirected = true;
+      headers.append('Location', url);
+      // You can add more logic here if needed
+    }),
     status: jest.fn().mockReturnThis(),
     send: jest.fn().mockReturnThis(),
-    headers: new Headers(),
+    headers,
+    get redirected() {
+      return redirected;
+    },
+    set redirected(value: boolean) {
+      redirected = value;
+    },
     body: null,
     bodyUsed: false,
     ok: true,
-    redirected: false,
     statusText: 'OK',
     type: 'basic',
     url: 'http://localhost',
@@ -58,6 +72,7 @@ const createMockRequest = (
   });
   return request;
 };
+
 const mockSessionStore: ISessionStore = {
   set: jest.fn().mockResolvedValue(undefined),
   get: jest.fn().mockResolvedValue(null),
@@ -104,6 +119,12 @@ describe('OIDC Middleware', () => {
       getAuthorizationUrl: jest.fn(),
       getAccessToken: jest.fn(),
       getClaims: jest.fn(),
+      getLogger: jest.fn().mockReturnValue({
+        debug: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+      }),
+      getSessionStore: jest.fn().mockReturnValue(mockSessionStore),
     } as unknown as jest.Mocked<Client>;
 
     mockClient.getConfig.mockReturnValue(mockConfig);
@@ -213,20 +234,33 @@ describe('OIDC Middleware', () => {
     mockClient.getConfig.mockReturnValue(mockConfig);
     mockClient.getUserInfo.mockResolvedValue({ sub: 'user1' });
 
+    // Modify the handleRedirect mock to include assertions
+    mockClient.handleRedirect.mockImplementation(
+      async (code, state, verifier, context) => {
+        // Assert that context.user is undefined at the time of handleRedirect
+        expect(context.user).toBeUndefined();
+
+        // Optionally, you can capture other parts of context if needed
+        expect(context.request).toBe(mockRequest);
+        expect(context.response).toBe(mockResponse);
+        expect(context.extra).toEqual({});
+
+        // Simulate any necessary behavior within handleRedirect
+        if (context.request.session && context.request.session.state) {
+          delete context.request.session.state[state];
+        }
+      },
+    );
+
     const mw = middleware(mockClient);
     await mw(mockRequest, mockResponse, mockNext);
 
-    // Verify handleRedirect was called correctly
+    // Verify handleRedirect was called correctly (without checking context.user here)
     expect(mockClient.handleRedirect).toHaveBeenCalledWith(
       '123',
       'abc',
       'code_verifier_123',
-      expect.objectContaining({
-        request: expect.any(Object),
-        response: expect.any(Object),
-        extra: {},
-        user: expect.any(Object), // This should now correctly pass
-      }),
+      expect.any(Object), // We already asserted the context inside the mock
     );
 
     // Verify getUserInfo was called
@@ -243,14 +277,6 @@ describe('OIDC Middleware', () => {
 
     // Ensure next was not called
     expect(mockNext).not.toHaveBeenCalled();
-
-    // Optionally, verify capturedContext if needed
-    expect(capturedContext).toMatchObject({
-      request: expect.any(Object),
-      response: expect.any(Object),
-      extra: {},
-      user: undefined, // Should still be undefined before getUserInfo
-    });
   });
 
   it('should handle errors and call onError if provided', async () => {

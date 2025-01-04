@@ -6,12 +6,14 @@ import {
   IRequest,
   IResponse,
   IRouteMetadata,
+  ISessionData,
   IStoreContext,
 } from '../interfaces';
-import { RequestMethod, RouteAction } from '../enums';
+import { RequestMethod, RouteAction, SameSite } from '../enums';
 import { ClientError } from '../errors/ClientError';
 import { NextFunction } from '../types';
 import { parseCookies } from './cookieUtils';
+import { Cookie } from '../utils';
 
 /**
  * Middleware function compatible with Express.
@@ -25,49 +27,116 @@ export const middleware = (client: Client) => {
     res: IResponse,
     next: NextFunction,
   ): Promise<void> => {
-    if (!req || !res) {
-      await next();
-      return;
-    }
-
-    // Parse cookies from headers
-    req.cookies = parseCookies(req.headers);
-
-    // Continue with existing middleware logic
-    const { method, url } = req;
-    let pathname: string;
+    let routeMetadata: IRouteMetadata | null = null; // Declare outside
 
     try {
-      const host = Array.isArray(req.headers['host'])
-        ? req.headers['host'][0]
-        : req.headers['host'] || 'localhost';
-      const baseUrl = `http://${host}`;
-      pathname = new URL(url, baseUrl).pathname;
-    } catch (error) {
-      console.error('Invalid URL:', url);
-      await next(error);
-      return;
-    }
+      if (!req || !res) {
+        await next();
+        return;
+      }
 
-    const routeMetadata = MetadataManager.getRouteMetadata(
-      method as RequestMethod,
-      pathname,
-    );
+      // Parse cookies from headers
+      req.cookies = parseCookies(req.headers);
+      client.getLogger().debug('Parsed cookies', { cookies: req.cookies });
 
-    if (!routeMetadata) {
-      await next();
-      return;
-    }
+      // Initialize session
+      const sessionStore = client.getSessionStore();
+      const sessionCookieName =
+        client.getConfig().session?.cookie?.name || 'sid';
+      let sid = req.cookies[sessionCookieName] || null;
+      let sessionData: ISessionData | null = null;
 
-    try {
+      if (sid && sessionStore) {
+        sessionData = await sessionStore.get(sid, {
+          request: req,
+          response: res,
+        });
+        if (sessionData) {
+          req.session = sessionData;
+          client.getLogger().debug('Session loaded', { sid, sessionData });
+        } else {
+          client.getLogger().warn('Invalid sid, clearing session', { sid });
+          sid = null;
+        }
+      }
+
+      // Continue with existing middleware logic
+      const { method, url } = req;
+      let pathname: string;
+
+      try {
+        const host = Array.isArray(req.headers['host'])
+          ? req.headers['host'][0]
+          : req.headers['host'] || 'localhost';
+        const baseUrl = `http://${host}`;
+        pathname = new URL(url, baseUrl).pathname;
+      } catch (error) {
+        client.getLogger().error('Invalid URL', { url, error });
+        await next(error);
+        return;
+      }
+
+      routeMetadata = MetadataManager.getRouteMetadata(
+        method as RequestMethod,
+        pathname,
+      );
+
+      if (!routeMetadata) {
+        await next();
+        return;
+      }
+
       const context: IStoreContext = {
         request: req,
         response: res,
         extra: {}, // Populate as needed
         user: undefined,
       };
+
+      client.getLogger().debug('Handling route', { pathname, routeMetadata });
+
       await handleRoute(client, req, res, routeMetadata, next, context);
+
+      // After handling the route, persist the session
+      if (sessionStore) {
+        if (sid) {
+          // Update existing session
+          await sessionStore.touch(sid, req.session, {
+            request: req,
+            response: res,
+          });
+          client.getLogger().debug('Session touched', { sid });
+        } else if (req.session) {
+          // Create new session
+          sid = await sessionStore.set(req.session, {
+            request: req,
+            response: res,
+          });
+          client
+            .getLogger()
+            .debug('New session created', { sid, sessionData: req.session });
+
+          // Set session cookie
+          const options = client.getConfig().session?.cookie?.options || {
+            httpOnly: true,
+            secure: true,
+            sameSite: SameSite.STRICT,
+            path: '/',
+            maxAge: 3600, // 1 hour
+          };
+
+          const cookie = new Cookie(sessionCookieName, sid, options);
+
+          res.headers.append('Set-Cookie', cookie.serialize());
+        }
+      }
+
+      // Only call next() if the response hasn't been sent (e.g., no redirect)
+      if (!res.redirected) {
+        await next();
+      }
     } catch (error) {
+      // Pass the actual routeMetadata to handleError
       await handleError(error, routeMetadata, req, res, next);
     }
   };

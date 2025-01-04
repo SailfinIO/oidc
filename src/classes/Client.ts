@@ -218,6 +218,17 @@ export class Client {
     return this.userInfoClient.getUserInfo();
   }
 
+  /**
+   * Exposes the session store.
+   */
+  public getSessionStore(): ISessionStore | null {
+    return this.sessionStore;
+  }
+
+  public getLogger(): ILogger {
+    return this.logger;
+  }
+
   public async introspectToken(
     token: string,
   ): Promise<ITokenIntrospectionResponse> {
