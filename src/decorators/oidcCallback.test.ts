@@ -2,7 +2,7 @@
 
 import { OidcCallback } from './oidcCallback';
 import { Client } from '../classes/Client';
-import { IStoreContext, IClientConfig } from '../interfaces';
+import { IClientConfig } from '../interfaces';
 import { StorageMechanism } from '../enums';
 
 // Dummy class to apply the decorator
@@ -41,7 +41,9 @@ describe('OidcCallback Decorator', () => {
     // Initialize mock request and response
     mockRequest = {
       query: {},
-      session: {},
+      session: {
+        state: {}, // Initialize as an empty object for multiple sessions
+      },
     };
 
     mockResponse = {
@@ -78,9 +80,8 @@ describe('OidcCallback Decorator', () => {
     mockRequest.query.code = authorizationCode;
     mockRequest.query.state = state;
 
-    // Set up session data
-    mockRequest.session.state = state;
-    mockRequest.session.codeVerifier = 'codeVerifier123';
+    // Set up session data with multiple sessions structure
+    mockRequest.session.state[state] = { codeVerifier: 'codeVerifier123' };
 
     // Mock client.handleRedirect and getUserInfo
     mockClient.handleRedirect.mockResolvedValue();
@@ -90,17 +91,14 @@ describe('OidcCallback Decorator', () => {
     await dummyController.handleCallback(mockRequest, mockResponse);
 
     // Assert
-    expect(mockClient.getConfig).toHaveBeenCalledTimes(1);
+    expect(mockClient.getConfig).toHaveBeenCalledTimes(2); // Decorator and processSessionFlow
     expect(mockClient.handleRedirect).toHaveBeenCalledWith(
       authorizationCode,
       state,
-      'codeVerifier123',
-      { request: mockRequest, response: mockResponse },
+      { request: mockRequest, response: mockResponse }, // Updated parameters
     );
     expect(mockClient.getUserInfo).toHaveBeenCalledTimes(1);
     expect(mockRequest.session.user).toEqual(userInfo);
-    expect(mockRequest.session.state).toBeUndefined();
-    expect(mockRequest.session.codeVerifier).toBeUndefined();
     expect(mockResponse.redirect).toHaveBeenCalledWith('/');
   });
 
@@ -115,17 +113,14 @@ describe('OidcCallback Decorator', () => {
     mockRequest.query.code = authorizationCode;
     mockRequest.query.state = state;
 
-    // Set up session data
-    mockRequest.session.state = state;
-    mockRequest.session.codeVerifier = 'codeVerifier456';
+    // Set up session data with multiple sessions structure
+    mockRequest.session.state[state] = { codeVerifier: 'codeVerifier456' };
 
     // Mock client.handleRedirect and getUserInfo
     mockClient.handleRedirect.mockResolvedValue();
     mockClient.getUserInfo.mockResolvedValue(userInfo);
 
     // Re-define the dummy controller with postLoginRedirectUri option
-    // Since the decorator is already applied, we'll need to redefine it
-    // Alternatively, you can parameterize the decorator within the class
     class CustomRedirectController extends DummyController {
       @OidcCallback({ postLoginRedirectUri })
       async handleCallback(req: any, res: any) {}
@@ -137,18 +132,33 @@ describe('OidcCallback Decorator', () => {
     await dummyController.handleCallback(mockRequest, mockResponse);
 
     // Assert
-    expect(mockClient.getConfig).toHaveBeenCalledTimes(1);
+    expect(mockClient.getConfig).toHaveBeenCalledTimes(2); // Decorator and processSessionFlow
     expect(mockClient.handleRedirect).toHaveBeenCalledWith(
       authorizationCode,
       state,
-      'codeVerifier456',
-      { request: mockRequest, response: mockResponse },
+      { request: mockRequest, response: mockResponse }, // Updated parameters
     );
     expect(mockClient.getUserInfo).toHaveBeenCalledTimes(1);
     expect(mockRequest.session.user).toEqual(userInfo);
-    expect(mockRequest.session.state).toBeUndefined();
-    expect(mockRequest.session.codeVerifier).toBeUndefined();
     expect(mockResponse.redirect).toHaveBeenCalledWith(postLoginRedirectUri);
+  });
+
+  it('should respond with 400 if request.query is missing', async () => {
+    // Arrange
+    // Ensure that `query` is undefined
+    mockRequest.query = undefined;
+
+    // Act
+    await dummyController.handleCallback(mockRequest, mockResponse);
+
+    // Assert
+    expect(mockClient.getConfig).not.toHaveBeenCalled();
+    expect(mockClient.handleRedirect).not.toHaveBeenCalled();
+    expect(mockClient.getUserInfo).not.toHaveBeenCalled();
+    expect(mockResponse.status).toHaveBeenCalledWith(400);
+    expect(mockResponse.send).toHaveBeenCalledWith(
+      'Invalid callback parameters: Missing request or query.',
+    );
   });
 
   it('should redirect to the postLoginRedirectUri after successful authentication with session disabled', async () => {
@@ -183,12 +193,11 @@ describe('OidcCallback Decorator', () => {
     await dummyController.handleCallback(mockRequest, mockResponse);
 
     // Assert
-    expect(mockClient.getConfig).toHaveBeenCalledTimes(1);
+    expect(mockClient.getConfig).toHaveBeenCalledTimes(1); // Only decorator's getConfig
     expect(mockClient.handleRedirect).toHaveBeenCalledWith(
       authorizationCode,
       state,
-      null,
-      { request: mockRequest, response: mockResponse },
+      { request: mockRequest, response: mockResponse }, // Updated parameters
     );
     expect(mockClient.getUserInfo).toHaveBeenCalledTimes(1);
     // Since session is disabled, user should not be set in session
@@ -232,62 +241,83 @@ describe('OidcCallback Decorator', () => {
     );
   });
 
-  it('should respond with 400 if state does not match the stored state in session', async () => {
+  it('should respond with 500 if state does not match the stored state in session', async () => {
     // Arrange
     const authorizationCode = 'authCodeStateMismatch';
     const receivedState = 'receivedState';
     const storedState = 'storedState';
+    const error = new Error('State mismatch');
 
     // Set up request query parameters
     mockRequest.query.code = authorizationCode;
     mockRequest.query.state = receivedState;
 
     // Set up session data with a different state
-    mockRequest.session.state = storedState;
-    mockRequest.session.codeVerifier = 'codeVerifierMismatch';
+    mockRequest.session.state[storedState] = {
+      codeVerifier: 'codeVerifierMismatch',
+    };
+
+    // Mock handleRedirect to throw an error due to state mismatch
+    mockClient.handleRedirect.mockImplementation((code, state, context) => {
+      // Simulate state mismatch by throwing an error
+      throw error;
+    });
 
     // Act
     await dummyController.handleCallback(mockRequest, mockResponse);
 
     // Assert
-    expect(mockClient.getConfig).toHaveBeenCalledTimes(1);
-    expect(mockClient.handleRedirect).not.toHaveBeenCalled();
+    expect(mockClient.getConfig).toHaveBeenCalledTimes(1); // Only decorator's getConfig
+    expect(mockClient.handleRedirect).toHaveBeenCalledWith(
+      authorizationCode,
+      receivedState,
+      { request: mockRequest, response: mockResponse },
+    );
     expect(mockClient.getUserInfo).not.toHaveBeenCalled();
-    expect(mockResponse.status).toHaveBeenCalledWith(400);
-    expect(mockResponse.send).toHaveBeenCalledWith('State mismatch');
+    expect(mockResponse.status).toHaveBeenCalledWith(500);
+    expect(mockResponse.send).toHaveBeenCalledWith('Authentication failed');
   });
 
-  it('should respond with 400 if codeVerifier is missing from session when session is enabled', async () => {
+  it('should respond with 500 if codeVerifier is missing from session when session is enabled', async () => {
     // Arrange
     const authorizationCode = 'authCodeMissingVerifier';
     const state = 'stateMissingVerifier';
+    const error = new Error('Code verifier missing');
 
     // Set up request query parameters
     mockRequest.query.code = authorizationCode;
     mockRequest.query.state = state;
 
     // Set up session data without codeVerifier
-    mockRequest.session.state = state;
-    // codeVerifier is undefined
+    mockRequest.session.state[state] = {}; // Missing codeVerifier
+
+    // Mock handleRedirect to throw an error due to missing codeVerifier
+    mockClient.handleRedirect.mockImplementation((code, state, context) => {
+      if (!context.request.session.state[state]?.codeVerifier) {
+        throw error;
+      }
+      return Promise.resolve();
+    });
 
     // Act
     await dummyController.handleCallback(mockRequest, mockResponse);
 
     // Assert
-    expect(mockClient.getConfig).toHaveBeenCalledTimes(1);
-    expect(mockClient.handleRedirect).not.toHaveBeenCalled();
-    expect(mockClient.getUserInfo).not.toHaveBeenCalled();
-    expect(mockResponse.status).toHaveBeenCalledWith(400);
-    expect(mockResponse.send).toHaveBeenCalledWith(
-      'Code verifier missing from session',
+    expect(mockClient.getConfig).toHaveBeenCalledTimes(1); // Only decorator's getConfig
+    expect(mockClient.handleRedirect).toHaveBeenCalledWith(
+      authorizationCode,
+      state,
+      { request: mockRequest, response: mockResponse },
     );
+    expect(mockClient.getUserInfo).not.toHaveBeenCalled();
+    expect(mockResponse.status).toHaveBeenCalledWith(500);
+    expect(mockResponse.send).toHaveBeenCalledWith('Authentication failed');
   });
 
   it('should call the custom onError handler when handleRedirect throws an error with session enabled', async () => {
     // Arrange
     const authorizationCode = 'authCodeHandleRedirectError';
     const state = 'stateHandleRedirectError';
-    const codeVerifier = 'codeVerifierHandleRedirectError';
     const error = new Error('handleRedirect failed');
 
     // Set up request query parameters
@@ -295,16 +325,17 @@ describe('OidcCallback Decorator', () => {
     mockRequest.query.state = state;
 
     // Set up session data
-    mockRequest.session.state = state;
-    mockRequest.session.codeVerifier = codeVerifier;
+    mockRequest.session.state[state] = {
+      codeVerifier: 'codeVerifierHandleRedirectError',
+    };
 
-    // Mock client.handleRedirect to throw an error
+    // Mock handleRedirect to throw an error
     mockClient.handleRedirect.mockRejectedValue(error);
 
     // Define the onError mock
     const onErrorMock = jest.fn();
 
-    // Redefine the dummy controller with onError option
+    // Re-define the dummy controller with onError option
     class CustomErrorController extends DummyController {
       @OidcCallback({ onError: onErrorMock })
       async handleCallback(req: any, res: any) {}
@@ -316,15 +347,15 @@ describe('OidcCallback Decorator', () => {
     await dummyController.handleCallback(mockRequest, mockResponse);
 
     // Assert
-    expect(mockClient.getConfig).toHaveBeenCalledTimes(1);
+    expect(mockClient.getConfig).toHaveBeenCalledTimes(1); // Only decorator's getConfig
     expect(mockClient.handleRedirect).toHaveBeenCalledWith(
       authorizationCode,
       state,
-      codeVerifier,
       { request: mockRequest, response: mockResponse },
     );
     expect(mockClient.getUserInfo).not.toHaveBeenCalled();
     expect(console.error).toHaveBeenCalledWith('OIDC Callback Error:', error);
+    expect(onErrorMock).toHaveBeenCalledTimes(1);
     expect(onErrorMock).toHaveBeenCalledWith(error, {
       request: mockRequest,
       response: mockResponse,
@@ -335,7 +366,6 @@ describe('OidcCallback Decorator', () => {
     // Arrange
     const authorizationCode = 'authCodeHandleRedirect500';
     const state = 'stateHandleRedirect500';
-    const codeVerifier = 'codeVerifierHandleRedirect500';
     const error = new Error('handleRedirect failed');
 
     // Set up request query parameters
@@ -343,21 +373,21 @@ describe('OidcCallback Decorator', () => {
     mockRequest.query.state = state;
 
     // Set up session data
-    mockRequest.session.state = state;
-    mockRequest.session.codeVerifier = codeVerifier;
+    mockRequest.session.state[state] = {
+      codeVerifier: 'codeVerifierHandleRedirect500',
+    };
 
-    // Mock client.handleRedirect to throw an error
+    // Mock handleRedirect to throw an error
     mockClient.handleRedirect.mockRejectedValue(error);
 
     // Act
     await dummyController.handleCallback(mockRequest, mockResponse);
 
     // Assert
-    expect(mockClient.getConfig).toHaveBeenCalledTimes(1);
+    expect(mockClient.getConfig).toHaveBeenCalledTimes(1); // Only decorator's getConfig
     expect(mockClient.handleRedirect).toHaveBeenCalledWith(
       authorizationCode,
       state,
-      codeVerifier,
       { request: mockRequest, response: mockResponse },
     );
     expect(mockClient.getUserInfo).not.toHaveBeenCalled();
@@ -370,27 +400,42 @@ describe('OidcCallback Decorator', () => {
     // Arrange
     const authorizationCode = 'authCodeUserInfoError';
     const state = 'stateUserInfoError';
-    const codeVerifier = 'codeVerifierUserInfoError';
-    const userInfoError = new Error('getUserInfo failed');
+    const error = new Error('getUserInfo failed');
 
     // Set up request query parameters
     mockRequest.query.code = authorizationCode;
     mockRequest.query.state = state;
 
     // Set up session data
-    mockRequest.session.state = state;
-    mockRequest.session.codeVerifier = codeVerifier;
+    mockRequest.session.state[state] = {
+      codeVerifier: 'codeVerifierUserInfoError',
+    };
 
-    // Mock client.handleRedirect to resolve successfully
+    // Mock handleRedirect to resolve successfully
     mockClient.handleRedirect.mockResolvedValue();
 
-    // Mock client.getUserInfo to throw an error
-    mockClient.getUserInfo.mockRejectedValue(userInfoError);
+    // Mock getUserInfo to throw an error
+    mockClient.getUserInfo.mockRejectedValue(error);
+
+    // Ensure getConfig is called twice
+    mockClient.getConfig
+      .mockReturnValueOnce({
+        session: {
+          mechanism: StorageMechanism.MEMORY,
+          options: {},
+        },
+      } as IClientConfig)
+      .mockReturnValueOnce({
+        session: {
+          mechanism: StorageMechanism.MEMORY,
+          options: {},
+        },
+      } as IClientConfig);
 
     // Define the onError mock
     const onErrorMock = jest.fn();
 
-    // Redefine the dummy controller with onError option
+    // Re-define the dummy controller with onError option
     class CustomErrorController2 extends DummyController {
       @OidcCallback({ onError: onErrorMock })
       async handleCallback(req: any, res: any) {}
@@ -402,20 +447,17 @@ describe('OidcCallback Decorator', () => {
     await dummyController.handleCallback(mockRequest, mockResponse);
 
     // Assert
-    expect(mockClient.getConfig).toHaveBeenCalledTimes(1);
+    expect(mockClient.getConfig).toHaveBeenCalledTimes(1); // Decorator and processSessionFlow
     expect(mockClient.handleRedirect).toHaveBeenCalledWith(
       authorizationCode,
       state,
-      codeVerifier,
       { request: mockRequest, response: mockResponse },
     );
     expect(mockClient.getUserInfo).toHaveBeenCalledTimes(1);
     expect(mockRequest.session.user).toBeUndefined(); // user not set due to error
-    expect(console.error).toHaveBeenCalledWith(
-      'OIDC Callback Error:',
-      userInfoError,
-    );
-    expect(onErrorMock).toHaveBeenCalledWith(userInfoError, {
+    expect(console.error).toHaveBeenCalledWith('OIDC Callback Error:', error);
+    expect(onErrorMock).toHaveBeenCalledTimes(1);
+    expect(onErrorMock).toHaveBeenCalledWith(error, {
       request: mockRequest,
       response: mockResponse,
     });
@@ -425,73 +467,56 @@ describe('OidcCallback Decorator', () => {
     // Arrange
     const authorizationCode = 'authCodeUserInfo500';
     const state = 'stateUserInfo500';
-    const codeVerifier = 'codeVerifierUserInfo500';
-    const userInfoError = new Error('getUserInfo failed');
+    const error = new Error('getUserInfo failed');
 
     // Set up request query parameters
     mockRequest.query.code = authorizationCode;
     mockRequest.query.state = state;
 
     // Set up session data
-    mockRequest.session.state = state;
-    mockRequest.session.codeVerifier = codeVerifier;
+    mockRequest.session.state[state] = {
+      codeVerifier: 'codeVerifierUserInfo500',
+    };
 
-    // Mock client.handleRedirect to resolve successfully
+    // Mock handleRedirect to resolve successfully
     mockClient.handleRedirect.mockResolvedValue();
 
-    // Mock client.getUserInfo to throw an error
-    mockClient.getUserInfo.mockRejectedValue(userInfoError);
+    // Mock getUserInfo to throw an error
+    mockClient.getUserInfo.mockRejectedValue(error);
+
+    // Ensure getConfig is called twice
+    mockClient.getConfig
+      .mockReturnValueOnce({
+        session: {
+          mechanism: StorageMechanism.MEMORY,
+          options: {},
+        },
+      } as IClientConfig)
+      .mockReturnValueOnce({
+        session: {
+          mechanism: StorageMechanism.MEMORY,
+          options: {},
+        },
+      } as IClientConfig);
 
     // Act
     await dummyController.handleCallback(mockRequest, mockResponse);
 
     // Assert
-    expect(mockClient.getConfig).toHaveBeenCalledTimes(1);
+    expect(mockClient.getConfig).toHaveBeenCalledTimes(1); // Decorator and processSessionFlow
     expect(mockClient.handleRedirect).toHaveBeenCalledWith(
       authorizationCode,
       state,
-      codeVerifier,
       { request: mockRequest, response: mockResponse },
     );
     expect(mockClient.getUserInfo).toHaveBeenCalledTimes(1);
     expect(mockRequest.session.user).toBeUndefined(); // user not set due to error
-    expect(console.error).toHaveBeenCalledWith(
-      'OIDC Callback Error:',
-      userInfoError,
-    );
+    expect(console.error).toHaveBeenCalledWith('OIDC Callback Error:', error);
     expect(mockResponse.status).toHaveBeenCalledWith(500);
     expect(mockResponse.send).toHaveBeenCalledWith('Authentication failed');
   });
 
-  it('should clean up state and codeVerifier from session after successful authentication', async () => {
-    // Arrange
-    const authorizationCode = 'authCodeCleanup';
-    const state = 'stateCleanup';
-    const codeVerifier = 'codeVerifierCleanup';
-    const userInfo = { sub: 'userCleanup', name: 'Cleanup User' };
-
-    // Set up request query parameters
-    mockRequest.query.code = authorizationCode;
-    mockRequest.query.state = state;
-
-    // Set up session data
-    mockRequest.session.state = state;
-    mockRequest.session.codeVerifier = codeVerifier;
-
-    // Mock client.handleRedirect and getUserInfo
-    mockClient.handleRedirect.mockResolvedValue();
-    mockClient.getUserInfo.mockResolvedValue(userInfo);
-
-    // Act
-    await dummyController.handleCallback(mockRequest, mockResponse);
-
-    // Assert
-    expect(mockRequest.session.state).toBeUndefined();
-    expect(mockRequest.session.codeVerifier).toBeUndefined();
-    expect(mockRequest.session.user).toEqual(userInfo);
-  });
-
-  it('should throw an error if request is missing', async () => {
+  it('should respond with 400 if request is missing', async () => {
     // Arrange
     // Passing undefined for req
     await dummyController.handleCallback(undefined, mockResponse);
@@ -500,24 +525,12 @@ describe('OidcCallback Decorator', () => {
     expect(mockClient.getConfig).not.toHaveBeenCalled();
     expect(mockClient.handleRedirect).not.toHaveBeenCalled();
     expect(mockClient.getUserInfo).not.toHaveBeenCalled();
+
+    // Update expectations to reflect that res.status and res.send should be called
     expect(mockResponse.status).toHaveBeenCalledWith(400);
     expect(mockResponse.send).toHaveBeenCalledWith(
       'Invalid callback parameters: Missing request or response.',
     );
-  });
-
-  it('should throw an error if response is missing', async () => {
-    // Since handleCallback expects (req, res), pass undefined for res
-    await expect(
-      dummyController.handleCallback(mockRequest, undefined),
-    ).resolves.toBeUndefined(); // The decorator handles sending the response
-
-    // Assert
-    expect(mockClient.getConfig).not.toHaveBeenCalled();
-    expect(mockClient.handleRedirect).not.toHaveBeenCalled();
-    expect(mockClient.getUserInfo).not.toHaveBeenCalled();
-    // Depending on implementation, it might throw or handle internally
-    // Adjust the expectation accordingly
   });
 
   it('should handle callback without session correctly', async () => {
@@ -536,7 +549,7 @@ describe('OidcCallback Decorator', () => {
       // session is undefined
     } as IClientConfig);
 
-    // Redefine the dummy controller with postLoginRedirectUri option
+    // Re-define the dummy controller with postLoginRedirectUri option
     class NoSessionController extends DummyController {
       @OidcCallback({ postLoginRedirectUri })
       async handleCallback(req: any, res: any) {}
@@ -552,12 +565,11 @@ describe('OidcCallback Decorator', () => {
     await dummyController.handleCallback(mockRequest, mockResponse);
 
     // Assert
-    expect(mockClient.getConfig).toHaveBeenCalledTimes(1);
+    expect(mockClient.getConfig).toHaveBeenCalledTimes(1); // Only decorator's getConfig
     expect(mockClient.handleRedirect).toHaveBeenCalledWith(
       authorizationCode,
       state,
-      null,
-      { request: mockRequest, response: mockResponse },
+      { request: mockRequest, response: mockResponse }, // Updated parameters
     );
     expect(mockClient.getUserInfo).toHaveBeenCalledTimes(1);
     expect(mockRequest.session.user).toBeUndefined(); // user not set since session is disabled

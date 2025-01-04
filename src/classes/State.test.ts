@@ -1,6 +1,6 @@
 /**
  * @fileoverview
- * Test suite for the `State` service class.
+ * Updated test suite for the `State` service class.
  * This suite verifies the correct handling of state-nonce mappings, ensuring
  * thread-safe operations and proper error handling for invalid scenarios.
  *
@@ -9,7 +9,7 @@
 
 import { State } from './State';
 import { ClientError } from '../errors/ClientError';
-import { IState } from '../interfaces';
+import { IState, IStateEntry } from '../interfaces';
 
 describe('State', () => {
   let stateManager: IState;
@@ -23,9 +23,10 @@ describe('State', () => {
     const nonce = 'nonce456';
 
     await stateManager.addState(state, nonce);
-    const retrievedNonce = await stateManager.getNonce(state);
+    const stateEntry = await stateManager.getStateEntry(state);
 
-    expect(retrievedNonce).toBe(nonce);
+    expect(stateEntry).toBeDefined();
+    expect(stateEntry?.nonce).toBe(nonce);
   });
 
   it('should throw ClientError if adding a duplicate state', async () => {
@@ -45,11 +46,13 @@ describe('State', () => {
     );
   });
 
-  it('should throw ClientError if retrieving a nonce for a nonexistent state', async () => {
+  it('should throw ClientError if retrieving a state entry for a nonexistent state', async () => {
     const state = 'nonexistent-state';
 
-    await expect(stateManager.getNonce(state)).rejects.toThrow(ClientError);
-    await expect(stateManager.getNonce(state)).rejects.toThrowError(
+    await expect(stateManager.getStateEntry(state)).rejects.toThrow(
+      ClientError,
+    );
+    await expect(stateManager.getStateEntry(state)).rejects.toThrowError(
       new ClientError(
         `State "${state}" does not match or was not found`,
         'STATE_MISMATCH',
@@ -57,15 +60,17 @@ describe('State', () => {
     );
   });
 
-  it('should throw ClientError if retrieving a nonce for a deleted state', async () => {
+  it('should throw ClientError if retrieving a state entry for a deleted state', async () => {
     const state = 'state123';
     const nonce = 'nonce456';
 
     await stateManager.addState(state, nonce);
-    await stateManager.getNonce(state); // This deletes the state
+    await stateManager.getStateEntry(state); // This deletes the state
 
-    await expect(stateManager.getNonce(state)).rejects.toThrow(ClientError);
-    await expect(stateManager.getNonce(state)).rejects.toThrowError(
+    await expect(stateManager.getStateEntry(state)).rejects.toThrow(
+      ClientError,
+    );
+    await expect(stateManager.getStateEntry(state)).rejects.toThrowError(
       new ClientError(
         `State "${state}" does not match or was not found`,
         'STATE_MISMATCH',
@@ -82,11 +87,13 @@ describe('State', () => {
     await stateManager.addState(state1, nonce1);
     await stateManager.addState(state2, nonce2);
 
-    const retrievedNonce1 = await stateManager.getNonce(state1);
-    const retrievedNonce2 = await stateManager.getNonce(state2);
+    const stateEntry1 = await stateManager.getStateEntry(state1);
+    const stateEntry2 = await stateManager.getStateEntry(state2);
 
-    expect(retrievedNonce1).toBe(nonce1);
-    expect(retrievedNonce2).toBe(nonce2);
+    expect(stateEntry1).toBeDefined();
+    expect(stateEntry1?.nonce).toBe(nonce1);
+    expect(stateEntry2).toBeDefined();
+    expect(stateEntry2?.nonce).toBe(nonce2);
   });
 
   it('should be thread-safe for concurrent operations', async () => {
@@ -100,10 +107,43 @@ describe('State', () => {
 
     await Promise.all([addState1, addState2]);
 
-    const retrievedNonce1 = await stateManager.getNonce(state1);
-    const retrievedNonce2 = await stateManager.getNonce(state2);
+    const [stateEntry1, stateEntry2] = await Promise.all([
+      stateManager.getStateEntry(state1),
+      stateManager.getStateEntry(state2),
+    ]);
 
-    expect(retrievedNonce1).toBe(nonce1);
-    expect(retrievedNonce2).toBe(nonce2);
+    expect(stateEntry1).toBeDefined();
+    expect(stateEntry1?.nonce).toBe(nonce1);
+    expect(stateEntry2).toBeDefined();
+    expect(stateEntry2?.nonce).toBe(nonce2);
+  });
+
+  it('should store and retrieve codeVerifier if provided', async () => {
+    const state = 'stateWithVerifier';
+    const nonce = 'nonceWithVerifier';
+    const codeVerifier = 'codeVerifier123';
+
+    await stateManager.addState(state, nonce, codeVerifier);
+    const stateEntry = await stateManager.getStateEntry(state);
+
+    expect(stateEntry).toBeDefined();
+    expect(stateEntry?.nonce).toBe(nonce);
+    expect(stateEntry?.codeVerifier).toBe(codeVerifier);
+  });
+
+  it('should delete the state entry after retrieval', async () => {
+    const state = 'stateToDelete';
+    const nonce = 'nonceToDelete';
+
+    await stateManager.addState(state, nonce);
+    const stateEntry = await stateManager.getStateEntry(state);
+
+    expect(stateEntry).toBeDefined();
+    expect(stateEntry?.nonce).toBe(nonce);
+
+    // Attempt to retrieve again should throw
+    await expect(stateManager.getStateEntry(state)).rejects.toThrow(
+      ClientError,
+    );
   });
 });

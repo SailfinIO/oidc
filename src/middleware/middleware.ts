@@ -1,14 +1,18 @@
+// src/middleware/middleware.ts
+
 import { Client } from '../classes/Client';
 import { MetadataManager } from '../decorators/MetadataManager';
 import {
   IRequest,
   IResponse,
   IRouteMetadata,
+  ISessionData,
   IStoreContext,
 } from '../interfaces';
-import { RequestMethod, RouteAction } from '../enums';
+import { RequestMethod, RouteAction, SameSite } from '../enums';
 import { ClientError } from '../errors/ClientError';
 import { NextFunction } from '../types';
+import { Cookie, parseCookies } from '../utils';
 
 /**
  * Middleware function compatible with Express.
@@ -17,42 +21,121 @@ import { NextFunction } from '../types';
  * @returns {Function} Express-compatible middleware function.
  */
 export const middleware = (client: Client) => {
-  return async (req?: IRequest, res?: IResponse, next?: NextFunction) => {
-    if (!req || !res) {
-      if (next) next();
-      return;
-    }
-    // Construct route metadata
-    const { method, url } = req;
-    let pathname: string;
+  return async (
+    req: IRequest,
+    res: IResponse,
+    next: NextFunction,
+  ): Promise<void> => {
+    let routeMetadata: IRouteMetadata | null = null; // Declare outside
 
     try {
-      pathname = new URL(url, `http://${req.headers['host']}`).pathname;
-    } catch (error) {
-      console.error('Invalid URL:', url);
-      await next(error);
-      return;
-    }
+      if (!req || !res) {
+        await next();
+        return;
+      }
 
-    const routeMetadata = MetadataManager.getRouteMetadata(
-      method as RequestMethod,
-      pathname,
-    );
+      // Parse cookies from headers
+      req.cookies = parseCookies(req.headers);
+      client.getLogger().debug('Parsed cookies', { cookies: req.cookies });
 
-    if (!routeMetadata) {
-      await next();
-      return;
-    }
+      // Initialize session
+      const sessionStore = client.getSessionStore();
+      const sessionCookieName =
+        client.getConfig().session?.cookie?.name || 'sid';
+      let sid = req.cookies[sessionCookieName] || null;
+      let sessionData: ISessionData | null = null;
 
-    try {
+      if (sid && sessionStore) {
+        sessionData = await sessionStore.get(sid, {
+          request: req,
+          response: res,
+        });
+        if (sessionData) {
+          req.session = sessionData;
+          client.getLogger().debug('Session loaded', { sid, sessionData });
+        } else {
+          client.getLogger().warn('Invalid sid, clearing session', { sid });
+          sid = null;
+        }
+      }
+
+      // Continue with existing middleware logic
+      const { method, url } = req;
+      let pathname: string;
+
+      try {
+        const host = Array.isArray(req.headers['host'])
+          ? req.headers['host'][0]
+          : req.headers['host'] || 'localhost';
+        const baseUrl = `http://${host}`;
+        pathname = new URL(url, baseUrl).pathname;
+      } catch (error) {
+        client.getLogger().error('Invalid URL', { url, error });
+        await next(error);
+        return;
+      }
+
+      routeMetadata = MetadataManager.getRouteMetadata(
+        method as RequestMethod,
+        pathname,
+      );
+
+      if (!routeMetadata) {
+        await next();
+        return;
+      }
+
       const context: IStoreContext = {
         request: req,
         response: res,
         extra: {}, // Populate as needed
         user: undefined,
       };
+
+      client.getLogger().debug('Handling route', { pathname, routeMetadata });
+
       await handleRoute(client, req, res, routeMetadata, next, context);
+
+      // After handling the route, persist the session
+      if (sessionStore) {
+        if (sid) {
+          // Update existing session
+          await sessionStore.touch(sid, req.session, {
+            request: req,
+            response: res,
+          });
+          client.getLogger().debug('Session touched', { sid });
+        } else if (req.session) {
+          // Create new session
+          sid = await sessionStore.set(req.session, {
+            request: req,
+            response: res,
+          });
+          client
+            .getLogger()
+            .debug('New session created', { sid, sessionData: req.session });
+
+          // Set session cookie
+          const options = client.getConfig().session?.cookie?.options || {
+            httpOnly: true,
+            secure: true,
+            sameSite: SameSite.STRICT,
+            path: '/',
+            maxAge: 3600, // 1 hour
+          };
+
+          const cookie = new Cookie(sessionCookieName, sid, options);
+
+          res.headers.append('Set-Cookie', cookie.serialize());
+        }
+      }
+
+      // Only call next() if the response hasn't been sent (e.g., no redirect)
+      if (!res.redirected) {
+        await next();
+      }
     } catch (error) {
+      // Pass the actual routeMetadata to handleError
       await handleError(error, routeMetadata, req, res, next);
     }
   };
@@ -78,7 +161,7 @@ const handleRoute = async (
 ) => {
   switch (metadata.action) {
     case RouteAction.Login:
-      await handleLogin(client, res);
+      await handleLogin(client, req, res);
       break;
     case RouteAction.Callback:
       await handleCallback(client, req, res, metadata, next, context);
@@ -97,8 +180,24 @@ const handleRoute = async (
  * @param {Client} client
  * @param {IResponse} res
  */
-const handleLogin = async (client: Client, res: IResponse) => {
-  const { url: authUrl } = await client.getAuthorizationUrl();
+const handleLogin = async (client: Client, req: IRequest, res: IResponse) => {
+  const {
+    url: authUrl,
+    state,
+    codeVerifier,
+  } = await client.getAuthorizationUrl();
+
+  // Initialize session if it doesn't exist
+  if (!req.session) {
+    req.session = {};
+  }
+  if (!req.session.state) {
+    req.session.state = {};
+  }
+
+  // Store state and codeVerifier in session
+  req.session.state[state] = { codeVerifier, createdAt: Date.now() };
+
   res.redirect(authUrl);
 };
 
@@ -120,18 +219,18 @@ const handleCallback = async (
   next: NextFunction,
   context: IStoreContext,
 ) => {
-  const urlParams = new URL(req.url, `http://${req.headers.get('host')}`)
-    .searchParams;
+  const host = Array.isArray(req.headers['host'])
+    ? req.headers['host'][0]
+    : req.headers['host'] || 'localhost';
+  const baseUrl = `http://${host}`;
+  const urlObj = new URL(req.url, baseUrl);
+  const urlParams = urlObj.searchParams;
 
   const code = urlParams.get('code');
   const state = urlParams.get('state');
   validateCallbackParams(code, state);
 
-  const codeVerifier = client.getConfig().session
-    ? validateSession(req, state)
-    : null;
-
-  await client.handleRedirect(code!, state!, codeVerifier, context);
+  await client.handleRedirect(code, state, context);
 
   const user = await client.getUserInfo();
   if (client.getConfig().session) {
@@ -139,9 +238,6 @@ const handleCallback = async (
     req.session = {
       ...req.session,
       user,
-      // Remove state and codeVerifier if they exist
-      state: undefined,
-      codeVerifier: undefined,
     };
   }
 
@@ -230,34 +326,6 @@ const validateCallbackParams = (code: string | null, state: string | null) => {
       'INVALID_CALLBACK',
     );
   }
-};
-
-/**
- * Validates session data.
- *
- * @param {IRequest} req
- * @param {string} returnedState
- * @returns {string}
- */
-const validateSession = (req: IRequest, returnedState: string): string => {
-  const { session } = req;
-  if (!session || session.state !== returnedState) {
-    throw new ClientError('State mismatch', 'STATE_MISMATCH');
-  }
-
-  const codeVerifier = session.codeVerifier;
-  if (!codeVerifier) {
-    throw new ClientError(
-      'Code verifier missing from session',
-      'CODE_VERIFIER_MISSING',
-    );
-  }
-
-  // Remove state and codeVerifier from session
-  delete req.session!.state;
-  delete req.session!.codeVerifier;
-
-  return codeVerifier;
 };
 
 /**

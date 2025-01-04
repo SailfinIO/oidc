@@ -165,11 +165,12 @@ export class Client {
   public async handleRedirect(
     code: string,
     returnedState: string,
-    codeVerifier: string | null,
     context: IStoreContext,
   ): Promise<void> {
     await this.ensureInitialized();
-    await this.auth.handleRedirect(code, returnedState, codeVerifier);
+
+    // Pass only code and state; Auth class handles codeVerifier internally
+    await this.auth.handleRedirect(code, returnedState);
 
     if (this.session) {
       await this.session.start(context);
@@ -216,6 +217,17 @@ export class Client {
   public async getUserInfo(): Promise<IUser> {
     await this.ensureInitialized();
     return this.userInfoClient.getUserInfo();
+  }
+
+  /**
+   * Exposes the session store.
+   */
+  public getSessionStore(): ISessionStore | null {
+    return this.sessionStore;
+  }
+
+  public getLogger(): ILogger {
+    return this.logger;
   }
 
   public async introspectToken(

@@ -1,3 +1,76 @@
+## [0.0.11-beta.11](https://github.com/SailfinIO/oidc/compare/v0.0.11-beta.10...v0.0.11-beta.11) (2025-01-04)
+
+### Bug Fixes
+
+* code smells ([1a95a0f](https://github.com/SailfinIO/oidc/commit/1a95a0fb3ca8878ddd315f3be2b1cb778f6716a4))
+
+## [0.0.11-beta.10](https://github.com/SailfinIO/oidc/compare/v0.0.11-beta.9...v0.0.11-beta.10) (2025-01-04)
+
+### Bug Fixes
+
+* remove unused state deletion ([c511e0f](https://github.com/SailfinIO/oidc/commit/c511e0fda30974d82ac543700ac50b6389848bea))
+
+## [0.0.11-beta.9](https://github.com/SailfinIO/oidc/compare/v0.0.11-beta.8...v0.0.11-beta.9) (2025-01-04)
+
+### Bug Fixes
+
+* instantiate session before adding user ([d38bbd8](https://github.com/SailfinIO/oidc/commit/d38bbd8cc902053be92c15545e133078c4839eff))
+
+## [0.0.11-beta.8](https://github.com/SailfinIO/oidc/compare/v0.0.11-beta.7...v0.0.11-beta.8) (2025-01-04)
+
+### Bug Fixes
+
+* parse cookie headers ([7c52684](https://github.com/SailfinIO/oidc/commit/7c52684f91d902c5a45326530558a2bc1661f33c))
+
+## [0.0.11-beta.7](https://github.com/SailfinIO/oidc/compare/v0.0.11-beta.6...v0.0.11-beta.7) (2025-01-04)
+
+### Bug Fixes
+
+* move session storage ([8ccd625](https://github.com/SailfinIO/oidc/commit/8ccd625a2bda18701869655d6b510c7426809fa3))
+
+## [0.0.11-beta.6](https://github.com/SailfinIO/oidc/compare/v0.0.11-beta.5...v0.0.11-beta.6) (2025-01-04)
+
+### Bug Fixes
+
+* session state and code storage ([979d1a9](https://github.com/SailfinIO/oidc/commit/979d1a9536fb4b675a4dbdd6f4b561387e1a22e2))
+
+## [0.0.11-beta.5](https://github.com/SailfinIO/oidc/compare/v0.0.11-beta.4...v0.0.11-beta.5) (2025-01-04)
+
+### Bug Fixes
+
+* session state saving ([e29a24f](https://github.com/SailfinIO/oidc/commit/e29a24fbae4f0bbe85cefb96984b1630ff8235f7))
+
+## [0.0.11-beta.4](https://github.com/SailfinIO/oidc/compare/v0.0.11-beta.3...v0.0.11-beta.4) (2025-01-04)
+
+### Bug Fixes
+
+* cookie header parsing ([6e32d1c](https://github.com/SailfinIO/oidc/commit/6e32d1c10a6c9fc3228687afcf3ed760b9ad328a))
+
+## [0.0.11-beta.3](https://github.com/SailfinIO/oidc/compare/v0.0.11-beta.2...v0.0.11-beta.3) (2025-01-04)
+
+### Bug Fixes
+
+* code smells ([9d925a3](https://github.com/SailfinIO/oidc/commit/9d925a3a79699a317beb885a9bf9b7b6c5c0c1d4))
+* cookie parsing needed ([c169215](https://github.com/SailfinIO/oidc/commit/c1692150842c2573f8c304cb5672ac99fb9e947f))
+
+## [0.0.11-beta.2](https://github.com/SailfinIO/oidc/compare/v0.0.11-beta.1...v0.0.11-beta.2) (2025-01-04)
+
+### Bug Fixes
+
+* code smells ([cf5fde7](https://github.com/SailfinIO/oidc/commit/cf5fde73f141213077fa7d39261b2f66d70a8d3d))
+
+## [0.0.11-beta.1](https://github.com/SailfinIO/oidc/compare/v0.0.10...v0.0.11-beta.1) (2025-01-04)
+
+### Bug Fixes
+
+* token authentication methods needed ([6a053d1](https://github.com/SailfinIO/oidc/commit/6a053d10d3fbde9f3ff661347522e37a04a20079))
+
+## [0.0.10-beta.10](https://github.com/SailfinIO/oidc/compare/v0.0.10-beta.9...v0.0.10-beta.10) (2025-01-04)
+
+### Bug Fixes
+
+* token authentication methods needed ([6a053d1](https://github.com/SailfinIO/oidc/commit/6a053d10d3fbde9f3ff661347522e37a04a20079))
+
 ## [0.0.10](https://github.com/SailfinIO/oidc/compare/v0.0.9...v0.0.10) (2025-01-03)
 
 ### Bug Fixes
@@ -15,6 +88,7 @@
 * remove redundant interface ([7fac0a8](https://github.com/SailfinIO/oidc/commit/7fac0a81557e4e698c98f7c9b4eb763730a65370))
 * work on claims ([8fe05d1](https://github.com/SailfinIO/oidc/commit/8fe05d111c70482c070ad635d94b31256347ee87))
 * work on session state ([6f7c95b](https://github.com/SailfinIO/oidc/commit/6f7c95b2a28daeb0ad1586de2a4ef81347672785))
+
 
 ## [0.0.10-beta.9](https://github.com/SailfinIO/oidc/compare/v0.0.10-beta.8...v0.0.10-beta.9) (2025-01-03)
 

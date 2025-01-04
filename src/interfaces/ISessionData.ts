@@ -34,16 +34,15 @@ export interface ISessionData {
   user?: IUser;
 
   /**
-   * Contains the session state for CSRF protection.
-   *
-   * @type {string | undefined}
+   * Stores per-request states mapped to their PKCE codeVerifier or other metadata.
+   * Useful for handling multiple simultaneous login requests (e.g. multi-tab).
    */
-  state?: string;
-
-  /**
-   * Contains the code verifier for PKCE.
-   *
-   * @type {string | undefined}
-   */
-  codeVerifier?: string;
+  state?: Record<
+    string, // The `state` string from the OIDC flow
+    {
+      codeVerifier?: string;
+      createdAt?: number;
+      [key: string]: any; // If you need more fields
+    }
+  >;
 }

@@ -18,6 +18,8 @@ import {
   Scopes,
   Display,
   UILocales,
+  AuthMethod,
+  Algorithm,
 } from '../enums';
 import { ILogger } from './ILogger';
 import { ISessionStore } from './ISessionStore';
@@ -56,9 +58,76 @@ export interface IClientConfig {
   issuer?: string;
 
   /**
+   * The client's authentication method (e.g., 'client_secret_basic').
+   *
+   * @type {AuthMethod | undefined}
+
+   */
+  tokenEndpointAuthMethod?: AuthMethod;
+
+  /**
+   * The PEM-encoded private key, used for private_key_jwt client authentication.
+   * If `tokenEndpointAuthMethod = AuthMethod.PRIVATE_KEY_JWT`, this is required.
+   *
+   * @type {string | Buffer}
+   */
+  privateKeyPem?: string | Buffer;
+
+  /**
+   * The client's certificate for mutual TLS authentication.
+   *
+   * @type {string | undefined}
+   */
+  tlsClientBoundAccessToken?: boolean;
+
+  /**
+   * The algorithm used to sign the request object.
+   *
+   * @type {Algorithm | undefined}
+   */
+  requestObjectSigningAlg?: Algorithm;
+
+  // /**
+  //  * The algorithm used to sign the ID token.
+  //  *
+  //  * @type {string | undefined}
+  //  */
+  // idTokenSignedResponseAlg?: Algorithm;
+
+  // idTokenEncryptedResponseAlg?: Algorithm;
+
+  // idTokenEncryptedResponseEnc?: string;
+
+  // introspectionEndpointAuthMethod?: AuthMethod;
+
+  // introspectionEndpointAuthSigningAlg?: Algorithm;
+
+  // requestObjectEncryptionAlg?: Algorithm;
+
+  // requestObjectEncryptionEnc?: string;
+
+  // revocationEndpointAuthMethod?: AuthMethod;
+
+  // revocationEndpointAuthSigningAlg?: Algorithm;
+
+  // userinfoEndpointAuthMethod?: AuthMethod;
+
+  // userinfoEndpointAuthSigningAlg?: Algorithm;
+
+  // userinfoEncryptedResponseAlg?: Algorithm;
+
+  // userinfoEncryptedResponseEnc?: string;
+
+  // authorizationSignedResponseAlg?: Algorithm;
+
+  // authorizationEncryptedResponseAlg?: Algorithm;
+
+  // authorizationEncryptedResponseEnc?: string;
+
+  /**
    * The URI to which the authorization server will redirect after authentication.
    *
-   * @type {string}
+   * @type {string | undefined}
    */
   redirectUri: string;
 

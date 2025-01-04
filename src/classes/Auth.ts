@@ -70,9 +70,6 @@ export class Auth implements IAuth {
     const state = generateRandomString();
     const nonce = generateRandomString();
 
-    // Store state -> nonce mapping
-    this.state.addState(state, nonce);
-
     // 1) Build up any extra query params to pass
     const additionalParams: Record<string, string> = {};
 
@@ -87,6 +84,8 @@ export class Auth implements IAuth {
       nonce,
       additionalParams,
     );
+
+    this.state.addState(state, nonce, codeVerifier);
 
     return { url, state, codeVerifier };
   }
@@ -258,13 +257,20 @@ export class Auth implements IAuth {
   public async handleRedirect(
     code: string,
     returnedState: string,
-    codeVerifier: string | null,
   ): Promise<void> {
-    const expectedNonce = await this.state.getNonce(returnedState);
-    if (!expectedNonce) {
+    const stateEntry = await this.state.getStateEntry(returnedState);
+    if (!stateEntry) {
       throw new ClientError(
-        'State does not match or not found',
+        'State mismatch or missing codeVerifier',
         'STATE_MISMATCH',
+      );
+    }
+
+    const { nonce, codeVerifier } = stateEntry;
+    if (!codeVerifier) {
+      throw new ClientError(
+        'Missing codeVerifier in state entry',
+        'CODE_VERIFIER_MISSING',
       );
     }
 
@@ -289,7 +295,7 @@ export class Auth implements IAuth {
           logger: this.logger,
           client: client,
           clientId: this.config.clientId,
-          nonce: expectedNonce,
+          nonce: nonce,
         });
         this.logger.info('ID token validated successfully', { payload });
       } else {
@@ -348,8 +354,16 @@ export class Auth implements IAuth {
       );
     }
 
-    const expectedNonce = await this.state.getNonce(state);
-    if (!expectedNonce) {
+    const stateEntry = await this.state.getStateEntry(state);
+    if (!stateEntry) {
+      throw new ClientError(
+        'State mismatch or missing codeVerifier',
+        'STATE_MISMATCH',
+      );
+    }
+
+    const { nonce } = stateEntry;
+    if (!nonce) {
       throw new ClientError(
         'State does not match or not found',
         'STATE_MISMATCH',
@@ -363,8 +377,7 @@ export class Auth implements IAuth {
         logger: this.logger,
         client: client,
         clientId: this.config.clientId,
-        nonce: expectedNonce,
-        // Optionally pass custom jwks, claimsValidator, signatureVerifier here
+        nonce: nonce,
       });
       this.logger.info('ID token validated successfully', { payload });
     } else {

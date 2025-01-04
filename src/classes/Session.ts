@@ -11,8 +11,8 @@ import {
   ISessionData,
   IUser,
 } from '../interfaces';
-import { parse } from '../utils';
 import { ClientError } from '../errors';
+import { parseCookies } from '../utils';
 
 export class Session implements ISession {
   private readonly config: IClientConfig;
@@ -74,12 +74,8 @@ export class Session implements ISession {
    * @returns The session ID or null if not found.
    */
   private getSidFromCookies(context: IStoreContext): string | null {
-    const cookieHeader = context.request.headers.get('cookie');
-    if (cookieHeader && typeof cookieHeader === 'string') {
-      const cookies = parse(cookieHeader);
-      return cookies[this.config.session?.cookie?.name || 'sid'] || null;
-    }
-    return null;
+    const cookies = parseCookies(context.request.headers);
+    return cookies[this.config.session?.cookie?.name || 'sid'] || null;
   }
 
   /**

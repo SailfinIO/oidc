@@ -11,3 +11,4 @@ export * from './sleep';
 export * from './Mutex';
 export * from './parseFragment';
 export * from './Cookie';
+export * from './cookieUtils';

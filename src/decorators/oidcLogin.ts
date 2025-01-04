@@ -9,12 +9,6 @@ import { MetadataManager } from './MetadataManager';
  */
 export interface OidcLoginOptions {
   /**
-   * The URL to redirect to after successful authentication.
-   * Defaults to '/' if not provided.
-   */
-  postLoginRedirectUri?: string;
-
-  /**
    * Optional custom error handler.
    */
   onError?: (error: any, context: IStoreContext) => void;
@@ -46,32 +40,16 @@ const processLoginFlow = async (
   context: IStoreContext,
   options?: OidcLoginOptions,
 ) => {
-  const { request, response } = context;
+  const { response } = context;
 
   try {
-    const { url, state, codeVerifier } = await client.getAuthorizationUrl();
+    const { url } = await client.getAuthorizationUrl();
 
-    // Check if session management is enabled
-    if (client.getConfig().session) {
-      // Initialize session if it's not present
-      if (!request.session) {
-        request.session = {};
-      }
-
-      // Set state and codeVerifier in session
-      request.session.state = state;
-      if (codeVerifier) {
-        request.session.codeVerifier = codeVerifier;
-      }
-    }
-
-    // Redirect the user to the authorization URL
     return response.redirect(url);
   } catch (error) {
     handleLoginError(error, context, options);
   }
 };
-
 /**
  * Decorator to initiate OIDC login flow.
  */
