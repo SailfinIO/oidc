@@ -143,7 +143,7 @@ describe('OIDC Middleware', () => {
 
     // Capture context in handleRedirect
     mockClient.handleRedirect.mockImplementation(
-      async (code, state, verifier, context) => {
+      async (code, state, context) => {
         console.log('Before handleRedirect:', context.user); // Should log undefined
         capturedContext = {
           request: context.request,
@@ -236,7 +236,7 @@ describe('OIDC Middleware', () => {
 
     // Modify the handleRedirect mock to include assertions
     mockClient.handleRedirect.mockImplementation(
-      async (code, state, verifier, context) => {
+      async (code, state, context) => {
         // Assert that context.user is undefined at the time of handleRedirect
         expect(context.user).toBeUndefined();
 
@@ -255,12 +255,11 @@ describe('OIDC Middleware', () => {
     const mw = middleware(mockClient);
     await mw(mockRequest, mockResponse, mockNext);
 
-    // Verify handleRedirect was called correctly (without checking context.user here)
+    // Verify handleRedirect was called correctly with 3 arguments
     expect(mockClient.handleRedirect).toHaveBeenCalledWith(
       '123',
       'abc',
-      'code_verifier_123',
-      expect.any(Object), // We already asserted the context inside the mock
+      expect.any(Object),
     );
 
     // Verify getUserInfo was called
@@ -460,7 +459,7 @@ describe('OIDC Middleware', () => {
     );
     mockClient.getConfig.mockReturnValue(mockConfig);
     mockClient.handleRedirect.mockImplementation(
-      async (code, state, codeVerifier, context) => {
+      async (code, state, context) => {
         if (context.request && context.request.session) {
           context.request.session.state = undefined;
         }
@@ -474,12 +473,7 @@ describe('OIDC Middleware', () => {
     expect(mockClient.handleRedirect).toHaveBeenCalledWith(
       '123',
       'abc',
-      'code_verifier_123',
-      expect.objectContaining({
-        request: mockRequest,
-        response: mockResponse,
-        user: expect.any(Object),
-      }),
+      expect.any(Object),
     );
     expect(mockClient.getUserInfo).toHaveBeenCalled();
     expect(mockRequest.session?.user).toEqual({ sub: 'user1' });
@@ -510,14 +504,25 @@ describe('OIDC Middleware', () => {
       routeMetadata,
     );
 
+    // Make handleRedirect throw an error due to missing session data
+    mockClient.handleRedirect.mockImplementation(
+      async (code, state, context) => {
+        throw new ClientError('Missing session data', 'MISSING_SESSION');
+      },
+    );
+
     const mw = middleware(mockClient);
     await mw(mockRequest, mockResponse, mockNext);
 
-    expect(mockClient.handleRedirect).not.toHaveBeenCalled();
+    expect(mockClient.handleRedirect).toHaveBeenCalledWith(
+      '123',
+      'abc',
+      expect.any(Object),
+    );
     expect(mockClient.getUserInfo).not.toHaveBeenCalled();
     expect(mockResponse.status).toHaveBeenCalledWith(500);
     expect(mockResponse.send).toHaveBeenCalledWith('Authentication failed');
-    expect(mockNext).toHaveBeenCalledWith(expect.any(Error));
+    expect(mockNext).toHaveBeenCalledWith(expect.any(ClientError));
   });
 
   it('should throw ClientError if state does not match', async () => {
@@ -552,14 +557,28 @@ describe('OIDC Middleware', () => {
       routeMetadata,
     );
 
+    // Make handleRedirect throw an error due to state mismatch
+    mockClient.handleRedirect.mockImplementation(
+      async (code, state, context) => {
+        const sessionState = context.request.session.state;
+        if (!sessionState || !sessionState[state]) {
+          throw new ClientError('State mismatch', 'STATE_MISMATCH');
+        }
+      },
+    );
+
     const mw = middleware(mockClient);
     await mw(mockRequest, mockResponse, mockNext);
 
-    expect(mockClient.handleRedirect).not.toHaveBeenCalled();
+    expect(mockClient.handleRedirect).toHaveBeenCalledWith(
+      '123',
+      'abc',
+      expect.any(Object),
+    );
     expect(mockClient.getUserInfo).not.toHaveBeenCalled();
     expect(mockResponse.status).toHaveBeenCalledWith(500);
     expect(mockResponse.send).toHaveBeenCalledWith('Authentication failed');
-    expect(mockNext).toHaveBeenCalledWith(expect.any(Error));
+    expect(mockNext).toHaveBeenCalledWith(expect.any(ClientError));
   });
 
   it('should throw ClientError if codeVerifier is missing', async () => {
@@ -567,6 +586,7 @@ describe('OIDC Middleware', () => {
     const initialSession: ISessionData = {
       state: {
         abc: {
+          // codeVerifier is missing
           createdAt: Date.now(),
         },
       },
@@ -594,13 +614,34 @@ describe('OIDC Middleware', () => {
       routeMetadata,
     );
 
+    // Make handleRedirect throw an error due to missing codeVerifier
+    mockClient.handleRedirect.mockImplementation(
+      async (code, state, context) => {
+        const sessionState = context.request.session.state;
+        if (
+          !sessionState ||
+          !sessionState[state] ||
+          !sessionState[state].codeVerifier
+        ) {
+          throw new ClientError(
+            'Missing codeVerifier',
+            'MISSING_CODE_VERIFIER',
+          );
+        }
+      },
+    );
+
     const mw = middleware(mockClient);
     await mw(mockRequest, mockResponse, mockNext);
 
-    expect(mockClient.handleRedirect).not.toHaveBeenCalled();
+    expect(mockClient.handleRedirect).toHaveBeenCalledWith(
+      '123',
+      'abc',
+      expect.any(Object),
+    );
     expect(mockClient.getUserInfo).not.toHaveBeenCalled();
     expect(mockResponse.status).toHaveBeenCalledWith(500);
     expect(mockResponse.send).toHaveBeenCalledWith('Authentication failed');
-    expect(mockNext).toHaveBeenCalledWith(expect.any(Error));
+    expect(mockNext).toHaveBeenCalledWith(expect.any(ClientError));
   });
 });

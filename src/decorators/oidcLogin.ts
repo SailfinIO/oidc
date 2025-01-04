@@ -40,21 +40,10 @@ const processLoginFlow = async (
   context: IStoreContext,
   options?: OidcLoginOptions,
 ) => {
-  const { request, response } = context;
+  const { response } = context;
 
   try {
-    const { url, state, codeVerifier } = await client.getAuthorizationUrl();
-
-    if (client.getConfig().session) {
-      // Ensure session
-      request.session ??= {};
-
-      request.session.state ??= {};
-      request.session.state[state] = {
-        codeVerifier,
-        createdAt: Date.now(),
-      };
-    }
+    const { url } = await client.getAuthorizationUrl();
 
     return response.redirect(url);
   } catch (error) {

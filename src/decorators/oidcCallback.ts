@@ -1,6 +1,5 @@
 // src/decorators/oidcCallback.ts
 
-import { ClientError } from '../errors';
 import { Client } from '../classes/Client';
 import { IStoreContext } from '../interfaces';
 import { MetadataManager } from './MetadataManager';
@@ -82,27 +81,22 @@ const processSessionFlow = async (
 ) => {
   const { request, response } = context;
 
-  const statesStore = request.session?.state || {};
-  const stored = statesStore[state];
-  if (!stored?.codeVerifier) {
-    return handleAuthError(
-      new ClientError(
-        'State mismatch or missing codeVerifier',
-        'STATE_MISMATCH',
-      ),
-      context,
-      options,
-    );
-  }
-
-  // Extract codeVerifier
-  const { codeVerifier } = stored;
-  delete statesStore[state]; // Cleanup
-
   try {
-    await client.handleRedirect(code, state, codeVerifier, context);
+    // Exchange code for tokens and validate ID token
+    await client.handleRedirect(code, state, context);
+
+    // Retrieve user information
     const user = await client.getUserInfo();
-    request.session.user = user;
+
+    if (client.getConfig().session) {
+      // Attach user to session
+      request.session.user = user;
+
+      // Cleanup state from session
+      delete request.session.state[state];
+    }
+
+    // Redirect to the specified URI after successful login
     response.redirect(options?.postLoginRedirectUri ?? '/');
   } catch (error) {
     handleAuthError(error, context, options);
@@ -122,7 +116,7 @@ const processStatelessFlow = async (
   const { response } = context;
 
   try {
-    await client.handleRedirect(code, state, null, context);
+    await client.handleRedirect(code, state, context);
     await client.getUserInfo();
     response.redirect(options?.postLoginRedirectUri || '/');
   } catch (error) {
@@ -176,7 +170,7 @@ export const OidcCallback = (
       // Retrieve the injected OIDC client from 'this' (the controller instance).
       const client: Client = this.client;
 
-      // Build the store context for your dryness helpers:
+      // Build the store context for your helpers:
       const context: IStoreContext = { request: req, response: res };
 
       // 1) Validate the callback params (code & state).
@@ -197,7 +191,7 @@ export const OidcCallback = (
           await processStatelessFlow(client, context, code, state, options);
         }
       } catch (error) {
-        // If an error escaped the dryness flows, handle it here:
+        // If an error escaped the flows, handle it here:
         handleAuthError(error, context, options);
       }
 

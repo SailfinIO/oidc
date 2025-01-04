@@ -165,11 +165,12 @@ export class Client {
   public async handleRedirect(
     code: string,
     returnedState: string,
-    codeVerifier: string | null,
     context: IStoreContext,
   ): Promise<void> {
     await this.ensureInitialized();
-    await this.auth.handleRedirect(code, returnedState, codeVerifier);
+
+    // Pass only code and state; Auth class handles codeVerifier internally
+    await this.auth.handleRedirect(code, returnedState);
 
     if (this.session) {
       await this.session.start(context);

@@ -5,7 +5,12 @@
  *
  * @module src/interfaces/IState
  */
-
+export interface IStateEntry {
+  nonce: string;
+  codeVerifier?: string;
+  createdAt?: number;
+  [key: string]: any;
+}
 /**
  * Interface for managing state-nonce pairs in OAuth2/OIDC flows.
  *
@@ -31,23 +36,9 @@ export interface IState {
    * await stateManager.addState('state123', 'nonce456');
    * ```
    */
-  addState(state: string, nonce: string): Promise<void>;
+  addState(state: string, nonce: string, codeVerifier?: string): Promise<void>;
 
-  /**
-   * Retrieves and deletes the nonce associated with a state.
-   *
-   * This method looks up the nonce associated with a given state and removes
-   * the state from storage. It ensures that the state is valid and has not been
-   * previously retrieved.
-   *
-   * @param {string} state - The state string to look up.
-   * @throws {Error} If the state is not found or does not match.
-   * @returns {Promise<string>} Resolves with the associated nonce.
-   *
-   * @example
-   * ```typescript
-   * const nonce = await stateManager.getNonce('state123'); // 'nonce456'
-   * ```
-   */
-  getNonce(state: string): Promise<string>;
+  getStateEntry(state: string): Promise<IStateEntry | undefined>;
+
+  removeState(state: string): Promise<void>;
 }

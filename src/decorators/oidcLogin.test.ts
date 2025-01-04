@@ -41,7 +41,7 @@ describe('OidcLogin Decorator', () => {
 
     // Initialize mock request and response
     mockRequest = {
-      session: {},
+      // session is no longer manipulated by the decorator
     };
 
     mockResponse = {
@@ -94,16 +94,14 @@ describe('OidcLogin Decorator', () => {
     return new DynamicMockController(mockClient);
   };
 
-  it('should redirect to the authorization URL and set session state and codeVerifier when session is enabled', async () => {
+  it('should redirect to the authorization URL when session is enabled', async () => {
     // Arrange
     const authorizationUrl = 'https://auth.example.com/authorize';
-    const state = 'randomState123';
-    const codeVerifier = 'randomCodeVerifier123';
 
     mockClient.getAuthorizationUrl.mockResolvedValue({
       url: authorizationUrl,
-      state,
-      codeVerifier,
+      state: 'randomState123', // Even though decorator doesn't handle it, client returns it
+      codeVerifier: 'randomCodeVerifier123',
     });
 
     const controller = createController();
@@ -113,23 +111,17 @@ describe('OidcLogin Decorator', () => {
 
     // Assert
     expect(mockClient.getAuthorizationUrl).toHaveBeenCalledTimes(1);
-    expect(mockRequest.session).toBeDefined();
-    expect(mockRequest.session.state).toHaveProperty(state);
-    expect(mockRequest.session.state[state].codeVerifier).toBe(codeVerifier);
-    expect(typeof mockRequest.session.state[state].createdAt).toBe('number');
     expect(mockResponse.redirect).toHaveBeenCalledWith(authorizationUrl);
   });
 
-  it('should redirect to the authorization URL and set only session state when codeVerifier is null', async () => {
+  it('should redirect to the authorization URL when codeVerifier is null', async () => {
     // Arrange
     const authorizationUrl = 'https://auth.example.com/authorize';
-    const state = 'randomState123';
-    const codeVerifier = null; // Explicitly set to null
 
     mockClient.getAuthorizationUrl.mockResolvedValue({
       url: authorizationUrl,
-      state,
-      codeVerifier,
+      state: 'randomState123',
+      codeVerifier: null, // Explicitly set to null
     });
 
     const controller = createController();
@@ -139,24 +131,18 @@ describe('OidcLogin Decorator', () => {
 
     // Assert
     expect(mockClient.getAuthorizationUrl).toHaveBeenCalledTimes(1);
-    expect(mockRequest.session).toBeDefined();
-    expect(mockRequest.session.state).toHaveProperty(state);
-    expect(mockRequest.session.state[state].codeVerifier).toBeNull();
-    expect(typeof mockRequest.session.state[state].createdAt).toBe('number');
     expect(mockResponse.redirect).toHaveBeenCalledWith(authorizationUrl);
   });
 
-  it('should initialize session if it is not already present', async () => {
+  it('should handle the case when session is not present gracefully', async () => {
     // Arrange
-    delete mockRequest.session; // Remove existing session
+    // Since the decorator no longer manipulates session, we don't need to initialize it
     const authorizationUrl = 'https://auth.example.com/authorize';
-    const state = 'randomState123';
-    const codeVerifier = 'randomCodeVerifier123';
 
     mockClient.getAuthorizationUrl.mockResolvedValue({
       url: authorizationUrl,
-      state,
-      codeVerifier,
+      state: 'randomState123',
+      codeVerifier: 'randomCodeVerifier123',
     });
 
     const controller = createController();
@@ -166,10 +152,6 @@ describe('OidcLogin Decorator', () => {
 
     // Assert
     expect(mockClient.getAuthorizationUrl).toHaveBeenCalledTimes(1);
-    expect(mockRequest.session).toBeDefined();
-    expect(mockRequest.session.state).toHaveProperty(state);
-    expect(mockRequest.session.state[state].codeVerifier).toBe(codeVerifier);
-    expect(typeof mockRequest.session.state[state].createdAt).toBe('number');
     expect(mockResponse.redirect).toHaveBeenCalledWith(authorizationUrl);
   });
 
@@ -186,13 +168,11 @@ describe('OidcLogin Decorator', () => {
     mockRequest.session = undefined;
 
     const authorizationUrl = 'https://auth.example.com/authorize';
-    const state = 'randomState123';
-    const codeVerifier = 'randomCodeVerifier123';
 
     mockClient.getAuthorizationUrl.mockResolvedValue({
       url: authorizationUrl,
-      state,
-      codeVerifier,
+      state: 'randomState123',
+      codeVerifier: 'randomCodeVerifier123',
     });
 
     // Act
@@ -200,7 +180,7 @@ describe('OidcLogin Decorator', () => {
 
     // Assert
     expect(mockClient.getAuthorizationUrl).toHaveBeenCalledTimes(1);
-    expect(mockRequest.session).toBeUndefined(); // Adjusted expectation
+    expect(mockRequest.session).toBeUndefined(); // No session to modify
     expect(mockResponse.redirect).toHaveBeenCalledWith(authorizationUrl);
   });
 
@@ -246,13 +226,11 @@ describe('OidcLogin Decorator', () => {
   it('should not set codeVerifier in session if it is not provided (set to null)', async () => {
     // Arrange
     const authorizationUrl = 'https://auth.example.com/authorize';
-    const state = 'randomState123';
-    const codeVerifier = null; // Explicitly set to null
 
     mockClient.getAuthorizationUrl.mockResolvedValue({
       url: authorizationUrl,
-      state,
-      codeVerifier,
+      state: 'randomState123',
+      codeVerifier: null, // Explicitly set to null
     });
 
     const controller = createController();
@@ -262,12 +240,10 @@ describe('OidcLogin Decorator', () => {
 
     // Assert
     expect(mockClient.getAuthorizationUrl).toHaveBeenCalledTimes(1);
-    expect(mockRequest.session).toBeDefined();
-    expect(mockRequest.session.state).toHaveProperty(state);
-    expect(mockRequest.session.state[state].codeVerifier).toBeNull(); // Adjusted expectation
-    expect(typeof mockRequest.session.state[state].createdAt).toBe('number');
+    // Since decorator doesn't set session, we don't assert on session.state
     expect(mockResponse.redirect).toHaveBeenCalledWith(authorizationUrl);
   });
+
   it('should attach metadata indicating this method is an OIDC login handler', () => {
     // Arrange
     const controller = createController();

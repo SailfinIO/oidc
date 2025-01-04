@@ -113,11 +113,7 @@ export interface IAuth {
    * await authClient.handleRedirect(code, returnedState);
    * ```
    */
-  handleRedirect(
-    code: string,
-    returnedState: string,
-    codeVerifier: string | null,
-  ): Promise<void>;
+  handleRedirect(code: string, returnedState: string): Promise<void>;
 
   /**
    * Handles the redirect callback for implicit flow.

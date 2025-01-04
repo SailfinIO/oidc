@@ -9,7 +9,7 @@
 
 import { Mutex } from '../utils';
 import { ClientError } from '../errors/ClientError';
-import { IState } from '../interfaces';
+import { IState, IStateEntry } from '../interfaces';
 
 /**
  * Service for managing OAuth2/OIDC state-nonce mappings.
@@ -27,7 +27,7 @@ import { IState } from '../interfaces';
  * ```
  */
 export class State implements IState {
-  private readonly stateMap: Map<string, string> = new Map();
+  private readonly stateMap: Map<string, IStateEntry> = new Map();
   private readonly stateMapLock = new Mutex();
 
   /**
@@ -38,7 +38,11 @@ export class State implements IState {
    * @throws {ClientError} If the state already exists.
    * @returns {Promise<void>} Resolves when the state-nonce pair has been added.
    */
-  async addState(state: string, nonce: string): Promise<void> {
+  async addState(
+    state: string,
+    nonce: string,
+    codeVerifier?: string,
+  ): Promise<void> {
     await this.stateMapLock.runExclusive(() => {
       if (this.stateMap.has(state)) {
         throw new ClientError(
@@ -46,7 +50,7 @@ export class State implements IState {
           'STATE_ALREADY_EXISTS',
         );
       }
-      this.stateMap.set(state, nonce);
+      this.stateMap.set(state, { nonce, codeVerifier, createdAt: Date.now() });
     });
   }
 
@@ -57,7 +61,7 @@ export class State implements IState {
    * @throws {ClientError} If the state is not found or does not match.
    * @returns {Promise<string>} Resolves with the associated nonce.
    */
-  async getNonce(state: string): Promise<string> {
+  async getStateEntry(state: string): Promise<IStateEntry | undefined> {
     return this.stateMapLock.runExclusive(() => {
       const nonce = this.stateMap.get(state);
       if (!nonce) {
@@ -68,6 +72,18 @@ export class State implements IState {
       }
       this.stateMap.delete(state);
       return nonce;
+    });
+  }
+
+  /**
+   * Removes a state-nonce pair from the manager.
+   *
+   * @param {string} state - The state string to remove.
+   * @returns {Promise<void>} Resolves when the state has been removed.
+   */
+  async removeState(state: string): Promise<void> {
+    return this.stateMapLock.runExclusive(() => {
+      this.stateMap.delete(state);
     });
   }
 }

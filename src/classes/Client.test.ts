@@ -347,12 +347,11 @@ describe('Client', () => {
 
   it('should handle redirect with valid code and state', async () => {
     await expect(
-      client.handleRedirect('auth-code', 'state', 'verifier', mockContext),
+      client.handleRedirect('auth-code', 'state', mockContext),
     ).resolves.toBeUndefined();
     expect(mockAuthInstance.handleRedirect).toHaveBeenCalledWith(
       'auth-code',
       'state',
-      'verifier',
     );
 
     // Now that session logic is handled by Session, we simply ensure it was called:
@@ -537,12 +536,11 @@ describe('Client', () => {
     client = new Client(configWithoutSilentRenew);
 
     await expect(
-      client.handleRedirect('auth-code', 'state', 'verifier', mockContext),
+      client.handleRedirect('auth-code', 'state', mockContext),
     ).resolves.toBeUndefined();
     expect(mockAuthInstance.handleRedirect).toHaveBeenCalledWith(
       'auth-code',
       'state',
-      'verifier',
     );
     expect(mockSessionInstance.start).toHaveBeenCalledWith(mockContext);
   });

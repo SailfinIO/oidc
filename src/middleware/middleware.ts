@@ -231,11 +231,7 @@ const handleCallback = async (
   const state = urlParams.get('state');
   validateCallbackParams(code, state);
 
-  const codeVerifier = client.getConfig().session
-    ? validateSession(req, state)
-    : null;
-
-  await client.handleRedirect(code!, state!, codeVerifier, context);
+  await client.handleRedirect(code!, state!, context);
 
   const user = await client.getUserInfo();
   if (client.getConfig().session) {
@@ -331,37 +327,6 @@ const validateCallbackParams = (code: string | null, state: string | null) => {
       'INVALID_CALLBACK',
     );
   }
-};
-
-/**
- * Validates session data.
- *
- * @param {IRequest} req
- * @param {string} returnedState
- * @returns {string}
- */
-const validateSession = (req: IRequest, returnedState: string): string => {
-  const { session } = req;
-  if (!session?.state?.[returnedState]) {
-    throw new ClientError(
-      'State mismatch or state not found in session',
-      'STATE_MISMATCH',
-    );
-  }
-
-  const stateEntry = session.state[returnedState];
-  const codeVerifier = stateEntry.codeVerifier;
-  if (!codeVerifier) {
-    throw new ClientError(
-      'Code verifier missing from session state',
-      'CODE_VERIFIER_MISSING',
-    );
-  }
-
-  // Remove the specific state entry from the session
-  delete session.state[returnedState];
-
-  return codeVerifier;
 };
 
 /**
