@@ -18,6 +18,7 @@ import {
   RequestMethod,
 } from '../enums';
 import { Jwt } from './Jwt';
+import { randomBytes } from 'crypto';
 
 export class Token implements IToken {
   private readonly logger: ILogger;
@@ -719,8 +720,7 @@ export class Token implements IToken {
     return jwt;
   }
 
-  // (Optional) Helper to generate a jti:
   private generateRandomJti(): string {
-    return Math.random().toString(36).slice(2) + Date.now();
+    return randomBytes(16).toString('hex');
   }
 }
