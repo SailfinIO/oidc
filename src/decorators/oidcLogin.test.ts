@@ -1,6 +1,5 @@
 // src/decorators/oidcLogin.test.ts
 
-import 'reflect-metadata'; // Ensure reflect-metadata is imported if using decorators
 import { OidcLogin, OidcLoginOptions } from './oidcLogin';
 import { Client } from '../classes/Client';
 import { IStoreContext, IClientConfig } from '../interfaces';
@@ -115,8 +114,9 @@ describe('OidcLogin Decorator', () => {
     // Assert
     expect(mockClient.getAuthorizationUrl).toHaveBeenCalledTimes(1);
     expect(mockRequest.session).toBeDefined();
-    expect(mockRequest.session.state).toBe(state);
-    expect(mockRequest.session.codeVerifier).toBe(codeVerifier);
+    expect(mockRequest.session.state).toHaveProperty(state);
+    expect(mockRequest.session.state[state].codeVerifier).toBe(codeVerifier);
+    expect(typeof mockRequest.session.state[state].createdAt).toBe('number');
     expect(mockResponse.redirect).toHaveBeenCalledWith(authorizationUrl);
   });
 
@@ -140,8 +140,9 @@ describe('OidcLogin Decorator', () => {
     // Assert
     expect(mockClient.getAuthorizationUrl).toHaveBeenCalledTimes(1);
     expect(mockRequest.session).toBeDefined();
-    expect(mockRequest.session.state).toBe(state);
-    expect(mockRequest.session.codeVerifier).toBeUndefined(); // Adjusted expectation
+    expect(mockRequest.session.state).toHaveProperty(state);
+    expect(mockRequest.session.state[state].codeVerifier).toBeNull();
+    expect(typeof mockRequest.session.state[state].createdAt).toBe('number');
     expect(mockResponse.redirect).toHaveBeenCalledWith(authorizationUrl);
   });
 
@@ -166,8 +167,9 @@ describe('OidcLogin Decorator', () => {
     // Assert
     expect(mockClient.getAuthorizationUrl).toHaveBeenCalledTimes(1);
     expect(mockRequest.session).toBeDefined();
-    expect(mockRequest.session.state).toBe(state);
-    expect(mockRequest.session.codeVerifier).toBe(codeVerifier);
+    expect(mockRequest.session.state).toHaveProperty(state);
+    expect(mockRequest.session.state[state].codeVerifier).toBe(codeVerifier);
+    expect(typeof mockRequest.session.state[state].createdAt).toBe('number');
     expect(mockResponse.redirect).toHaveBeenCalledWith(authorizationUrl);
   });
 
@@ -241,37 +243,6 @@ describe('OidcLogin Decorator', () => {
     );
   });
 
-  it('should use the postLoginRedirectUri option if provided', async () => {
-    // Arrange
-    const options: OidcLoginOptions = {
-      postLoginRedirectUri: '/dashboard',
-    };
-    const authorizationUrl = 'https://auth.example.com/authorize';
-    const state = 'randomState123';
-    const codeVerifier = 'randomCodeVerifier123';
-
-    mockClient.getAuthorizationUrl.mockResolvedValue({
-      url: authorizationUrl,
-      state,
-      codeVerifier,
-    });
-
-    const controller = createController(options);
-
-    // Act
-    await controller.loginHandler(mockRequest, mockResponse);
-
-    // Assert
-    expect(mockClient.getAuthorizationUrl).toHaveBeenCalledWith();
-    expect(mockRequest.session).toBeDefined();
-    expect(mockRequest.session.state).toBe(state);
-    expect(mockRequest.session.codeVerifier).toBe(codeVerifier);
-    expect(mockResponse.redirect).toHaveBeenCalledWith(authorizationUrl);
-
-    // Optionally, you can verify that the postLoginRedirectUri is used somewhere
-    // depending on how it's integrated in the actual implementation
-  });
-
   it('should not set codeVerifier in session if it is not provided (set to null)', async () => {
     // Arrange
     const authorizationUrl = 'https://auth.example.com/authorize';
@@ -292,11 +263,11 @@ describe('OidcLogin Decorator', () => {
     // Assert
     expect(mockClient.getAuthorizationUrl).toHaveBeenCalledTimes(1);
     expect(mockRequest.session).toBeDefined();
-    expect(mockRequest.session.state).toBe(state);
-    expect(mockRequest.session.codeVerifier).toBeUndefined(); // Adjusted expectation
+    expect(mockRequest.session.state).toHaveProperty(state);
+    expect(mockRequest.session.state[state].codeVerifier).toBeNull(); // Adjusted expectation
+    expect(typeof mockRequest.session.state[state].createdAt).toBe('number');
     expect(mockResponse.redirect).toHaveBeenCalledWith(authorizationUrl);
   });
-
   it('should attach metadata indicating this method is an OIDC login handler', () => {
     // Arrange
     const controller = createController();

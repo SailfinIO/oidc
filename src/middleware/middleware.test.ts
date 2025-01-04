@@ -123,17 +123,24 @@ describe('OIDC Middleware', () => {
     // Capture context in handleRedirect
     mockClient.handleRedirect.mockImplementation(
       async (code, state, verifier, context) => {
-        capturedContext = { ...context }; // Capture unmodified context
-        // Simulate internal logic of handleRedirect
-        context.request.session.state = undefined;
-        context.request.session.codeVerifier = undefined;
-        context.user = { sub: 'user1' }; // Simulated user retrieval
+        console.log('Before handleRedirect:', context.user); // Should log undefined
+        capturedContext = {
+          request: context.request,
+          response: context.response,
+          extra: { ...context.extra },
+          user: context.user,
+        };
+        if (context.request.session && context.request.session.state) {
+          delete context.request.session.state[state];
+        }
+        console.log('After handleRedirect:', context.user); // Should still log undefined
       },
     );
   });
 
   afterEach(() => {
     capturedContext = null;
+    jest.resetAllMocks();
   });
 
   it('should call next if no request or response', async () => {
@@ -182,8 +189,14 @@ describe('OIDC Middleware', () => {
     );
 
     const initialSession: ISessionData = {
-      state: 'abc',
-      codeVerifier: 'code_verifier_123',
+      state: {
+        abc: {
+          codeVerifier: 'code_verifier_123',
+          createdAt: Date.now(),
+        },
+      },
+      user: undefined,
+      cookie: undefined,
     };
 
     mockRequest = createMockRequest(
@@ -202,6 +215,8 @@ describe('OIDC Middleware', () => {
 
     const mw = middleware(mockClient);
     await mw(mockRequest, mockResponse, mockNext);
+
+    // Verify handleRedirect was called correctly
     expect(mockClient.handleRedirect).toHaveBeenCalledWith(
       '123',
       'abc',
@@ -210,15 +225,23 @@ describe('OIDC Middleware', () => {
         request: expect.any(Object),
         response: expect.any(Object),
         extra: {},
-        user: expect.any(Object), // Before user is set
+        user: expect.any(Object), // This should now correctly pass
       }),
     );
 
+    // Verify getUserInfo was called
     expect(mockClient.getUserInfo).toHaveBeenCalled();
+
+    // Verify session was updated with user info
     expect(mockRequest.session?.user).toEqual({ sub: 'user1' });
-    expect(mockRequest.session?.state).toBeUndefined();
-    expect(mockRequest.session?.codeVerifier).toBeUndefined();
+
+    // Verify state was removed from session
+    expect(mockRequest.session?.state).toEqual({});
+
+    // Verify redirection after successful callback handling
     expect(mockResponse.redirect).toHaveBeenCalledWith('/dashboard');
+
+    // Ensure next was not called
     expect(mockNext).not.toHaveBeenCalled();
 
     // Optionally, verify capturedContext if needed
@@ -226,7 +249,7 @@ describe('OIDC Middleware', () => {
       request: expect.any(Object),
       response: expect.any(Object),
       extra: {},
-      user: undefined,
+      user: undefined, // Should still be undefined before getUserInfo
     });
   });
 
@@ -382,10 +405,15 @@ describe('OIDC Middleware', () => {
   it('should validate session successfully when session exists and matches state', async () => {
     // Setup the request with the correct URL containing code and state
     const initialSession: ISessionData = {
-      state: 'abc',
-      codeVerifier: 'code_verifier_123',
+      state: {
+        abc: {
+          codeVerifier: 'code_verifier_123',
+          createdAt: Date.now(),
+        },
+      },
+      user: undefined,
+      cookie: undefined,
     };
-
     mockRequest = createMockRequest(
       'http://localhost/callback?code=123&state=abc',
       {
@@ -409,7 +437,6 @@ describe('OIDC Middleware', () => {
       async (code, state, codeVerifier, context) => {
         if (context.request && context.request.session) {
           context.request.session.state = undefined;
-          context.request.session.codeVerifier = undefined;
         }
       },
     );
@@ -431,7 +458,6 @@ describe('OIDC Middleware', () => {
     expect(mockClient.getUserInfo).toHaveBeenCalled();
     expect(mockRequest.session?.user).toEqual({ sub: 'user1' });
     expect(mockRequest.session?.state).toBeUndefined();
-    expect(mockRequest.session?.codeVerifier).toBeUndefined();
     expect(mockResponse.redirect).toHaveBeenCalledWith('/dashboard');
     expect(mockNext).not.toHaveBeenCalled();
   });
@@ -471,10 +497,15 @@ describe('OIDC Middleware', () => {
   it('should throw ClientError if state does not match', async () => {
     // Setup the request with mismatched state
     const initialSession: ISessionData = {
-      state: 'wrong_state',
-      codeVerifier: 'code_verifier_123',
+      state: {
+        wrong_state: {
+          codeVerifier: 'code_verifier_123',
+          createdAt: Date.now(),
+        },
+      },
+      user: undefined,
+      cookie: undefined,
     };
-
     mockRequest = createMockRequest(
       'http://localhost/callback?code=123&state=abc',
       {
@@ -508,8 +539,13 @@ describe('OIDC Middleware', () => {
   it('should throw ClientError if codeVerifier is missing', async () => {
     // Setup the request without codeVerifier
     const initialSession: ISessionData = {
-      state: 'abc',
-      // codeVerifier is missing
+      state: {
+        abc: {
+          createdAt: Date.now(),
+        },
+      },
+      user: undefined,
+      cookie: undefined,
     };
 
     mockRequest = createMockRequest(

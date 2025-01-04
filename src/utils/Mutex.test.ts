@@ -171,6 +171,31 @@ describe('Mutex', () => {
       expect(mutex.locked).toBe(false);
     });
 
+    it('should clear timeout when an error is thrown in tryAcquire with a defined timeout', async () => {
+      // 1) Acquire once so that the mutex is locked
+      //    This ensures the next acquire() goes into the "enqueue" path.
+      const unlockFirst = await mutex.acquire();
+
+      // 2) Mock logger.info (which is called inside enqueue()) to throw.
+      //    This will force an error in the same call stack that sets timerId.
+      (logger.info as jest.Mock).mockImplementationOnce(() => {
+        throw new Error('Simulated error during enqueue');
+      });
+
+      // 3) Call acquire with a timeout to set timerId
+      const acquirePromise = mutex.acquire(500);
+
+      // 4) Because `logger.info` threw inside `enqueue`,
+      //    the Promise should reject with a MutexError (handleAcquireError).
+      await expect(acquirePromise).rejects.toThrow(MutexError);
+
+      // 5) Verify clearTimeout was invoked
+      expect(timer.clearTimeout).toHaveBeenCalledTimes(1);
+
+      // 6) Finally unlock the first one
+      unlockFirst();
+    });
+
     it('should handle errors during acquire and reject appropriately', async () => {
       // To simulate an error during acquire, we'll mock the logger.debug to throw an error
       const originalDebug = logger.debug;

@@ -1,5 +1,6 @@
 // src/decorators/oidcCallback.ts
 
+import { ClientError } from '../errors';
 import { Client } from '../classes/Client';
 import { IStoreContext } from '../interfaces';
 import { MetadataManager } from './MetadataManager';
@@ -80,30 +81,29 @@ const processSessionFlow = async (
   options?: OidcCallbackOptions,
 ) => {
   const { request, response } = context;
-  const storedState = request.session?.state;
 
-  if (state !== storedState) {
-    response.status(400).send('State mismatch');
-    return;
+  const statesStore = request.session?.state || {};
+  const stored = statesStore[state];
+  if (!stored || !stored.codeVerifier) {
+    return handleAuthError(
+      new ClientError(
+        'State mismatch or missing codeVerifier',
+        'STATE_MISMATCH',
+      ),
+      context,
+      options,
+    );
   }
 
-  const codeVerifier = request.session?.codeVerifier;
-  if (!codeVerifier) {
-    response.status(400).send('Code verifier missing from session');
-    return;
-  }
-
-  delete request.session.state;
-  delete request.session.codeVerifier;
-
-  const storeContext = { request, response };
+  // Extract codeVerifier
+  const { codeVerifier } = stored;
+  delete statesStore[state]; // Cleanup
 
   try {
-    await client.handleRedirect(code, state, codeVerifier, storeContext);
+    await client.handleRedirect(code, state, codeVerifier, context);
     const user = await client.getUserInfo();
-
     request.session.user = user;
-    response.redirect(options?.postLoginRedirectUri || '/');
+    response.redirect(options?.postLoginRedirectUri ?? '/');
   } catch (error) {
     handleAuthError(error, context, options);
   }

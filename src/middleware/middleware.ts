@@ -139,9 +139,6 @@ const handleCallback = async (
     req.session = {
       ...req.session,
       user,
-      // Remove state and codeVerifier if they exist
-      state: undefined,
-      codeVerifier: undefined,
     };
   }
 
@@ -241,21 +238,24 @@ const validateCallbackParams = (code: string | null, state: string | null) => {
  */
 const validateSession = (req: IRequest, returnedState: string): string => {
   const { session } = req;
-  if (!session || session.state !== returnedState) {
-    throw new ClientError('State mismatch', 'STATE_MISMATCH');
+  if (!session || !session.state || !session.state[returnedState]) {
+    throw new ClientError(
+      'State mismatch or state not found in session',
+      'STATE_MISMATCH',
+    );
   }
 
-  const codeVerifier = session.codeVerifier;
+  const stateEntry = session.state[returnedState];
+  const codeVerifier = stateEntry.codeVerifier;
   if (!codeVerifier) {
     throw new ClientError(
-      'Code verifier missing from session',
+      'Code verifier missing from session state',
       'CODE_VERIFIER_MISSING',
     );
   }
 
-  // Remove state and codeVerifier from session
-  delete req.session!.state;
-  delete req.session!.codeVerifier;
+  // Remove the specific state entry from the session
+  delete session.state[returnedState];
 
   return codeVerifier;
 };
