@@ -1,3 +1,9 @@
+## [0.0.11-beta.7](https://github.com/SailfinIO/oidc/compare/v0.0.11-beta.6...v0.0.11-beta.7) (2025-01-04)
+
+### Bug Fixes
+
+* move session storage ([8ccd625](https://github.com/SailfinIO/oidc/commit/8ccd625a2bda18701869655d6b510c7426809fa3))
+
 ## [0.0.11-beta.6](https://github.com/SailfinIO/oidc/compare/v0.0.11-beta.5...v0.0.11-beta.6) (2025-01-04)
 
 ### Bug Fixes
