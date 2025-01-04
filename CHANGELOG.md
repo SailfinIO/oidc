@@ -1,3 +1,9 @@
+## [0.0.11-beta.10](https://github.com/SailfinIO/oidc/compare/v0.0.11-beta.9...v0.0.11-beta.10) (2025-01-04)
+
+### Bug Fixes
+
+* remove unused state deletion ([c511e0f](https://github.com/SailfinIO/oidc/commit/c511e0fda30974d82ac543700ac50b6389848bea))
+
 ## [0.0.11-beta.9](https://github.com/SailfinIO/oidc/compare/v0.0.11-beta.8...v0.0.11-beta.9) (2025-01-04)
 
 ### Bug Fixes
