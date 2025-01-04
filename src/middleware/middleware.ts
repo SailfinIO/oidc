@@ -230,7 +230,7 @@ const handleCallback = async (
   const state = urlParams.get('state');
   validateCallbackParams(code, state);
 
-  await client.handleRedirect(code!, state!, context);
+  await client.handleRedirect(code, state, context);
 
   const user = await client.getUserInfo();
   if (client.getConfig().session) {
