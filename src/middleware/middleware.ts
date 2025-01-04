@@ -93,7 +93,7 @@ const handleRoute = async (
 ) => {
   switch (metadata.action) {
     case RouteAction.Login:
-      await handleLogin(client, res);
+      await handleLogin(client, req, res);
       break;
     case RouteAction.Callback:
       await handleCallback(client, req, res, metadata, next, context);
@@ -112,8 +112,24 @@ const handleRoute = async (
  * @param {Client} client
  * @param {IResponse} res
  */
-const handleLogin = async (client: Client, res: IResponse) => {
-  const { url: authUrl } = await client.getAuthorizationUrl();
+const handleLogin = async (client: Client, req: IRequest, res: IResponse) => {
+  const {
+    url: authUrl,
+    state,
+    codeVerifier,
+  } = await client.getAuthorizationUrl();
+
+  // Initialize session if it doesn't exist
+  if (!req.session) {
+    req.session = {};
+  }
+  if (!req.session.state) {
+    req.session.state = {};
+  }
+
+  // Store state and codeVerifier in session
+  req.session.state[state] = { codeVerifier, createdAt: Date.now() };
+
   res.redirect(authUrl);
 };
 
