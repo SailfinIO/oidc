@@ -87,12 +87,42 @@ export interface IClientConfig {
    */
   requestObjectSigningAlg?: Algorithm;
 
-  /**
-   * The algorithm used to sign the ID token.
-   *
-   * @type {string | undefined}
-   */
-  idTokenSignedResponseAlg?: string;
+  // /**
+  //  * The algorithm used to sign the ID token.
+  //  *
+  //  * @type {string | undefined}
+  //  */
+  // idTokenSignedResponseAlg?: Algorithm;
+
+  // idTokenEncryptedResponseAlg?: Algorithm;
+
+  // idTokenEncryptedResponseEnc?: string;
+
+  // introspectionEndpointAuthMethod?: AuthMethod;
+
+  // introspectionEndpointAuthSigningAlg?: Algorithm;
+
+  // requestObjectEncryptionAlg?: Algorithm;
+
+  // requestObjectEncryptionEnc?: string;
+
+  // revocationEndpointAuthMethod?: AuthMethod;
+
+  // revocationEndpointAuthSigningAlg?: Algorithm;
+
+  // userinfoEndpointAuthMethod?: AuthMethod;
+
+  // userinfoEndpointAuthSigningAlg?: Algorithm;
+
+  // userinfoEncryptedResponseAlg?: Algorithm;
+
+  // userinfoEncryptedResponseEnc?: string;
+
+  // authorizationSignedResponseAlg?: Algorithm;
+
+  // authorizationEncryptedResponseAlg?: Algorithm;
+
+  // authorizationEncryptedResponseEnc?: string;
 
   /**
    * The URI to which the authorization server will redirect after authentication.
