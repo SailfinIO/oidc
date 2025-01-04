@@ -96,9 +96,6 @@ const processSessionFlow = async (
 
       // Attach user to session
       request.session.user = user;
-
-      // Cleanup state from session
-      delete request.session.state[state];
     }
 
     // Redirect to the specified URI after successful login

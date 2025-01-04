@@ -99,7 +99,6 @@ describe('OidcCallback Decorator', () => {
     );
     expect(mockClient.getUserInfo).toHaveBeenCalledTimes(1);
     expect(mockRequest.session.user).toEqual(userInfo);
-    expect(mockRequest.session.state[state]).toBeUndefined(); // Specific state entry removed
     expect(mockResponse.redirect).toHaveBeenCalledWith('/');
   });
 
@@ -141,7 +140,6 @@ describe('OidcCallback Decorator', () => {
     );
     expect(mockClient.getUserInfo).toHaveBeenCalledTimes(1);
     expect(mockRequest.session.user).toEqual(userInfo);
-    expect(mockRequest.session.state[state]).toBeUndefined(); // Specific state entry removed
     expect(mockResponse.redirect).toHaveBeenCalledWith(postLoginRedirectUri);
   });
 
@@ -516,31 +514,6 @@ describe('OidcCallback Decorator', () => {
     expect(console.error).toHaveBeenCalledWith('OIDC Callback Error:', error);
     expect(mockResponse.status).toHaveBeenCalledWith(500);
     expect(mockResponse.send).toHaveBeenCalledWith('Authentication failed');
-  });
-
-  it('should clean up state from session after successful authentication', async () => {
-    // Arrange
-    const authorizationCode = 'authCodeCleanup';
-    const state = 'stateCleanup';
-    const userInfo = { sub: 'userCleanup', name: 'Cleanup User' };
-
-    // Set up request query parameters
-    mockRequest.query.code = authorizationCode;
-    mockRequest.query.state = state;
-
-    // Set up session data
-    mockRequest.session.state[state] = { codeVerifier: 'codeVerifierCleanup' };
-
-    // Mock client.handleRedirect and getUserInfo
-    mockClient.handleRedirect.mockResolvedValue();
-    mockClient.getUserInfo.mockResolvedValue(userInfo);
-
-    // Act
-    await dummyController.handleCallback(mockRequest, mockResponse);
-
-    // Assert
-    expect(mockRequest.session.state[state]).toBeUndefined(); // Specific state entry removed
-    expect(mockRequest.session.user).toEqual(userInfo);
   });
 
   it('should respond with 400 if request is missing', async () => {
