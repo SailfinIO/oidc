@@ -10,8 +10,13 @@ import {
 } from '../interfaces';
 import { ClientError } from '../errors/ClientError';
 import { buildUrlEncodedBody } from '../utils';
-import { GrantType } from '../enums/GrantType';
-import { TokenTypeHint } from '../enums/TokenTypeHint';
+import {
+  TokenTypeHint,
+  AuthMethod,
+  GrantType,
+  Algorithm,
+  RequestMethod,
+} from '../enums';
 import { Jwt } from './Jwt';
 
 export class Token implements IToken {
@@ -28,6 +33,69 @@ export class Token implements IToken {
     this.logger = logger;
     this.config = config;
     this.issuer = issuer;
+
+    this.validateConfig();
+  }
+
+  private validateConfig(): void {
+    // 1) If no tokenEndpointAuthMethod is set, pick a default (already done)
+    if (!this.config.tokenEndpointAuthMethod) {
+      if (this.config.clientSecret) {
+        this.logger.debug(
+          'No tokenEndpointAuthMethod specified; using client_secret_post',
+        );
+        this.config.tokenEndpointAuthMethod = AuthMethod.CLIENT_SECRET_POST;
+      } else {
+        this.logger.debug(
+          'No tokenEndpointAuthMethod specified, no clientSecret; using none',
+        );
+        this.config.tokenEndpointAuthMethod = AuthMethod.NONE;
+      }
+    }
+
+    // 2) Additional checks:
+    switch (this.config.tokenEndpointAuthMethod) {
+      case AuthMethod.CLIENT_SECRET_BASIC:
+      case AuthMethod.CLIENT_SECRET_POST:
+      case AuthMethod.CLIENT_SECRET_JWT:
+        if (!this.config.clientSecret) {
+          throw new ClientError(
+            `tokenEndpointAuthMethod ${this.config.tokenEndpointAuthMethod} requires a clientSecret`,
+            'MISSING_CLIENT_SECRET',
+          );
+        }
+        break;
+
+      case AuthMethod.PRIVATE_KEY_JWT:
+        if (!this.config.requestObjectSigningAlg) {
+          throw new ClientError(
+            'requestObjectSigningAlg is required for private_key_jwt (e.g. RS256)',
+            'MISSING_ALGORITHM',
+          );
+        }
+        if (!this.config.privateKeyPem) {
+          throw new ClientError(
+            'privateKeyPem is required for private_key_jwt',
+            'MISSING_PRIVATE_KEY',
+          );
+        }
+        break;
+
+      case AuthMethod.TLS_CLIENT_AUTH:
+      case AuthMethod.SELF_SIGNED_TLS_CLIENT_AUTH:
+        if (!this.config.tlsClientBoundAccessToken) {
+          throw new ClientError(
+            `tokenEndpointAuthMethod ${this.config.tokenEndpointAuthMethod} requires tlsClientBoundAccessToken`,
+            'MISSING_TLS_CLIENT_BOUND_ACCESS_TOKEN',
+          );
+        }
+        break;
+
+      case AuthMethod.NONE:
+      default:
+        // No additional checks needed for `none`.
+        break;
+    }
   }
 
   public setTokens(tokenResponse: TokenSet): void {
@@ -70,24 +138,34 @@ export class Token implements IToken {
       throw error;
     }
 
-    const issuer = await this.issuer.discover();
-    const tokenEndpoint = issuer.token_endpoint;
-
+    const { token_endpoint } = await this.issuer.discover();
     const params: Record<string, string> = {
       grant_type: GrantType.RefreshToken,
       refresh_token: this.refreshToken,
       client_id: this.config.clientId,
     };
 
-    if (this.config.clientSecret) {
-      params.client_secret = this.config.clientSecret;
-    }
+    const { headers, finalBody } = this.prepareTokenRequestAuth(
+      token_endpoint,
+      params,
+    );
 
     try {
-      const tokenResponse = await this.performTokenRequest(
-        tokenEndpoint,
-        params,
-      );
+      const response = await fetch(token_endpoint, {
+        method: RequestMethod.POST,
+        headers,
+        body: finalBody,
+      });
+
+      // Parse JSON
+      const tokenResponse = await response.json();
+      if (!response.ok) {
+        throw new ClientError(
+          `Refresh token request failed: ${response.status} ${JSON.stringify(tokenResponse)}`,
+        );
+      }
+
+      // Now pass the parsed tokenResponse to setTokens:
       this.setTokens(tokenResponse);
       this.logger.info('Access token refreshed successfully');
     } catch (error) {
@@ -218,17 +296,24 @@ export class Token implements IToken {
    */
   private async performTokenRequest(
     endpoint: string,
-    params: Record<string, string>,
+    baseParams: Record<string, string>,
   ): Promise<any> {
-    const headers = {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    };
-
-    const body = buildUrlEncodedBody(params);
+    // Decide how to handle client authentication
+    const { headers, finalBody } = this.prepareTokenRequestAuth(
+      endpoint,
+      baseParams,
+    );
 
     try {
-      const response = await fetch(endpoint, { method: 'POST', body, headers });
+      const response = await fetch(endpoint, {
+        method: RequestMethod.POST,
+        body: finalBody,
+        headers,
+        // If you need mutual TLS, you would pass an `agent` here:
+        // agent: new https.Agent({ cert: ..., key: ... })
+      });
       const json = await response.json();
+
       if (!response.ok) {
         throw new Error(
           `Token request failed: ${response.status} ${JSON.stringify(json)}`,
@@ -236,11 +321,122 @@ export class Token implements IToken {
       }
       return json;
     } catch (error) {
-      this.logger.error('Token request failed', { endpoint, params, error });
+      this.logger.error('Token request failed', {
+        endpoint,
+        baseParams,
+        error,
+      });
       throw new ClientError('Token request failed', 'TOKEN_REQUEST_ERROR', {
         originalError: error,
       });
     }
+  }
+
+  /**
+   * Prepare the appropriate headers and final request body
+   * based on `tokenEndpointAuthMethod`.
+   */
+  private prepareTokenRequestAuth(
+    endpoint: string,
+    params: Record<string, string>,
+  ): { headers: Record<string, string>; finalBody: string } {
+    // Start with base headers
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    };
+
+    const authMethod = this.config.tokenEndpointAuthMethod;
+
+    // Default: If no method set, try client_secret_post or fallback logic
+    const method = authMethod || AuthMethod.CLIENT_SECRET_POST;
+
+    // Make a shallow copy so we can safely modify
+    const requestParams: Record<string, string> = { ...params };
+
+    // Decide how to handle each method:
+    switch (method) {
+      case AuthMethod.CLIENT_SECRET_POST: {
+        // Put client_secret in the body (the current default approach).
+        if (this.config.clientSecret) {
+          requestParams.client_secret = this.config.clientSecret;
+        }
+        break;
+      }
+
+      case AuthMethod.CLIENT_SECRET_BASIC: {
+        // Basic Auth header with base64(client_id:client_secret)
+        if (!this.config.clientSecret) {
+          throw new ClientError(
+            'client_secret is required for client_secret_basic',
+            'MISSING_CLIENT_SECRET',
+          );
+        }
+
+        // Remove from the body if you don’t want it there
+        delete requestParams.client_secret;
+
+        const basicAuth = Buffer.from(
+          `${this.config.clientId}:${this.config.clientSecret}`,
+        ).toString('base64');
+        headers['Authorization'] = `Basic ${basicAuth}`;
+        break;
+      }
+
+      case AuthMethod.CLIENT_SECRET_JWT: {
+        if (!this.config.clientSecret) {
+          throw new ClientError(
+            'client_secret is required for client_secret_jwt',
+            'MISSING_CLIENT_SECRET',
+          );
+        }
+        const clientAssertion = this.signJwtWithClientSecret(endpoint); // "endpoint" is your token endpoint
+
+        requestParams.client_assertion_type =
+          'urn:ietf:params:oauth:client-assertion-type:jwt-bearer';
+        requestParams.client_assertion = clientAssertion;
+        delete requestParams.client_secret; // remove raw secret from body
+        break;
+      }
+      case AuthMethod.PRIVATE_KEY_JWT: {
+        // signJwtWithPrivateKey(...) returns the JWT
+        const clientAssertion = this.signJwtWithPrivateKey(endpoint);
+
+        requestParams.client_assertion_type =
+          'urn:ietf:params:oauth:client-assertion-type:jwt-bearer';
+        requestParams.client_assertion = clientAssertion;
+        delete requestParams.client_secret;
+        break;
+      }
+
+      case AuthMethod.TLS_CLIENT_AUTH:
+      case AuthMethod.SELF_SIGNED_TLS_CLIENT_AUTH: {
+        // For (self-signed) TLS client auth, you typically do not send client_secret.
+        // Instead, you present a client TLS certificate via HTTPS agent.
+        // Just ensure client_id is in the body if required.
+        delete requestParams.client_secret;
+        // (In Node, you’d pass { agent: new https.Agent({ cert, key }) } in fetch)
+        break;
+      }
+
+      case AuthMethod.NONE: {
+        // Public client; no secret. Just ensure client_id is in body.
+        delete requestParams.client_secret;
+        break;
+      }
+
+      default: {
+        this.logger.warn(
+          `Unrecognized tokenEndpointAuthMethod: ${method}. Defaulting to client_secret_post.`,
+        );
+        if (this.config.clientSecret) {
+          requestParams.client_secret = this.config.clientSecret;
+        }
+        break;
+      }
+    }
+
+    const finalBody = buildUrlEncodedBody(requestParams);
+    return { headers, finalBody };
   }
 
   /**
@@ -253,17 +449,19 @@ export class Token implements IToken {
     code: string,
     codeVerifier?: string | null,
   ): Promise<void> {
-    const client = await this.issuer.discover();
-    const tokenEndpoint = client.token_endpoint;
+    const { token_endpoint } = await this.issuer.discover();
+    const baseParams = this.buildTokenRequestParams(code, codeVerifier);
 
-    const params = this.buildTokenRequestParams(code, codeVerifier);
-    const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
-    const body = buildUrlEncodedBody(params);
+    // Let prepareTokenRequestAuth decide whether to put client_secret in body or Basic auth, etc.
+    const { headers, finalBody } = this.prepareTokenRequestAuth(
+      token_endpoint,
+      baseParams,
+    );
 
     try {
-      const response = await fetch(tokenEndpoint, {
-        method: 'POST',
-        body,
+      const response = await fetch(token_endpoint, {
+        method: RequestMethod.POST,
+        body: finalBody,
         headers,
       });
       const tokenResponse: TokenSet = await response.json();
@@ -304,10 +502,6 @@ export class Token implements IToken {
       client_id: this.config.clientId,
       redirect_uri: this.config.redirectUri,
     };
-
-    if (this.config.clientSecret) {
-      baseParams.client_secret = this.config.clientSecret;
-    }
 
     switch (this.config.grantType) {
       case GrantType.AuthorizationCode:
@@ -439,7 +633,7 @@ export class Token implements IToken {
 
     try {
       const response = await fetch(userInfoEndpoint, {
-        method: 'GET',
+        method: RequestMethod.GET,
         headers,
       });
 
@@ -449,5 +643,84 @@ export class Token implements IToken {
       this.logger.error('Error fetching UserInfo', { error });
       throw error;
     }
+  }
+
+  private signJwtWithClientSecret(tokenEndpoint: string): string {
+    if (!this.config.clientId || !this.config.clientSecret) {
+      throw new ClientError(
+        'client_id and client_secret must be set for client_secret_jwt',
+        'MISSING_CLIENT_CREDENTIALS',
+      );
+    }
+
+    // The usual claims needed for client_assertion:
+    const now = Math.floor(Date.now() / 1000);
+    const payload = {
+      iss: this.config.clientId, // issuer = client_id
+      sub: this.config.clientId, // subject = client_id
+      aud: tokenEndpoint, // audience = the token endpoint
+      iat: now,
+      exp: now + 60, // short-lived, typically 60 seconds
+      jti: this.generateRandomJti(),
+    };
+
+    // Decide the HMAC-based algorithm (HS256 is most common)
+    const algorithm: Algorithm = Algorithm.HS256;
+
+    // Use the static Jwt.encode() method
+    const jwt = Jwt.encode(payload, {
+      algorithm,
+      privateKey: this.config.clientSecret, // for HS256, "privateKey" is actually the secret key
+    });
+
+    return jwt;
+  }
+
+  private signJwtWithPrivateKey(tokenEndpoint: string): string {
+    if (!this.config.clientId) {
+      throw new ClientError(
+        'client_id is required for private_key_jwt',
+        'MISSING_CLIENT_ID',
+      );
+    }
+    if (!this.config.requestObjectSigningAlg) {
+      // Or however you store the signing alg
+      throw new ClientError(
+        'requestObjectSigningAlg is required for private_key_jwt (e.g., RS256)',
+        'MISSING_ALGORITHM',
+      );
+    }
+    if (!this.config.privateKeyPem) {
+      // You need some way of storing the actual private key, e.g. config.privateKeyPem
+      throw new ClientError(
+        'No private key provided for private_key_jwt',
+        'MISSING_PRIVATE_KEY',
+      );
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const payload = {
+      iss: this.config.clientId,
+      sub: this.config.clientId,
+      aud: tokenEndpoint,
+      iat: now,
+      exp: now + 60, // 60s expiration, typical
+      jti: this.generateRandomJti(),
+    };
+
+    // For RSA-based, typically "RS256" is the default
+    const algorithm = this.config.requestObjectSigningAlg; // e.g., "RS256"
+
+    const jwt = Jwt.encode(payload, {
+      algorithm,
+      privateKey: this.config.privateKeyPem,
+    });
+
+    return jwt;
+  }
+
+  // (Optional) Helper to generate a jti:
+  private generateRandomJti(): string {
+    return Math.random().toString(36).slice(2) + Date.now();
   }
 }

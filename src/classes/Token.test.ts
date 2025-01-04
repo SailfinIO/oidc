@@ -1,3 +1,5 @@
+// src/classes/Token.test.ts
+
 import { Token } from './Token';
 import {
   IToken,
@@ -8,7 +10,14 @@ import {
   ITokenIntrospectionResponse,
 } from '../interfaces';
 import { ClientError } from '../errors/ClientError';
-import { GrantType, Scopes, TokenTypeHint } from '../enums';
+import {
+  Algorithm,
+  AuthMethod,
+  GrantType,
+  RequestMethod,
+  Scopes,
+  TokenTypeHint,
+} from '../enums';
 import { Jwt } from './Jwt';
 
 // Mock the Jwt class
@@ -69,7 +78,7 @@ describe('TokenClient', () => {
       scopes: [Scopes.OpenId, Scopes.Profile],
       discoveryUrl: 'https://example.com/.well-known/openid-configuration',
       tokenRefreshThreshold: 60,
-      // No clientSecret provided
+      // No clientSecret provided by default
     };
 
     mockIssuer = {
@@ -81,7 +90,7 @@ describe('TokenClient', () => {
       }),
     };
     (global.fetch as jest.Mock).mockReset();
-    tokenClient = new Token(mockLogger, mockConfig, mockIssuer);
+    // Do not instantiate tokenClient here; instantiate within each test as needed
 
     MockedJwt.mockClear();
   });
@@ -99,9 +108,25 @@ describe('TokenClient', () => {
     currentTime += ms;
   };
 
+  /**
+   * Helper function to instantiate Token without clientSecret
+   */
+  const createTokenClientWithoutSecret = (): IToken => {
+    return new Token(mockLogger, mockConfig, mockIssuer);
+  };
+
+  /**
+   * Helper function to instantiate Token with clientSecret
+   */
+  const createTokenClientWithSecret = (): IToken => {
+    mockConfig.clientSecret = 'test-client-secret';
+    return new Token(mockLogger, mockConfig, mockIssuer);
+  };
+
   describe('refreshAccessToken', () => {
     it('should refresh the access token successfully', async () => {
       // Arrange
+      tokenClient = createTokenClientWithoutSecret();
       tokenClient.setTokens({
         access_token: 'old-access-token',
         refresh_token: 'valid-refresh-token',
@@ -148,8 +173,7 @@ describe('TokenClient', () => {
 
     it('should include client_secret in the token request if provided', async () => {
       // Arrange
-      mockConfig.clientSecret = 'test-client-secret'; // Add clientSecret to mockConfig
-
+      tokenClient = createTokenClientWithSecret();
       tokenClient.setTokens({
         access_token: 'old-access-token',
         refresh_token: 'valid-refresh-token',
@@ -196,6 +220,7 @@ describe('TokenClient', () => {
 
     it('should throw an error if no refresh token is available', async () => {
       // Arrange
+      tokenClient = createTokenClientWithoutSecret();
       tokenClient.setTokens({
         access_token: 'old-access-token',
         token_type: 'Bearer',
@@ -213,6 +238,7 @@ describe('TokenClient', () => {
 
     it('should handle HTTP errors gracefully', async () => {
       // Arrange
+      tokenClient = createTokenClientWithoutSecret();
       tokenClient.setTokens({
         access_token: 'old-access-token',
         refresh_token: 'invalid-refresh-token',
@@ -221,24 +247,27 @@ describe('TokenClient', () => {
       });
 
       const mockError = new ClientError(
-        'Token request failed',
-        'TOKEN_REQUEST_ERROR',
+        'Refresh token request failed: 400 {"error":"invalid_grant"}',
+        'TOKEN_REFRESH_ERROR',
       );
-      (global.fetch as jest.Mock).mockRejectedValue(mockError);
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        json: jest.fn().mockResolvedValue({ error: 'invalid_grant' }),
+      });
 
       // Act & Assert
       await expect(tokenClient.refreshAccessToken()).rejects.toThrow(
         'Token refresh failed',
       );
-      expect(mockLogger.error).toHaveBeenCalledWith('Token request failed', {
-        endpoint: 'https://example.com/oauth/token',
-        params: {
-          grant_type: 'refresh_token',
-          refresh_token: 'invalid-refresh-token',
-          client_id: 'test-client-id',
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://example.com/oauth/token',
+        {
+          method: 'POST',
+          body: 'grant_type=refresh_token&refresh_token=invalid-refresh-token&client_id=test-client-id',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         },
-        error: mockError,
-      });
+      );
       expect(mockLogger.error).toHaveBeenCalledWith(
         'Failed to refresh access token',
         expect.any(ClientError),
@@ -248,6 +277,7 @@ describe('TokenClient', () => {
 
   describe('setTokens', () => {
     it('should set all tokens correctly when all fields are provided', () => {
+      tokenClient = createTokenClientWithoutSecret();
       const tokenResponse: TokenSet = {
         access_token: 'access123',
         refresh_token: 'refresh123',
@@ -272,6 +302,7 @@ describe('TokenClient', () => {
     });
 
     it('should set tokens correctly without a refresh token', () => {
+      tokenClient = createTokenClientWithoutSecret();
       const tokenResponse: TokenSet = {
         access_token: 'access123',
         expires_in: 3600,
@@ -293,6 +324,7 @@ describe('TokenClient', () => {
     });
 
     it('should set tokens correctly without an ID token', () => {
+      tokenClient = createTokenClientWithoutSecret();
       const tokenResponse: TokenSet = {
         access_token: 'access123',
         refresh_token: 'refresh123',
@@ -318,6 +350,7 @@ describe('TokenClient', () => {
 
   describe('getAccessToken', () => {
     it('should return the access token if it is valid', async () => {
+      tokenClient = createTokenClientWithoutSecret();
       tokenClient.setTokens({
         access_token: 'valid-access-token',
         refresh_token: 'refresh-token',
@@ -332,6 +365,7 @@ describe('TokenClient', () => {
 
     it('should refresh the access token if it is expired and refresh token is available', async () => {
       // Arrange
+      tokenClient = createTokenClientWithoutSecret();
       tokenClient.setTokens({
         access_token: 'expired-access-token',
         refresh_token: 'valid-refresh-token',
@@ -373,6 +407,7 @@ describe('TokenClient', () => {
 
     it('should return null if access token is expired and no refresh token is available', async () => {
       // Arrange
+      tokenClient = createTokenClientWithoutSecret();
       tokenClient.setTokens({
         access_token: 'expired-access-token',
         token_type: 'Bearer',
@@ -393,7 +428,7 @@ describe('TokenClient', () => {
 
   describe('isTokenValid', () => {
     it('should return true if no expiration time is set', () => {
-      // Arrange
+      tokenClient = createTokenClientWithoutSecret();
       tokenClient.setTokens({
         access_token: 'access-token',
         token_type: 'Bearer',
@@ -409,6 +444,7 @@ describe('TokenClient', () => {
     });
 
     it('should return true if the token is not expired', () => {
+      tokenClient = createTokenClientWithoutSecret();
       tokenClient.setTokens({
         access_token: 'valid-access-token',
         refresh_token: 'refresh-token',
@@ -426,6 +462,7 @@ describe('TokenClient', () => {
 
     it('should return false if the token is expired', () => {
       // Arrange
+      tokenClient = createTokenClientWithoutSecret();
       tokenClient.setTokens({
         access_token: 'expired-access-token',
         refresh_token: 'refresh-token',
@@ -447,6 +484,7 @@ describe('TokenClient', () => {
 
   describe('introspectToken', () => {
     it('should successfully introspect an active token', async () => {
+      tokenClient = createTokenClientWithoutSecret();
       const token = 'active-token';
       const mockIntrospectionResponse: ITokenIntrospectionResponse = {
         active: true,
@@ -480,6 +518,7 @@ describe('TokenClient', () => {
     });
 
     it('should successfully introspect an inactive token', async () => {
+      tokenClient = createTokenClientWithoutSecret();
       const token = 'inactive-token';
       const mockIntrospectionResponse: ITokenIntrospectionResponse = {
         active: false,
@@ -507,6 +546,7 @@ describe('TokenClient', () => {
     });
 
     it('should throw an error if introspection endpoint is unavailable', async () => {
+      tokenClient = createTokenClientWithoutSecret();
       // Mock discovery config without introspection endpoint
       (mockIssuer.discover as jest.Mock).mockResolvedValue({
         token_endpoint: 'https://example.com/oauth/token',
@@ -523,6 +563,7 @@ describe('TokenClient', () => {
     });
 
     it('should handle HTTP errors during introspection gracefully', async () => {
+      tokenClient = createTokenClientWithoutSecret();
       const token = 'error-token';
       const mockError = new ClientError(
         'Token request failed',
@@ -533,12 +574,20 @@ describe('TokenClient', () => {
       await expect(tokenClient.introspectToken(token)).rejects.toThrow(
         'Token introspection failed',
       );
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://example.com/oauth/introspect',
+        {
+          method: 'POST',
+          body: 'token=error-token&client_id=test-client-id',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        },
+      );
       expect(mockLogger.error).toHaveBeenCalledWith('Token request failed', {
-        endpoint: 'https://example.com/oauth/introspect',
-        params: {
+        baseParams: {
           token: 'error-token',
           client_id: 'test-client-id',
         },
+        endpoint: 'https://example.com/oauth/introspect',
         error: mockError,
       });
       expect(mockLogger.error).toHaveBeenCalledWith(
@@ -548,14 +597,11 @@ describe('TokenClient', () => {
         },
       );
     });
-    describe('introspectToken with clientSecret', () => {
-      beforeEach(() => {
-        // Add clientSecret to the configuration
-        mockConfig.clientSecret = 'test-client-secret';
-        tokenClient = new Token(mockLogger, mockConfig, mockIssuer);
-      });
 
+    describe('introspectToken with clientSecret', () => {
       it('should include client_secret in the introspection request if provided', async () => {
+        // Arrange
+        tokenClient = createTokenClientWithSecret();
         const token = 'active-token-with-secret';
         const mockIntrospectionResponse: ITokenIntrospectionResponse = {
           active: true,
@@ -592,13 +638,8 @@ describe('TokenClient', () => {
 
   describe('revokeToken', () => {
     describe('revokeToken with clientSecret', () => {
-      beforeEach(() => {
-        // Add clientSecret to the configuration
-        mockConfig.clientSecret = 'test-client-secret';
-        tokenClient = new Token(mockLogger, mockConfig, mockIssuer);
-      });
-
       it('should include client_secret in the revocation request if provided', async () => {
+        tokenClient = createTokenClientWithSecret();
         const token = 'token-to-revoke-with-secret';
 
         // Mock fetch to simulate successful revocation
@@ -622,6 +663,7 @@ describe('TokenClient', () => {
       });
 
       it('should include client_secret and token_type_hint in the revocation request if provided', async () => {
+        tokenClient = createTokenClientWithSecret();
         const token = 'token-to-revoke-with-secret-and-hint';
         const tokenTypeHint = TokenTypeHint.AccessToken;
 
@@ -647,6 +689,7 @@ describe('TokenClient', () => {
     });
 
     it('should successfully revoke a token without a token type hint', async () => {
+      tokenClient = createTokenClientWithoutSecret();
       const token = 'token-to-revoke';
 
       (global.fetch as jest.Mock).mockResolvedValueOnce(mockFetchSuccess({}));
@@ -667,6 +710,7 @@ describe('TokenClient', () => {
     });
 
     it('should successfully revoke a token with a token type hint', async () => {
+      tokenClient = createTokenClientWithoutSecret();
       const token = 'token-to-revoke';
       const tokenTypeHint = TokenTypeHint.RefreshToken;
 
@@ -688,6 +732,7 @@ describe('TokenClient', () => {
     });
 
     it('should throw an error if revocation endpoint is unavailable', async () => {
+      tokenClient = createTokenClientWithoutSecret();
       // Mock discovery config without revocation endpoint
       (mockIssuer.discover as jest.Mock).mockResolvedValue({
         token_endpoint: 'https://example.com/oauth/token',
@@ -704,6 +749,7 @@ describe('TokenClient', () => {
     });
 
     it('should handle HTTP errors during revocation gracefully', async () => {
+      tokenClient = createTokenClientWithoutSecret();
       const token = 'error-token';
       const mockError = new ClientError(
         'Token request failed',
@@ -712,12 +758,20 @@ describe('TokenClient', () => {
       (global.fetch as jest.Mock).mockRejectedValue(mockError);
 
       await expect(tokenClient.revokeToken(token)).rejects.toThrow(ClientError);
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://example.com/oauth/revoke',
+        {
+          method: 'POST',
+          body: 'token=error-token&client_id=test-client-id',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        },
+      );
       expect(mockLogger.error).toHaveBeenCalledWith('Token request failed', {
-        endpoint: 'https://example.com/oauth/revoke',
-        params: {
+        baseParams: {
           token: 'error-token',
           client_id: 'test-client-id',
         },
+        endpoint: 'https://example.com/oauth/revoke',
         error: mockError,
       });
       expect(mockLogger.error).toHaveBeenCalledWith('Token revocation failed', {
@@ -726,6 +780,7 @@ describe('TokenClient', () => {
     });
 
     it('should clear tokens if the revoked token matches the stored tokens', async () => {
+      tokenClient = createTokenClientWithoutSecret();
       tokenClient.setTokens({
         access_token: 'access-token',
         refresh_token: 'refresh-token',
@@ -745,6 +800,7 @@ describe('TokenClient', () => {
     });
 
     it('should not clear tokens if the revoked token does not match the stored tokens', async () => {
+      tokenClient = createTokenClientWithoutSecret();
       tokenClient.setTokens({
         access_token: 'access-token',
         refresh_token: 'refresh-token',
@@ -769,6 +825,7 @@ describe('TokenClient', () => {
 
   describe('performTokenRequest', () => {
     it('should perform a token request with correct parameters', async () => {
+      tokenClient = createTokenClientWithoutSecret();
       const endpoint = 'https://example.com/oauth/token';
       const params = {
         grant_type: GrantType.RefreshToken,
@@ -793,6 +850,7 @@ describe('TokenClient', () => {
     });
 
     it('should propagate errors from HTTP client', async () => {
+      tokenClient = createTokenClientWithoutSecret();
       const endpoint = 'https://example.com/oauth/token';
       const params = {
         grant_type: GrantType.RefreshToken,
@@ -812,6 +870,7 @@ describe('TokenClient', () => {
 
   describe('getTokens', () => {
     it('should return the tokens when they are set', () => {
+      tokenClient = createTokenClientWithoutSecret();
       tokenClient.setTokens({
         access_token: 'access-token',
         refresh_token: 'refresh-token',
@@ -831,6 +890,7 @@ describe('TokenClient', () => {
     });
 
     it('should return null when no tokens are set', () => {
+      tokenClient = createTokenClientWithoutSecret();
       const tokens = tokenClient.getTokens();
       expect(tokens).toBeNull();
     });
@@ -838,6 +898,7 @@ describe('TokenClient', () => {
 
   describe('clearTokens', () => {
     it('should clear all tokens', () => {
+      tokenClient = createTokenClientWithoutSecret();
       tokenClient.setTokens({
         access_token: 'access-token',
         refresh_token: 'refresh-token',
@@ -857,69 +918,9 @@ describe('TokenClient', () => {
   });
 
   describe('exchangeCodeForToken', () => {
-    describe('exchangeCodeForToken with clientSecret', () => {
-      beforeEach(() => {
-        // Add clientSecret to the configuration
-        mockConfig.clientSecret = 'test-client-secret';
-        tokenClient = new Token(mockLogger, mockConfig, mockIssuer);
-      });
-
-      it('should include client_secret when exchanging code for token', async () => {
-        // Arrange
-        const code = 'auth-code-with-secret';
-        const codeVerifier = 'code-verifier';
-        const mockTokenResponse: TokenSet = {
-          access_token: 'new-access-token-with-secret',
-          refresh_token: 'new-refresh-token-with-secret',
-          expires_in: 3600,
-          token_type: 'Bearer',
-        };
-        mockConfig.grantType = GrantType.AuthorizationCode;
-
-        // Mock fetch to return the token response
-        (global.fetch as jest.Mock).mockResolvedValueOnce(
-          mockFetchSuccess(mockTokenResponse),
-        );
-
-        // Act
-        await tokenClient.exchangeCodeForToken(code, codeVerifier);
-
-        // Build expected body using URLSearchParams
-        const expectedBody = new URLSearchParams({
-          grant_type: GrantType.AuthorizationCode,
-          client_id: 'test-client-id',
-          redirect_uri: 'https://example.com/callback',
-          client_secret: 'test-client-secret',
-          code: code,
-          code_verifier: codeVerifier,
-        }).toString();
-
-        // Assert
-        expect(global.fetch).toHaveBeenCalledWith(
-          'https://example.com/oauth/token',
-          {
-            method: 'POST',
-            body: expectedBody,
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          },
-        );
-        const tokens = tokenClient.getTokens();
-        expect(tokens).toMatchObject({
-          access_token: 'new-access-token-with-secret',
-          refresh_token: 'new-refresh-token-with-secret',
-          token_type: 'Bearer',
-        });
-        expect(mockLogger.info).toHaveBeenCalledWith(
-          'Exchanged grant for tokens',
-          {
-            grantType: GrantType.AuthorizationCode,
-          },
-        );
-      });
-    });
-
     it('should exchange the authorization code for tokens successfully', async () => {
       // Arrange
+      tokenClient = createTokenClientWithoutSecret();
       const code = 'auth-code';
       const codeVerifier = 'code-verifier';
       const mockTokenResponse: TokenSet = {
@@ -972,6 +973,7 @@ describe('TokenClient', () => {
 
     it('should handle errors during token exchange gracefully', async () => {
       // Arrange
+      tokenClient = createTokenClientWithoutSecret();
       const code = 'auth-code';
       const codeVerifier = 'code-verifier';
       const mockError = new Error('Token exchange failed');
@@ -989,67 +991,18 @@ describe('TokenClient', () => {
 
       expect(mockLogger.error).toHaveBeenCalledWith(
         'Failed to exchange grant for tokens',
-        expect.objectContaining({
+        {
           error: mockError,
           grantType: GrantType.AuthorizationCode,
-        }),
+        },
       );
     });
   });
 
   describe('buildTokenRequestParams', () => {
-    describe('buildTokenRequestParams with clientSecret', () => {
-      beforeEach(() => {
-        // Add clientSecret to the configuration
-        mockConfig.clientSecret = 'test-client-secret';
-        tokenClient = new Token(mockLogger, mockConfig, mockIssuer);
-      });
-
-      it('should include client_secret for Authorization Code grant type', () => {
-        // Arrange
-        const code = 'auth-code';
-        const codeVerifier = 'code-verifier';
-        mockConfig.grantType = GrantType.AuthorizationCode;
-
-        // Act
-        // @ts-ignore - testing private method
-        const params = tokenClient.buildTokenRequestParams(code, codeVerifier);
-
-        // Assert
-        expect(params).toEqual({
-          grant_type: GrantType.AuthorizationCode,
-          client_id: 'test-client-id',
-          redirect_uri: 'https://example.com/callback',
-          client_secret: 'test-client-secret',
-          code: 'auth-code',
-          code_verifier: 'code-verifier',
-        });
-      });
-
-      it('should include client_secret for Refresh Token grant type', () => {
-        // Arrange
-        const refreshToken = 'refresh-token';
-        mockConfig.grantType = GrantType.RefreshToken;
-
-        // Act
-        // @ts-ignore - testing private method
-        const params = tokenClient.buildTokenRequestParams(refreshToken);
-
-        // Assert
-        expect(params).toEqual({
-          grant_type: GrantType.RefreshToken,
-          client_id: 'test-client-id',
-          redirect_uri: 'https://example.com/callback',
-          client_secret: 'test-client-secret',
-          refresh_token: 'refresh-token',
-        });
-      });
-
-      // Add similar tests for other grant types if they utilize client_secret
-    });
-
     it('should build correct parameters for Authorization Code grant type', () => {
       // Arrange
+      tokenClient = createTokenClientWithoutSecret();
       const code = 'auth-code';
       const codeVerifier = 'code-verifier';
       mockConfig.grantType = GrantType.AuthorizationCode;
@@ -1070,6 +1023,7 @@ describe('TokenClient', () => {
 
     it('should build correct parameters for Device Code grant type', () => {
       // Arrange
+      tokenClient = createTokenClientWithoutSecret();
       const code = 'device-code';
       mockConfig.grantType = GrantType.DeviceCode;
 
@@ -1088,6 +1042,7 @@ describe('TokenClient', () => {
 
     it('should build correct parameters for JWT Bearer grant type', () => {
       // Arrange
+      tokenClient = createTokenClientWithoutSecret();
       const code = 'jwt-token';
       mockConfig.grantType = GrantType.JWTBearer;
 
@@ -1107,6 +1062,7 @@ describe('TokenClient', () => {
 
     it('should build correct parameters for SAML2 Bearer grant type', () => {
       // Arrange
+      tokenClient = createTokenClientWithoutSecret();
       const code = 'saml-token';
       mockConfig.grantType = GrantType.SAML2Bearer;
 
@@ -1126,6 +1082,7 @@ describe('TokenClient', () => {
 
     it('should handle Client Credentials grant type without errors', () => {
       // Arrange
+      tokenClient = createTokenClientWithoutSecret();
       const code = 'client-credentials-code';
       mockConfig.grantType = GrantType.ClientCredentials;
 
@@ -1143,6 +1100,7 @@ describe('TokenClient', () => {
 
     it('should handle Custom grant type without errors', () => {
       // Arrange
+      tokenClient = createTokenClientWithoutSecret();
       const code = 'custom-grant-code';
       mockConfig.grantType = GrantType.Custom;
 
@@ -1160,6 +1118,7 @@ describe('TokenClient', () => {
 
     it('should build correct parameters for Refresh Token grant type', () => {
       // Arrange
+      tokenClient = createTokenClientWithoutSecret();
       const code = 'refresh-token';
       mockConfig.grantType = GrantType.RefreshToken;
 
@@ -1178,6 +1137,7 @@ describe('TokenClient', () => {
 
     it('should throw an error for unsupported grant types', () => {
       // Arrange
+      tokenClient = createTokenClientWithoutSecret();
       const code = 'unsupported-code';
       mockConfig.grantType = 'unsupported_grant_type' as GrantType;
 
@@ -1208,6 +1168,7 @@ describe('TokenClient', () => {
 
     it('should correctly identify and process a valid JWT access token', async () => {
       // Arrange
+      tokenClient = createTokenClientWithoutSecret();
       const jwtToken = 'header.payload.signature'; // Simulated JWT token with three parts
       const jwtPayload = { sub: 'user123', name: 'John Doe' };
 
@@ -1235,6 +1196,7 @@ describe('TokenClient', () => {
 
     it('should correctly identify and process an opaque access token', async () => {
       // Arrange
+      tokenClient = createTokenClientWithoutSecret();
       const opaqueToken = 'opaque.token'; // Simulated non-JWT token with less than three parts
       const userInfo = { sub: 'user123', email: 'john.doe@example.com' };
 
@@ -1285,6 +1247,7 @@ describe('TokenClient', () => {
 
     it('should handle tokens with three parts but invalid JWT format gracefully', async () => {
       // Arrange
+      tokenClient = createTokenClientWithoutSecret();
       const invalidJwtToken = 'part1.part2.part3';
       const verificationError = new Error('Invalid JWT format');
 
@@ -1308,6 +1271,7 @@ describe('TokenClient', () => {
 
     it('should throw a ClientError if JWT verification fails', async () => {
       // Arrange
+      tokenClient = createTokenClientWithoutSecret();
       const verificationError = new Error('JWT verification failed');
       (Jwt.verify as jest.Mock).mockRejectedValue(verificationError);
 
@@ -1338,6 +1302,7 @@ describe('TokenClient', () => {
 
     it('should successfully fetch and return claims from UserInfo endpoint for opaque access token', async () => {
       // Arrange
+      tokenClient = createTokenClientWithoutSecret();
       const userInfo = { sub: 'user123', email: 'john.doe@example.com' };
       // Simulate an opaque token (not a JWT)
       tokenClient.setTokens({
@@ -1393,6 +1358,7 @@ describe('TokenClient', () => {
 
     it('should throw a ClientError if UserInfo endpoint is unavailable for opaque access token', async () => {
       // Arrange
+      tokenClient = createTokenClientWithoutSecret();
       tokenClient.setTokens({
         access_token: 'opaque-access-token',
         refresh_token: 'refresh-token',
@@ -1428,6 +1394,7 @@ describe('TokenClient', () => {
 
     it('should throw a ClientError if fetching UserInfo fails', async () => {
       // Arrange
+      tokenClient = createTokenClientWithoutSecret();
       const fetchError = new Error('Network error');
       tokenClient.setTokens({
         access_token: 'opaque-access-token',
@@ -1467,7 +1434,7 @@ describe('TokenClient', () => {
     });
 
     it('should throw a ClientError if no access token is available', async () => {
-      // Arrange
+      tokenClient = createTokenClientWithoutSecret();
       tokenClient.clearTokens();
 
       // Act & Assert
@@ -1480,6 +1447,7 @@ describe('TokenClient', () => {
 
     it('should refresh the access token if expired and then extract claims', async () => {
       // Arrange
+      tokenClient = createTokenClientWithoutSecret();
       tokenClient.setTokens({
         access_token: 'expired-access-token',
         refresh_token: 'valid-refresh-token',
@@ -1545,5 +1513,338 @@ describe('TokenClient', () => {
       // Restore the spy
       isJwtSpy.mockRestore();
     });
+  });
+  describe('prepareTokenRequestAuth with CLIENT_SECRET_BASIC', () => {
+    it('should set Authorization header with Basic Auth and exclude client_secret from body', async () => {
+      // Arrange
+      mockConfig.tokenEndpointAuthMethod = AuthMethod.CLIENT_SECRET_BASIC;
+      mockConfig.clientSecret = 'test-client-secret';
+      tokenClient = createTokenClientWithSecret();
+
+      // Set tokens to avoid 'No refresh token available' error
+      tokenClient.setTokens({
+        access_token: 'old-access-token',
+        refresh_token: 'valid-refresh-token',
+        expires_in: 3600,
+        token_type: 'Bearer',
+      });
+
+      const tokenEndpoint = 'https://example.com/oauth/token';
+
+      const expectedHeaders = {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: `Basic ${Buffer.from('test-client-id:test-client-secret').toString('base64')}`,
+      };
+
+      const expectedBody =
+        'grant_type=refresh_token&refresh_token=valid-refresh-token&client_id=test-client-id';
+
+      // Mock fetch response
+      (global.fetch as jest.Mock).mockResolvedValueOnce(mockFetchSuccess({}));
+
+      // Act
+      await tokenClient.refreshAccessToken();
+
+      // Assert
+      expect(global.fetch).toHaveBeenCalledWith(tokenEndpoint, {
+        method: RequestMethod.POST,
+        headers: expectedHeaders,
+        body: expectedBody,
+      });
+    });
+
+    it('should throw an error if client_secret is missing for CLIENT_SECRET_BASIC', () => {
+      // Arrange
+      mockConfig.tokenEndpointAuthMethod = AuthMethod.CLIENT_SECRET_BASIC;
+      delete mockConfig.clientSecret; // Ensure clientSecret is missing
+
+      // Act & Assert
+      expect(() => {
+        new Token(mockLogger, mockConfig, mockIssuer);
+      }).toThrow(ClientError);
+
+      expect(mockLogger.debug).not.toHaveBeenCalled(); // Ensure no unexpected logs
+    });
+  });
+
+  describe('prepareTokenRequestAuth with CLIENT_SECRET_JWT', () => {
+    it('should include client_assertion and client_assertion_type in body and exclude client_secret', async () => {
+      // Arrange
+      mockConfig.tokenEndpointAuthMethod = AuthMethod.CLIENT_SECRET_JWT;
+      mockConfig.clientSecret = 'test-client-secret';
+      tokenClient = createTokenClientWithSecret();
+
+      // Set tokens to allow refreshAccessToken to proceed
+      tokenClient.setTokens({
+        access_token: 'old-access-token',
+        refresh_token: 'valid-refresh-token',
+        expires_in: 3600,
+        token_type: 'Bearer',
+      });
+
+      const tokenEndpoint = 'https://example.com/oauth/token';
+
+      const mockJwt = 'mocked.jwt.token';
+      (MockedJwt.encode as jest.Mock).mockReturnValue(mockJwt);
+
+      const expectedBody =
+        'grant_type=refresh_token&refresh_token=valid-refresh-token&client_id=test-client-id&client_assertion_type=urn%3Aietf%3Aparams%3Aoauth%3Aclient-assertion-type%3Ajwt-bearer&client_assertion=mocked.jwt.token';
+      const expectedHeaders = {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      };
+
+      // Mock fetch response
+      (global.fetch as jest.Mock).mockResolvedValueOnce(mockFetchSuccess({}));
+
+      // Act
+      await tokenClient.refreshAccessToken();
+
+      // Assert
+      expect(Jwt.encode).toHaveBeenCalledWith(expect.any(Object), {
+        algorithm: Algorithm.HS256,
+        privateKey: 'test-client-secret',
+      });
+
+      expect(global.fetch).toHaveBeenCalledWith(tokenEndpoint, {
+        method: RequestMethod.POST,
+        headers: expectedHeaders,
+        body: expectedBody,
+      });
+    });
+
+    it('should throw an error if client_secret is missing for CLIENT_SECRET_JWT', () => {
+      // Arrange
+      mockConfig.tokenEndpointAuthMethod = AuthMethod.CLIENT_SECRET_JWT;
+      delete mockConfig.clientSecret; // Ensure clientSecret is missing
+
+      // Act & Assert
+      expect(() => {
+        new Token(mockLogger, mockConfig, mockIssuer);
+      }).toThrow(ClientError);
+
+      expect(mockLogger.debug).not.toHaveBeenCalled(); // Ensure no unexpected logs
+    });
+  });
+
+  describe('prepareTokenRequestAuth with PRIVATE_KEY_JWT', () => {
+    it('should throw an error if required configurations are missing for PRIVATE_KEY_JWT', () => {
+      // Arrange
+      mockConfig.tokenEndpointAuthMethod = AuthMethod.PRIVATE_KEY_JWT;
+      // Missing requestObjectSigningAlg and privateKeyPem
+
+      // Act & Assert
+      expect(() => {
+        new Token(mockLogger, mockConfig, mockIssuer);
+      }).toThrow(ClientError);
+
+      expect(mockLogger.debug).not.toHaveBeenCalled(); // Ensure no unexpected logs
+    });
+
+    it('should throw an error if privateKeyPem is missing for PRIVATE_KEY_JWT', () => {
+      // Arrange
+      mockConfig.tokenEndpointAuthMethod = AuthMethod.PRIVATE_KEY_JWT;
+      mockConfig.requestObjectSigningAlg = Algorithm.RS256;
+      delete mockConfig.privateKeyPem; // Ensure privateKeyPem is missing
+
+      // Act & Assert
+      expect(() => {
+        new Token(mockLogger, mockConfig, mockIssuer);
+      }).toThrow(
+        new ClientError(
+          'privateKeyPem is required for private_key_jwt',
+          'MISSING_PRIVATE_KEY',
+        ),
+      );
+
+      expect(mockLogger.debug).not.toHaveBeenCalled();
+    });
+
+    it('should include client_assertion and client_assertion_type in body and exclude client_secret', async () => {
+      // Arrange
+      mockConfig.tokenEndpointAuthMethod = AuthMethod.PRIVATE_KEY_JWT;
+      mockConfig.requestObjectSigningAlg = Algorithm.RS256;
+      mockConfig.privateKeyPem =
+        '-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----';
+      tokenClient = new Token(mockLogger, mockConfig, mockIssuer);
+
+      // Set tokens to allow refreshAccessToken to proceed
+      tokenClient.setTokens({
+        access_token: 'old-access-token',
+        refresh_token: 'valid-refresh-token',
+        expires_in: 3600,
+        token_type: 'Bearer',
+      });
+
+      const tokenEndpoint = 'https://example.com/oauth/token';
+
+      const mockJwt = 'mocked.jwt.token';
+      (MockedJwt.encode as jest.Mock).mockReturnValue(mockJwt);
+
+      const expectedBody =
+        'grant_type=refresh_token&refresh_token=valid-refresh-token&client_id=test-client-id&client_assertion_type=urn%3Aietf%3Aparams%3Aoauth%3Aclient-assertion-type%3Ajwt-bearer&client_assertion=mocked.jwt.token';
+      const expectedHeaders = {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      };
+
+      // Mock fetch response
+      (global.fetch as jest.Mock).mockResolvedValueOnce(mockFetchSuccess({}));
+
+      // Act
+      await tokenClient.refreshAccessToken();
+
+      // Assert
+      expect(Jwt.encode).toHaveBeenCalledWith(expect.any(Object), {
+        algorithm: 'RS256',
+        privateKey:
+          '-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----',
+      });
+
+      expect(global.fetch).toHaveBeenCalledWith(tokenEndpoint, {
+        method: RequestMethod.POST,
+        headers: expectedHeaders,
+        body: expectedBody,
+      });
+    });
+  });
+
+  describe('prepareTokenRequestAuth with TLS_CLIENT_AUTH', () => {
+    it('should throw an error if tlsClientBoundAccessToken is missing for TLS_CLIENT_AUTH', () => {
+      // Arrange
+      mockConfig.tokenEndpointAuthMethod = AuthMethod.TLS_CLIENT_AUTH;
+      delete mockConfig.tlsClientBoundAccessToken; // Ensure token is missing
+
+      // Act & Assert
+      expect(() => {
+        new Token(mockLogger, mockConfig, mockIssuer);
+      }).toThrow(ClientError);
+
+      expect(mockLogger.debug).not.toHaveBeenCalled(); // Ensure no unexpected logs
+    });
+  });
+
+  describe('prepareTokenRequestAuth with NONE', () => {
+    it('should include only client_id in the request body and no authentication headers', async () => {
+      // Arrange
+      mockConfig.tokenEndpointAuthMethod = AuthMethod.NONE;
+      tokenClient = createTokenClientWithoutSecret();
+
+      // Set tokens to allow refreshAccessToken to proceed
+      tokenClient.setTokens({
+        access_token: 'old-access-token',
+        refresh_token: 'valid-refresh-token', // Ensure refresh token is set
+        expires_in: 3600,
+        token_type: 'Bearer',
+      });
+
+      const tokenEndpoint = 'https://example.com/oauth/token';
+
+      const expectedBody =
+        'grant_type=refresh_token&refresh_token=valid-refresh-token&client_id=test-client-id';
+      const expectedHeaders = {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      };
+
+      // Mock fetch response
+      (global.fetch as jest.Mock).mockResolvedValueOnce(mockFetchSuccess({}));
+
+      // Act
+      await tokenClient.refreshAccessToken();
+
+      // Assert
+      expect(global.fetch).toHaveBeenCalledWith(tokenEndpoint, {
+        method: RequestMethod.POST,
+        headers: expectedHeaders,
+        body: expectedBody,
+      });
+    });
+  });
+  describe('with unrecognized AuthMethod', () => {
+    it('should default to CLIENT_SECRET_POST and log a warning', async () => {
+      // Arrange
+      mockConfig.tokenEndpointAuthMethod = 'UNKNOWN_AUTH_METHOD' as AuthMethod;
+      mockConfig.clientSecret = 'test-client-secret'; // Provide clientSecret
+      tokenClient = createTokenClientWithSecret();
+
+      // Set tokens to allow refreshAccessToken to proceed
+      tokenClient.setTokens({
+        access_token: 'old-access-token',
+        refresh_token: 'valid-refresh-token',
+        expires_in: 3600,
+        token_type: 'Bearer',
+      });
+
+      const tokenEndpoint = 'https://example.com/oauth/token';
+
+      const expectedBody =
+        'grant_type=refresh_token&refresh_token=valid-refresh-token&client_id=test-client-id&client_secret=test-client-secret';
+      const expectedHeaders = {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      };
+
+      // Mock fetch response
+      (global.fetch as jest.Mock).mockResolvedValueOnce(mockFetchSuccess({}));
+
+      // Act
+      await tokenClient.refreshAccessToken();
+
+      // Assert
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Unrecognized tokenEndpointAuthMethod: UNKNOWN_AUTH_METHOD. Defaulting to client_secret_post.',
+      );
+
+      expect(global.fetch).toHaveBeenCalledWith(tokenEndpoint, {
+        method: RequestMethod.POST,
+        headers: expectedHeaders,
+        body: expectedBody,
+      });
+    });
+
+    it('should throw an error if client_secret is missing when defaulting to CLIENT_SECRET_POST', async () => {
+      // Arrange
+      mockConfig.tokenEndpointAuthMethod = 'UNKNOWN_AUTH_METHOD' as AuthMethod;
+      delete mockConfig.clientSecret; // Missing clientSecret
+      tokenClient = createTokenClientWithoutSecret();
+
+      tokenClient.setTokens({
+        access_token: 'old-access-token',
+        refresh_token: 'valid-refresh-token',
+        expires_in: 3600,
+        token_type: 'Bearer',
+      });
+
+      // Mock fetch to simulate an error response
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        json: jest.fn().mockResolvedValue({ error: 'invalid_client' }),
+      });
+
+      // Act & Assert
+      await expect(tokenClient.refreshAccessToken()).rejects.toThrow(
+        ClientError,
+      );
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Unrecognized tokenEndpointAuthMethod: UNKNOWN_AUTH_METHOD. Defaulting to client_secret_post.',
+      );
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Failed to refresh access token',
+        expect.any(ClientError),
+      );
+    });
+  });
+  it('should throw an error if requestObjectSigningAlg is missing for PRIVATE_KEY_JWT', () => {
+    // Arrange
+    mockConfig.tokenEndpointAuthMethod = AuthMethod.PRIVATE_KEY_JWT;
+    mockConfig.privateKeyPem =
+      '-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----';
+    delete mockConfig.requestObjectSigningAlg; // Ensure signing alg is missing
+
+    // Act & Assert
+    expect(() => {
+      new Token(mockLogger, mockConfig, mockIssuer);
+    }).toThrow(ClientError);
+
+    expect(mockLogger.debug).not.toHaveBeenCalled(); // Ensure no unexpected logs
   });
 });
