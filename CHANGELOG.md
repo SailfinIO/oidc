@@ -1,3 +1,9 @@
+## [0.0.10-beta.10](https://github.com/SailfinIO/oidc/compare/v0.0.10-beta.9...v0.0.10-beta.10) (2025-01-04)
+
+### Bug Fixes
+
+* token authentication methods needed ([6a053d1](https://github.com/SailfinIO/oidc/commit/6a053d10d3fbde9f3ff661347522e37a04a20079))
+
 ## [0.0.10-beta.9](https://github.com/SailfinIO/oidc/compare/v0.0.10-beta.8...v0.0.10-beta.9) (2025-01-03)
 
 ### Bug Fixes
