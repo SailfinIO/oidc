@@ -1,3 +1,10 @@
+## [0.0.11-beta.3](https://github.com/SailfinIO/oidc/compare/v0.0.11-beta.2...v0.0.11-beta.3) (2025-01-04)
+
+### Bug Fixes
+
+* code smells ([9d925a3](https://github.com/SailfinIO/oidc/commit/9d925a3a79699a317beb885a9bf9b7b6c5c0c1d4))
+* cookie parsing needed ([c169215](https://github.com/SailfinIO/oidc/commit/c1692150842c2573f8c304cb5672ac99fb9e947f))
+
 ## [0.0.11-beta.2](https://github.com/SailfinIO/oidc/compare/v0.0.11-beta.1...v0.0.11-beta.2) (2025-01-04)
 
 ### Bug Fixes
