@@ -21,7 +21,6 @@ import {
   IPkce,
   IState,
   IAuthorizationUrlResponse,
-  IStoreContext,
 } from '../interfaces';
 import { GrantType } from '../enums/GrantType';
 import { PkceMethod } from '../enums';

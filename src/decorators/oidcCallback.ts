@@ -89,6 +89,11 @@ const processSessionFlow = async (
     const user = await client.getUserInfo();
 
     if (client.getConfig().session) {
+      // Initialize session if it doesn't exist
+      if (!request.session) {
+        request.session = {};
+      }
+
       // Attach user to session
       request.session.user = user;
 
