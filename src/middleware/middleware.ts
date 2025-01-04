@@ -1,3 +1,5 @@
+// src/middleware/middleware.ts
+
 import { Client } from '../classes/Client';
 import { MetadataManager } from '../decorators/MetadataManager';
 import {
@@ -27,6 +29,8 @@ export const middleware = (client: Client) => {
       await next();
       return;
     }
+
+    // Parse cookies from headers
     req.cookies = parseCookies(req.headers);
 
     // Continue with existing middleware logic
@@ -34,7 +38,11 @@ export const middleware = (client: Client) => {
     let pathname: string;
 
     try {
-      pathname = new URL(url, `http://${req.headers.get('host')}`).pathname;
+      const host = Array.isArray(req.headers['host'])
+        ? req.headers['host'][0]
+        : req.headers['host'] || 'localhost';
+      const baseUrl = `http://${host}`;
+      pathname = new URL(url, baseUrl).pathname;
     } catch (error) {
       console.error('Invalid URL:', url);
       await next(error);
@@ -127,8 +135,12 @@ const handleCallback = async (
   next: NextFunction,
   context: IStoreContext,
 ) => {
-  const urlParams = new URL(req.url, `http://${req.headers.get('host')}`)
-    .searchParams;
+  const host = Array.isArray(req.headers['host'])
+    ? req.headers['host'][0]
+    : req.headers['host'] || 'localhost';
+  const baseUrl = `http://${host}`;
+  const urlObj = new URL(req.url, baseUrl);
+  const urlParams = urlObj.searchParams;
 
   const code = urlParams.get('code');
   const state = urlParams.get('state');
