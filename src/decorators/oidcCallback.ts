@@ -84,7 +84,7 @@ const processSessionFlow = async (
 
   const statesStore = request.session?.state || {};
   const stored = statesStore[state];
-  if (!stored || !stored.codeVerifier) {
+  if (!stored?.codeVerifier) {
     return handleAuthError(
       new ClientError(
         'State mismatch or missing codeVerifier',

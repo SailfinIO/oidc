@@ -238,7 +238,7 @@ const validateCallbackParams = (code: string | null, state: string | null) => {
  */
 const validateSession = (req: IRequest, returnedState: string): string => {
   const { session } = req;
-  if (!session || !session.state || !session.state[returnedState]) {
+  if (!session?.state?.[returnedState]) {
     throw new ClientError(
       'State mismatch or state not found in session',
       'STATE_MISMATCH',
