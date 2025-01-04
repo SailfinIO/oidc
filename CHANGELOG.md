@@ -1,3 +1,9 @@
+## [0.0.11-beta.8](https://github.com/SailfinIO/oidc/compare/v0.0.11-beta.7...v0.0.11-beta.8) (2025-01-04)
+
+### Bug Fixes
+
+* parse cookie headers ([7c52684](https://github.com/SailfinIO/oidc/commit/7c52684f91d902c5a45326530558a2bc1661f33c))
+
 ## [0.0.11-beta.7](https://github.com/SailfinIO/oidc/compare/v0.0.11-beta.6...v0.0.11-beta.7) (2025-01-04)
 
 ### Bug Fixes
