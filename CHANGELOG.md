@@ -1,3 +1,9 @@
+## [0.0.11-beta.9](https://github.com/SailfinIO/oidc/compare/v0.0.11-beta.8...v0.0.11-beta.9) (2025-01-04)
+
+### Bug Fixes
+
+* instantiate session before adding user ([d38bbd8](https://github.com/SailfinIO/oidc/commit/d38bbd8cc902053be92c15545e133078c4839eff))
+
 ## [0.0.11-beta.8](https://github.com/SailfinIO/oidc/compare/v0.0.11-beta.7...v0.0.11-beta.8) (2025-01-04)
 
 ### Bug Fixes
