@@ -1,6 +1,6 @@
 // src/middleware/cookieUtils.test.ts
 
-import { parseCookies } from './cookieUtils';
+import { parseCookies } from '../utils/cookieUtils';
 import { parse } from '../utils/Cookie';
 
 jest.mock('../utils/Cookie');

@@ -19,7 +19,7 @@ import { Mutex, Logger } from '../utils';
 import { SameSite } from '../enums';
 import { IStore } from '../interfaces/IStore';
 import { MemoryStore } from './MemoryStore';
-import { Cookie } from '../utils/Cookie';
+import { Cookie, parseCookies } from '../utils';
 
 /**
  * Represents a server-side session store implemented using cookies.
@@ -114,35 +114,24 @@ export class CookieStore implements ISessionStore {
     }
 
     return this.mutex.runExclusive(async () => {
-      const cookieHeader = context.request.headers.get('cookie');
-      if (!cookieHeader || typeof cookieHeader !== 'string') {
+      const cookies = parseCookies(context.request.headers);
+      const sessionId = cookies[this.cookieName];
+
+      if (!sessionId) {
         return null;
       }
 
-      const cookieStrings = cookieHeader
-        .split(';')
-        .map((cookie) => cookie.trim());
-      const sessionCookieString = cookieStrings.find((cookieStr) =>
-        cookieStr.startsWith(`${this.cookieName}=`),
-      );
-
-      if (!sessionCookieString) {
+      if (sessionId !== sid) {
+        this.logger.warn('SID mismatch', { expected: sid, actual: sessionId });
         return null;
       }
 
       try {
-        const sessionCookie = Cookie.parse(sessionCookieString);
-        const sessionId = sessionCookie.value;
-
-        if (sessionId !== sid) {
-          return null;
-        }
-
         const sessionData = await this.dataStore.get(sid, context);
         this.logger.debug('Session retrieved', { sid, sessionData });
         return sessionData;
       } catch (error) {
-        this.logger.error('Error parsing session cookie', { error });
+        this.logger.error('Error retrieving session data', { error });
         return null;
       }
     });

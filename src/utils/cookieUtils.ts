@@ -1,6 +1,6 @@
 // src/middleware/cookieUtils.ts
 
-import { ParsedCookies, parse } from '../utils/Cookie';
+import { ParsedCookies, parse } from './Cookie';
 
 /**
  * Parses the 'Cookie' header from the request and returns a ParsedCookies object.

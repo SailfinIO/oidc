@@ -12,8 +12,7 @@ import {
 import { RequestMethod, RouteAction, SameSite } from '../enums';
 import { ClientError } from '../errors/ClientError';
 import { NextFunction } from '../types';
-import { parseCookies } from './cookieUtils';
-import { Cookie } from '../utils';
+import { Cookie, parseCookies } from '../utils';
 
 /**
  * Middleware function compatible with Express.

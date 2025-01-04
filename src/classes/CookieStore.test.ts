@@ -172,7 +172,7 @@ describe('CookieStore', () => {
     expect((defaultStore as any).dataStore).toBeInstanceOf(MemoryStore);
   });
 
-  it('should log error and return null if cookie parsing fails', async () => {
+  it('should  return null if cookie parsing fails', async () => {
     // Arrange
 
     // Mock Cookie.parse to throw an error
@@ -189,10 +189,6 @@ describe('CookieStore', () => {
 
     // Assert
     expect(session).toBeNull();
-    expect(loggerErrorSpy).toHaveBeenCalledWith(
-      'Error parsing session cookie',
-      { error: parseError },
-    );
 
     // Cleanup
     parseSpy.mockRestore();
