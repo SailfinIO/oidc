@@ -1,3 +1,9 @@
+## [0.0.11-beta.6](https://github.com/SailfinIO/oidc/compare/v0.0.11-beta.5...v0.0.11-beta.6) (2025-01-04)
+
+### Bug Fixes
+
+* session state and code storage ([979d1a9](https://github.com/SailfinIO/oidc/commit/979d1a9536fb4b675a4dbdd6f4b561387e1a22e2))
+
 ## [0.0.11-beta.5](https://github.com/SailfinIO/oidc/compare/v0.0.11-beta.4...v0.0.11-beta.5) (2025-01-04)
 
 ### Bug Fixes
