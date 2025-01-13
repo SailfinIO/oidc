@@ -141,20 +141,22 @@ export class Session implements ISession {
     }
 
     const accessTokenCookie = new Cookie('access_token', tokens.access_token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: SameSite.STRICT,
-      path: '/',
+      httpOnly: this.config.session?.cookie?.options?.httpOnly || true,
+      secure: this.config.session?.cookie?.options?.secure || true,
+      sameSite:
+        this.config.session?.cookie?.options?.sameSite || SameSite.STRICT,
+      path: this.config.session?.cookie?.options?.path || '/',
       maxAge: tokens.expires_in || 3600,
     });
     setCookieHeader(context.response, accessTokenCookie.serialize());
 
     if (tokens.id_token) {
       const idTokenCookie = new Cookie('id_token', tokens.id_token, {
-        httpOnly: true,
-        secure: true,
-        sameSite: SameSite.STRICT,
-        path: '/',
+        httpOnly: this.config.session?.cookie?.options?.httpOnly || true,
+        secure: this.config.session?.cookie?.options?.secure || true,
+        sameSite:
+          this.config.session?.cookie?.options?.sameSite || SameSite.STRICT,
+        path: this.config.session?.cookie?.options?.path || '/',
         maxAge: tokens.expires_in || 3600,
       });
       setCookieHeader(context.response, idTokenCookie.serialize());
@@ -165,10 +167,11 @@ export class Session implements ISession {
         'refresh_token',
         tokens.refresh_token,
         {
-          httpOnly: true,
-          secure: true,
-          sameSite: SameSite.STRICT,
-          path: '/',
+          httpOnly: this.config.session?.cookie?.options?.httpOnly || true,
+          secure: this.config.session?.cookie?.options?.secure || true,
+          sameSite:
+            this.config.session?.cookie?.options?.sameSite || SameSite.STRICT,
+          path: this.config.session?.cookie?.options?.path || '/',
           maxAge: 86400,
         },
       );
@@ -179,10 +182,11 @@ export class Session implements ISession {
   private clearSessionCookie(context: IStoreContext): void {
     const sessionCookieName = this.config.session?.cookie?.name || 'sid';
     const expiredCookie = new Cookie(sessionCookieName, '', {
-      httpOnly: true,
-      secure: true,
-      sameSite: SameSite.STRICT,
-      path: '/',
+      httpOnly: this.config.session?.cookie?.options?.httpOnly || true,
+      secure: this.config.session?.cookie?.options?.secure || true,
+      sameSite:
+        this.config.session?.cookie?.options?.sameSite || SameSite.STRICT,
+      path: this.config.session?.cookie?.options?.path || '/',
       expires: new Date(0),
     });
 
@@ -224,10 +228,11 @@ export class Session implements ISession {
 
     // Set SID in a secure cookie
     const sessionCookie = new Cookie(sessionCookieName, sid, {
-      httpOnly: true,
-      secure: true,
-      sameSite: SameSite.STRICT,
-      path: '/',
+      httpOnly: this.config.session?.cookie?.options?.httpOnly || true,
+      secure: this.config.session?.cookie?.options?.secure || true,
+      sameSite:
+        this.config.session?.cookie?.options?.sameSite || SameSite.STRICT,
+      path: this.config.session?.cookie?.options?.path || '/',
       maxAge: this.config.session?.ttl ? this.config.session.ttl / 1000 : 3600, // Default 1 hour
     });
 
@@ -239,10 +244,11 @@ export class Session implements ISession {
 
     // Set CSRF token in a separate cookie
     const csrfCookie = new Cookie('csrf_token', csrfToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: SameSite.STRICT,
-      path: '/',
+      httpOnly: this.config.session?.cookie?.options?.httpOnly || true,
+      secure: this.config.session?.cookie?.options?.secure || true,
+      sameSite:
+        this.config.session?.cookie?.options?.sameSite || SameSite.STRICT,
+      path: this.config.session?.cookie?.options?.path || '/',
       maxAge: 3600, // 1 hour
     });
 
@@ -389,6 +395,7 @@ export class Session implements ISession {
       this.config.session?.mode === SessionMode.CLIENT ||
       this.config.session?.mode === SessionMode.HYBRID
     ) {
+      this.logger.debug('Exposing refreshed tokens to client');
       this.exposeTokensToClient(context, tokens);
     }
 
