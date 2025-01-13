@@ -53,7 +53,7 @@ export const parseCookies = (
 export const setCookieHeader = (
   response: IResponse | undefined,
   cookieString: string,
-) => {
+): boolean => {
   if (!response) return;
 
   // ─────────────────────────────────────────────────────────────────────────────
