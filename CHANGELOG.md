@@ -1,3 +1,9 @@
+## [0.0.12-beta.5](https://github.com/SailfinIO/oidc/compare/v0.0.12-beta.4...v0.0.12-beta.5) (2025-01-13)
+
+### Bug Fixes
+
+* csrf token checking ([27d1ecc](https://github.com/SailfinIO/oidc/commit/27d1ecc259e66565002a68b15490994e9298b5f9))
+
 ## [0.0.12-beta.4](https://github.com/SailfinIO/oidc/compare/v0.0.12-beta.3...v0.0.12-beta.4) (2025-01-13)
 
 ### Bug Fixes
