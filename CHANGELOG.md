@@ -1,3 +1,9 @@
+## [0.0.12-beta.1](https://github.com/SailfinIO/oidc/compare/v0.0.11...v0.0.12-beta.1) (2025-01-13)
+
+### Bug Fixes
+
+* session handling ([9f0a283](https://github.com/SailfinIO/oidc/commit/9f0a28316efa639c3d9da1856dbf4d16712aa6f4))
+
 ## [0.0.11-beta.12](https://github.com/SailfinIO/oidc/compare/v0.0.11-beta.11...v0.0.11-beta.12) (2025-01-13)
 
 ### Bug Fixes
