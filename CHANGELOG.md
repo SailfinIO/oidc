@@ -1,3 +1,9 @@
+## [0.0.12-beta.4](https://github.com/SailfinIO/oidc/compare/v0.0.12-beta.3...v0.0.12-beta.4) (2025-01-13)
+
+### Bug Fixes
+
+* pass config into cookies ([2481cd2](https://github.com/SailfinIO/oidc/commit/2481cd2e5648488648754ec0d878b245323628af))
+
 ## [0.0.12-beta.3](https://github.com/SailfinIO/oidc/compare/v0.0.12-beta.2...v0.0.12-beta.3) (2025-01-13)
 
 ### Bug Fixes
