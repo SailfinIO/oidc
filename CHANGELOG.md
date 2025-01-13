@@ -1,3 +1,9 @@
+## [0.0.12-beta.3](https://github.com/SailfinIO/oidc/compare/v0.0.12-beta.2...v0.0.12-beta.3) (2025-01-13)
+
+### Bug Fixes
+
+* add testing for cookie header append ([a2ca435](https://github.com/SailfinIO/oidc/commit/a2ca4355b6ed2406f75c89f61bc335543735ad2d))
+
 ## [0.0.12-beta.2](https://github.com/SailfinIO/oidc/compare/v0.0.12-beta.1...v0.0.12-beta.2) (2025-01-13)
 
 ### Bug Fixes
