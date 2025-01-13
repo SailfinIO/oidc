@@ -21,125 +21,129 @@ import { Cookie, parseCookies } from '../utils';
  * @returns {Function} Express-compatible middleware function.
  */
 export const middleware = (client: Client) => {
-  csrfMiddleware(client);
+  const csrfMw = csrfMiddleware(client);
 
   return async (
     req: IRequest,
     res: IResponse,
     next: NextFunction,
   ): Promise<void> => {
-    let routeMetadata: IRouteMetadata | null = null; // Declare outside
-
-    try {
-      if (!req || !res) {
-        await next();
-        return;
+    if (!req || !res) {
+      return next();
+    }
+    await csrfMw(req, res, async (csrfErr) => {
+      if (csrfErr) {
+        // If CSRF check fails, we won't proceed
+        return next(csrfErr);
       }
-
-      // Parse cookies from headers
-      req.cookies = parseCookies(req.headers);
-      client.getLogger().debug('Parsed cookies', { cookies: req.cookies });
-
-      // Initialize session
-      const sessionStore = client.getSessionStore();
-      const sessionCookieName =
-        client.getConfig().session?.cookie?.name || 'sid';
-      let sid = req.cookies[sessionCookieName] || null;
-      let sessionData: ISessionData | null = null;
-
-      if (sid && sessionStore) {
-        sessionData = await sessionStore.get(sid, {
-          request: req,
-          response: res,
-        });
-        if (sessionData) {
-          req.session = sessionData;
-          client.getLogger().debug('Session loaded', { sid, sessionData });
-        } else {
-          client.getLogger().warn('Invalid sid, clearing session', { sid });
-          sid = null;
-        }
-      }
-
-      // Continue with existing middleware logic
-      const { method, url } = req;
-      let pathname: string;
+      let routeMetadata: IRouteMetadata | null = null; // Declare outside
 
       try {
-        const host = Array.isArray(req.headers['host'])
-          ? req.headers['host'][0]
-          : req.headers['host'] || 'localhost';
-        const baseUrl = `http://${host}`;
-        pathname = new URL(url, baseUrl).pathname;
-      } catch (error) {
-        client.getLogger().error('Invalid URL', { url, error });
-        await next(error);
-        return;
-      }
+        // Parse cookies from headers
+        req.cookies = parseCookies(req.headers);
+        client.getLogger().debug('Parsed cookies', { cookies: req.cookies });
 
-      routeMetadata = MetadataManager.getRouteMetadata(
-        method as RequestMethod,
-        pathname,
-      );
+        // Initialize session
+        const sessionStore = client.getSessionStore();
+        const sessionCookieName =
+          client.getConfig().session?.cookie?.name || 'sid';
+        let sid = req.cookies[sessionCookieName] || null;
+        let sessionData: ISessionData | null = null;
 
-      if (!routeMetadata) {
-        await next();
-        return;
-      }
-
-      const context: IStoreContext = {
-        request: req,
-        response: res,
-        extra: {}, // Populate as needed
-        user: undefined,
-      };
-
-      client.getLogger().debug('Handling route', { pathname, routeMetadata });
-
-      await handleRoute(client, req, res, routeMetadata, next, context);
-
-      // After handling the route, persist the session
-      if (sessionStore) {
-        if (sid) {
-          // Update existing session
-          await sessionStore.touch(sid, req.session, {
+        if (sid && sessionStore) {
+          sessionData = await sessionStore.get(sid, {
             request: req,
             response: res,
           });
-          client.getLogger().debug('Session touched', { sid });
-        } else if (req.session) {
-          // Create new session
-          sid = await sessionStore.set(req.session, {
-            request: req,
-            response: res,
-          });
-          client
-            .getLogger()
-            .debug('New session created', { sid, sessionData: req.session });
-
-          // Set session cookie
-          const options = client.getConfig().session?.cookie?.options || {
-            httpOnly: true,
-            secure: true,
-            sameSite: SameSite.STRICT,
-            path: '/',
-            maxAge: 3600, // 1 hour
-          };
-
-          const cookie = new Cookie(sessionCookieName, sid, options);
-
-          res.headers.append('Set-Cookie', cookie.serialize());
+          if (sessionData) {
+            req.session = sessionData;
+            client.getLogger().debug('Session loaded', { sid, sessionData });
+          } else {
+            client.getLogger().warn('Invalid sid, clearing session', { sid });
+            sid = null;
+          }
         }
-      }
 
-      // Only call next() if the response hasn't been sent (e.g., no redirect)
-      if (!res.redirected) {
-        await next();
+        // Continue with existing middleware logic
+        const { method, url } = req;
+        let pathname: string;
+
+        try {
+          const host = Array.isArray(req.headers['host'])
+            ? req.headers['host'][0]
+            : req.headers['host'] || 'localhost';
+          const baseUrl = `http://${host}`;
+          pathname = new URL(url, baseUrl).pathname;
+        } catch (error) {
+          client.getLogger().error('Invalid URL', { url, error });
+          await next(error);
+          return;
+        }
+
+        routeMetadata = MetadataManager.getRouteMetadata(
+          method as RequestMethod,
+          pathname,
+        );
+
+        if (!routeMetadata) {
+          await next();
+          return;
+        }
+
+        const context: IStoreContext = {
+          request: req,
+          response: res,
+          extra: {}, // Populate as needed
+          user: undefined,
+        };
+
+        client.getLogger().debug('Handling route', { pathname, routeMetadata });
+
+        await handleRoute(client, req, res, routeMetadata, next, context);
+
+        // After handling the route, persist the session
+        if (sessionStore) {
+          if (sid) {
+            // Update existing session
+            await sessionStore.touch(sid, req.session, {
+              request: req,
+              response: res,
+            });
+            client.getLogger().debug('Session touched', { sid });
+          } else if (req.session) {
+            // Create new session
+            sid = await sessionStore.set(req.session, {
+              request: req,
+              response: res,
+            });
+            client
+              .getLogger()
+              .debug('New session created', { sid, sessionData: req.session });
+
+            // Set session cookie
+            const options = client.getConfig().session?.cookie?.options || {
+              httpOnly: true,
+              secure: true,
+              sameSite: SameSite.STRICT,
+              path: '/',
+              maxAge: 3600, // 1 hour
+            };
+
+            const cookie = new Cookie(sessionCookieName, sid, options);
+
+            res.headers.append('Set-Cookie', cookie.serialize());
+          }
+        }
+
+        // Only call next() if the response hasn't been sent (e.g., no redirect)
+        if (!res.redirected) {
+          await next();
+        }
+      } catch (error) {
+        // Pass the actual routeMetadata to handleError
+        await handleError(error, routeMetadata, req, res, next);
       }
-    } catch (error) {
-      // Pass the actual routeMetadata to handleError
-      await handleError(error, routeMetadata, req, res, next);
-    }
+    });
   };
 };
 
@@ -164,7 +168,7 @@ const handleRoute = async (
   switch (metadata.action) {
     case RouteAction.Login:
       await handleLogin(client, req, res);
-      break;
+      return;
     case RouteAction.Callback:
       await handleCallback(client, req, res, metadata, next, context);
       break;
@@ -201,6 +205,8 @@ const handleLogin = async (client: Client, req: IRequest, res: IResponse) => {
   req.session.state[state] = { codeVerifier, createdAt: Date.now() };
 
   res.redirect(authUrl);
+
+  return;
 };
 
 /**
@@ -351,7 +357,7 @@ const validateSpecificClaims = (
   }
 };
 
-const csrfMiddleware = (client: Client) => {
+export const csrfMiddleware = (client: Client) => {
   return async (req: IRequest, res: IResponse, next: NextFunction) => {
     const mode = client.getConfig().session?.mode || SessionMode.SERVER;
 
@@ -360,6 +366,7 @@ const csrfMiddleware = (client: Client) => {
       return next();
     }
 
+    // Skip for safe methods (GET, HEAD, OPTIONS)
     if (
       req.method === RequestMethod.GET ||
       req.method === RequestMethod.HEAD ||
@@ -368,17 +375,47 @@ const csrfMiddleware = (client: Client) => {
       return next();
     }
 
-    const csrfToken = req.headers['x-csrf-token'] as string;
-    const storedCsrfToken = req.session?.csrfToken;
+    // --------------------------------------------
+    // 1. Extract CSRF token from request headers
+    // --------------------------------------------
+    let csrfToken: string | undefined;
 
+    // If req.headers is a native "Headers" instance
+    if (req.headers instanceof Headers) {
+      csrfToken = req.headers.get('x-csrf-token') || undefined;
+    }
+    // Otherwise, if it's a plain object
+    else if (typeof req.headers === 'object' && req.headers !== null) {
+      for (const key in req.headers as Record<string, any>) {
+        if (key.toLowerCase() === 'x-csrf-token') {
+          const val = req.headers[key];
+          if (Array.isArray(val)) {
+            // If somehow multiple token headers were sent, pick the last or the first
+            csrfToken = (val as string[])[(val as string[]).length - 1];
+          } else if (typeof val === 'string') {
+            csrfToken = val;
+          }
+          break;
+        }
+      }
+    }
+
+    // --------------------------------------------
+    // 2. Compare extracted token to stored token
+    // --------------------------------------------
+    const storedCsrfToken = req.session?.csrfToken;
     if (!csrfToken || csrfToken !== storedCsrfToken) {
       client
         .getLogger()
         .warn('Invalid CSRF token', { csrfToken, storedCsrfToken });
+      // If your response object is fetch-like or Express-like,
+      // this should still work. Otherwise, see your cookieUtils
+      // approach (e.g. set status code, send text, etc.).
       res.status(403).send('Invalid CSRF token');
       return;
     }
 
-    next();
+    // If everything is good, move on
+    return next();
   };
 };

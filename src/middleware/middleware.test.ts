@@ -1,6 +1,6 @@
 // src/middleware/middleware.test.ts
 
-import { middleware } from './middleware';
+import { csrfMiddleware, middleware } from './middleware';
 import { Client } from '../classes/Client';
 import { MetadataManager } from '../decorators/MetadataManager';
 import {
@@ -15,10 +15,10 @@ import {
 } from '../interfaces';
 import {
   Claims,
+  RequestMethod,
   RouteAction,
   SameSite,
   SessionMode,
-  StorageMechanism,
 } from '../enums';
 import { ClientError } from '../errors';
 
@@ -649,5 +649,161 @@ describe('OIDC Middleware', () => {
     expect(mockResponse.status).toHaveBeenCalledWith(500);
     expect(mockResponse.send).toHaveBeenCalledWith('Authentication failed');
     expect(mockNext).toHaveBeenCalledWith(expect.any(ClientError));
+  });
+
+  describe('csrfMiddleware', () => {
+    let mockClient: jest.Mocked<Client>;
+    let mockRequest: IRequest;
+    let mockResponse: IResponse;
+    let mockNext: jest.Mock;
+
+    beforeEach(() => {
+      mockClient = {
+        getLogger: jest.fn().mockReturnValue({
+          debug: jest.fn(),
+          warn: jest.fn(),
+          error: jest.fn(),
+        }),
+        getConfig: jest.fn(),
+      } as unknown as jest.Mocked<Client>;
+
+      mockRequest = createMockRequest('http://localhost');
+      mockResponse = createMockResponse();
+      mockNext = jest.fn();
+    });
+
+    it('should call next() immediately if session mode is CLIENT', async () => {
+      mockClient.getConfig.mockReturnValue({
+        session: { mode: SessionMode.CLIENT },
+      } as IClientConfig);
+
+      const mw = csrfMiddleware(mockClient);
+      await mw(mockRequest, mockResponse, mockNext);
+
+      expect(mockNext).toHaveBeenCalled();
+      expect(mockResponse.status).not.toHaveBeenCalled();
+      expect(mockResponse.send).not.toHaveBeenCalled();
+    });
+
+    it('should call next() if request method is GET', async () => {
+      mockClient.getConfig.mockReturnValue({
+        session: { mode: SessionMode.SERVER },
+      } as IClientConfig);
+
+      mockRequest = createMockRequest('http://localhost', {
+        method: RequestMethod.GET,
+      });
+
+      const mw = csrfMiddleware(mockClient);
+      await mw(mockRequest, mockResponse, mockNext);
+
+      expect(mockNext).toHaveBeenCalled();
+      expect(mockResponse.status).not.toHaveBeenCalled();
+      expect(mockResponse.send).not.toHaveBeenCalled();
+    });
+
+    it('should call next() if request method is HEAD', async () => {
+      mockClient.getConfig.mockReturnValue({
+        session: { mode: SessionMode.SERVER },
+      } as IClientConfig);
+
+      mockRequest = createMockRequest('http://localhost', {
+        method: RequestMethod.HEAD,
+      });
+
+      const mw = csrfMiddleware(mockClient);
+      await mw(mockRequest, mockResponse, mockNext);
+
+      expect(mockNext).toHaveBeenCalled();
+      expect(mockResponse.status).not.toHaveBeenCalled();
+      expect(mockResponse.send).not.toHaveBeenCalled();
+    });
+
+    it('should call next() if request method is OPTIONS', async () => {
+      mockClient.getConfig.mockReturnValue({
+        session: { mode: SessionMode.SERVER },
+      } as IClientConfig);
+
+      mockRequest = createMockRequest('http://localhost', {
+        method: RequestMethod.OPTIONS,
+      });
+
+      const mw = csrfMiddleware(mockClient);
+      await mw(mockRequest, mockResponse, mockNext);
+
+      expect(mockNext).toHaveBeenCalled();
+      expect(mockResponse.status).not.toHaveBeenCalled();
+      expect(mockResponse.send).not.toHaveBeenCalled();
+    });
+
+    it('should return 403 if x-csrf-token header is missing on a POST', async () => {
+      mockClient.getConfig.mockReturnValue({
+        session: { mode: SessionMode.SERVER },
+      } as IClientConfig);
+
+      mockRequest = createMockRequest('http://localhost', {
+        method: RequestMethod.POST,
+      });
+      // No 'x-csrf-token' header set
+
+      const mw = csrfMiddleware(mockClient);
+      await mw(mockRequest, mockResponse, mockNext);
+
+      expect(mockNext).not.toHaveBeenCalled();
+      expect(mockResponse.status).toHaveBeenCalledWith(403);
+      expect(mockResponse.send).toHaveBeenCalledWith('Invalid CSRF token');
+    });
+
+    it('should return 403 if token in header does not match session csrfToken', async () => {
+      mockClient.getConfig.mockReturnValue({
+        session: { mode: SessionMode.SERVER },
+      } as IClientConfig);
+
+      mockRequest = createMockRequest('http://localhost', {
+        method: RequestMethod.POST,
+      });
+      // Simulate an incoming CSRF token that does not match
+      (mockRequest.headers as any)['x-csrf-token'] = 'mismatch_token';
+      // Simulate a session that has a different token
+      mockRequest.session = { csrfToken: 'real_token' } as ISessionData;
+
+      const mw = csrfMiddleware(mockClient);
+      await mw(mockRequest, mockResponse, mockNext);
+
+      expect(mockNext).not.toHaveBeenCalled();
+      expect(mockResponse.status).toHaveBeenCalledWith(403);
+      expect(mockResponse.send).toHaveBeenCalledWith('Invalid CSRF token');
+    });
+
+    it('should call next() if token in header matches the session csrfToken', async () => {
+      mockClient.getConfig.mockReturnValue({
+        session: { mode: SessionMode.SERVER },
+      } as IClientConfig);
+
+      mockRequest = createMockRequest('http://localhost', {
+        method: RequestMethod.POST,
+        headers: {
+          'x-csrf-token': 'real_token',
+        },
+      });
+      (mockRequest.headers as any)['x-csrf-token'] = 'real_token';
+      // Override the get method to return the CSRF token when requested
+      (mockRequest.headers.get as jest.Mock).mockImplementation(
+        (header: string) => {
+          if (header.toLowerCase() === 'host') return 'localhost';
+          if (header.toLowerCase() === 'x-csrf-token') return 'real_token';
+          return null;
+        },
+      );
+
+      mockRequest.session = { csrfToken: 'real_token' } as ISessionData;
+
+      const mw = csrfMiddleware(mockClient);
+      await mw(mockRequest, mockResponse, mockNext);
+
+      expect(mockNext).toHaveBeenCalled();
+      expect(mockResponse.status).not.toHaveBeenCalled();
+      expect(mockResponse.send).not.toHaveBeenCalled();
+    });
   });
 });
