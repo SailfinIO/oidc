@@ -13,7 +13,7 @@ import {
   TokenSet,
 } from '../interfaces';
 import { ClientError } from '../errors';
-import { Cookie, parseCookies } from '../utils';
+import { Cookie, parseCookies, setCookieHeader } from '../utils';
 import { SameSite, SessionMode, StorageMechanism } from '../enums';
 import { randomBytes } from 'crypto';
 
@@ -135,51 +135,44 @@ export class Session implements ISession {
   }
 
   private exposeTokensToClient(context: IStoreContext, tokens: TokenSet): void {
-    const { response } = context;
-
-    if (!response) {
-      this.logger.error(
-        'Response object is required to set client-side tokens.',
-      );
+    if (!context.response) {
+      this.logger.warn('No response object, skipping exposeTokensToClient');
       return;
     }
 
-    // Define token cookies
     const accessTokenCookie = new Cookie('access_token', tokens.access_token, {
       httpOnly: true,
       secure: true,
       sameSite: SameSite.STRICT,
       path: '/',
-      maxAge: tokens.expires_in || 3600, // Default to 1 hour if not specified
+      maxAge: tokens.expires_in || 3600,
     });
+    setCookieHeader(context.response, accessTokenCookie.serialize());
 
-    const idTokenCookie = tokens.id_token
-      ? new Cookie('id_token', tokens.id_token, {
-          httpOnly: true,
-          secure: true,
-          sameSite: SameSite.STRICT,
-          path: '/',
-          maxAge: tokens.expires_in || 3600,
-        })
-      : null;
-
-    const refreshTokenCookie = tokens.refresh_token
-      ? new Cookie('refresh_token', tokens.refresh_token, {
-          httpOnly: true,
-          secure: true,
-          sameSite: SameSite.STRICT,
-          path: '/',
-          maxAge: 86400, // Example: 1 day
-        })
-      : null;
-
-    // Append tokens to response cookies
-    response.headers.append('Set-Cookie', accessTokenCookie.serialize());
-    if (idTokenCookie) {
-      response.headers.append('Set-Cookie', idTokenCookie.serialize());
+    if (tokens.id_token) {
+      const idTokenCookie = new Cookie('id_token', tokens.id_token, {
+        httpOnly: true,
+        secure: true,
+        sameSite: SameSite.STRICT,
+        path: '/',
+        maxAge: tokens.expires_in || 3600,
+      });
+      setCookieHeader(context.response, idTokenCookie.serialize());
     }
-    if (refreshTokenCookie) {
-      response.headers.append('Set-Cookie', refreshTokenCookie.serialize());
+
+    if (tokens.refresh_token) {
+      const refreshTokenCookie = new Cookie(
+        'refresh_token',
+        tokens.refresh_token,
+        {
+          httpOnly: true,
+          secure: true,
+          sameSite: SameSite.STRICT,
+          path: '/',
+          maxAge: 86400,
+        },
+      );
+      setCookieHeader(context.response, refreshTokenCookie.serialize());
     }
   }
 
@@ -193,7 +186,7 @@ export class Session implements ISession {
       expires: new Date(0),
     });
 
-    context.response.headers.append('Set-Cookie', expiredCookie.serialize());
+    setCookieHeader(context.response, expiredCookie.serialize());
   }
 
   private async createNewServerSession(
@@ -238,7 +231,7 @@ export class Session implements ISession {
       maxAge: this.config.session?.ttl ? this.config.session.ttl / 1000 : 3600, // Default 1 hour
     });
 
-    context.response.headers.append('Set-Cookie', sessionCookie.serialize());
+    setCookieHeader(context.response, sessionCookie.serialize());
 
     // Generate CSRF token
     const csrfToken = randomBytes(32).toString('hex');
@@ -253,7 +246,7 @@ export class Session implements ISession {
       maxAge: 3600, // 1 hour
     });
 
-    context.response.headers.append('Set-Cookie', csrfCookie.serialize());
+    setCookieHeader(context.response, csrfCookie.serialize());
 
     // Schedule token refresh
     this.scheduleTokenRefresh(context);
