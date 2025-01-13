@@ -406,14 +406,11 @@ export class Session implements ISession {
       this.config.session?.mode === SessionMode.HYBRID
     ) {
       // Re-save session data
-      await this.saveTokensToServerSideSession(context, tokens);
+      await this.save(context, tokens);
     }
   }
 
-  public async saveTokensToServerSideSession(
-    context: IStoreContext,
-    tokens: TokenSet,
-  ): Promise<void> {
+  public async save(context: IStoreContext, tokens: TokenSet): Promise<void> {
     // 1) Check if we have an existing session ID (sid) from cookies
     const sessionCookieName = this.config.session?.cookie?.name || 'sid';
     const sid = context.request.cookies[sessionCookieName];
