@@ -153,7 +153,7 @@ describe('Session', () => {
 
       // Assert
       expect(sessionStore.get).toHaveBeenCalledWith('mock-sid', context);
-      expect(logger.debug).toHaveBeenCalledWith('Existing session resumed', {
+      expect(logger.debug).toHaveBeenCalledWith('Server-side session resumed', {
         // Updated line
         sid: 'mock-sid',
       });
@@ -206,12 +206,16 @@ describe('Session', () => {
         {
           cookie: mockTokens,
           user: mockUser,
+          csrfToken: expect.any(String),
         },
         context,
       );
-      expect(logger.debug).toHaveBeenCalledWith('New session created', {
-        sid: 'new-mock-sid',
-      });
+      expect(logger.debug).toHaveBeenCalledWith(
+        'New server-side session created',
+        {
+          sid: 'new-mock-sid',
+        },
+      );
       expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 60000); // (120 - 60) * 1000
       expect(logger.debug).toHaveBeenCalledWith('Scheduled token refresh in', {
         refreshTime: 60000,
@@ -285,6 +289,7 @@ describe('Session', () => {
         {
           cookie: mockTokens,
           user: undefined,
+          csrfToken: expect.any(String),
         },
         context,
       );
@@ -292,9 +297,12 @@ describe('Session', () => {
         'Failed to fetch user info during session creation',
         { error: userInfoError },
       );
-      expect(logger.debug).toHaveBeenCalledWith('New session created', {
-        sid: 'new-mock-sid',
-      });
+      expect(logger.debug).toHaveBeenCalledWith(
+        'New server-side session created',
+        {
+          sid: 'new-mock-sid',
+        },
+      );
       expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 60000); // (120 - 60) * 1000
     });
 

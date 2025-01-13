@@ -20,6 +20,7 @@ import {
   UILocales,
   AuthMethod,
   Algorithm,
+  SessionMode,
 } from '../enums';
 import { ILogger } from './ILogger';
 import { ISessionStore } from './ISessionStore';
@@ -271,14 +272,30 @@ export interface IClientConfig {
    */
   retryAttempts?: number;
 
-  /** Session Management Configuration */
+  /**
+   * Session Management Configuration
+   */
   session?: {
     /**
-     * Storage mechanism for session data (e.g., MEMORY, COOKIE).
+     * Specifies the session management mode: 'server', 'client', or 'hybrid'.
+     *
+     * @type {SessionMode}
+     */
+    mode?: SessionMode;
+
+    /**
+     * Storage mechanism for server-side sessions.
      *
      * @type {StorageMechanism | undefined}
      */
-    mechanism?: StorageMechanism;
+    serverStorage?: StorageMechanism;
+
+    /**
+     * Storage mechanism for client-side sessions.
+     *
+     * @type {StorageMechanism | undefined}
+     */
+    clientStorage?: StorageMechanism;
 
     /**
      * Specific options for session storage, based on the selected mechanism.
@@ -288,7 +305,7 @@ export interface IClientConfig {
     options?: StoreOptions;
 
     /**
-     * Custom session store implementation.
+     * Custom session store implementation for server-side sessions.
      *
      * @type {ISessionStore | undefined}
      */
@@ -298,7 +315,6 @@ export interface IClientConfig {
      * Configuration for the session cookie.
      *
      * @property {string | undefined} name - The name of the session cookie (e.g., 'sid').
-     * @property {string | undefined} secret - The secret used for signing cookies.
      * @property {CookieOptions | undefined} options - Additional cookie attributes.
      */
     cookie?: {

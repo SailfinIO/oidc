@@ -21,6 +21,7 @@ export interface IResponse extends Omit<globalThis.Response, 'status'> {
   redirect(url: string): void;
   status(code: number): this;
   send(body: string): this;
+  json(...body: Array<Record<string, any>>): Promise<any>;
 }
 
 /**

@@ -13,7 +13,13 @@ import {
   IClientConfig,
   IStoreContext,
 } from '../interfaces';
-import { Claims, RouteAction, SameSite, StorageMechanism } from '../enums';
+import {
+  Claims,
+  RouteAction,
+  SameSite,
+  SessionMode,
+  StorageMechanism,
+} from '../enums';
 import { ClientError } from '../errors';
 
 jest.mock('../classes/Client');
@@ -87,16 +93,16 @@ const mockCookieOptions: CookieOptions = {
 };
 
 const mockConfig: IClientConfig = {
-  clientId: 'your-client-id', // Replace with actual client ID
-  redirectUri: 'http://localhost/callback', // Replace with actual redirect URI
-  scopes: ['openid', 'profile', 'email'], // Replace with required scopes
-  discoveryUrl: 'http://localhost/.well-known/openid-configuration', // Replace with actual discovery URL
+  clientId: 'your-client-id',
+  redirectUri: 'http://localhost/callback',
+  scopes: ['openid', 'profile', 'email'],
+  discoveryUrl: 'http://localhost/.well-known/openid-configuration',
   session: {
-    mechanism: StorageMechanism.MEMORY, // Adjust based on your application
+    mode: SessionMode.SERVER,
     store: mockSessionStore,
     cookie: {
       name: 'session_cookie',
-      secret: 'supersecretkey', // Replace with actual secret
+      secret: 'supersecretkey',
       options: mockCookieOptions,
     },
     useSilentRenew: false,

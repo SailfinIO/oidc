@@ -22,6 +22,8 @@ export interface ISession {
    */
   stop(context: IStoreContext): Promise<void>;
 
+  update(context: IStoreContext): Promise<void>;
+
   /**
    * The current session ID.
    *

@@ -9,7 +9,7 @@ import {
   ISessionData,
   IStoreContext,
 } from '../interfaces';
-import { RequestMethod, RouteAction, SameSite } from '../enums';
+import { RequestMethod, RouteAction, SameSite, SessionMode } from '../enums';
 import { ClientError } from '../errors/ClientError';
 import { NextFunction } from '../types';
 import { Cookie, parseCookies } from '../utils';
@@ -21,6 +21,8 @@ import { Cookie, parseCookies } from '../utils';
  * @returns {Function} Express-compatible middleware function.
  */
 export const middleware = (client: Client) => {
+  csrfMiddleware(client);
+
   return async (
     req: IRequest,
     res: IResponse,
@@ -347,4 +349,36 @@ const validateSpecificClaims = (
       'MISSING_CLAIMS',
     );
   }
+};
+
+const csrfMiddleware = (client: Client) => {
+  return async (req: IRequest, res: IResponse, next: NextFunction) => {
+    const mode = client.getConfig().session?.mode || SessionMode.SERVER;
+
+    // Only enforce CSRF in server-side or hybrid modes
+    if (mode === SessionMode.CLIENT) {
+      return next();
+    }
+
+    if (
+      req.method === RequestMethod.GET ||
+      req.method === RequestMethod.HEAD ||
+      req.method === RequestMethod.OPTIONS
+    ) {
+      return next();
+    }
+
+    const csrfToken = req.headers['x-csrf-token'] as string;
+    const storedCsrfToken = req.session?.csrfToken;
+
+    if (!csrfToken || csrfToken !== storedCsrfToken) {
+      client
+        .getLogger()
+        .warn('Invalid CSRF token', { csrfToken, storedCsrfToken });
+      res.status(403).send('Invalid CSRF token');
+      return;
+    }
+
+    next();
+  };
 };

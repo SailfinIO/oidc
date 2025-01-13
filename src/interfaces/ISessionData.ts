@@ -45,4 +45,11 @@ export interface ISessionData {
       [key: string]: any; // If you need more fields
     }
   >;
+
+  /**
+   * Contains the CSRF token associated with the session.
+   *
+   * @type {string | undefined}
+   */
+  csrfToken?: string | undefined;
 }
