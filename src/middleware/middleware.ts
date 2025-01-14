@@ -134,7 +134,9 @@ export const middleware = (client: Client) => {
 
             const cookie = new Cookie(sessionCookieName, sid, options);
 
-            setCookieHeader(context.response, cookie.serialize());
+            // setCookieHeader(context.response, cookie.serialize());
+
+            res.headers.append('Set-Cookie', cookie.serialize());
           }
         }
 
