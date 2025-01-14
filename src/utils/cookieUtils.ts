@@ -54,68 +54,49 @@ export const setCookieHeader = (
   response: IResponse | undefined,
   cookieString: string,
 ): boolean => {
-  if (!response) return;
+  if (!response) {
+    return false;
+  }
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Case A: Express-style
-  //   - If your custom IResponse is actually an Express Response,
-  //     it might have getHeader() / setHeader().
   // ─────────────────────────────────────────────────────────────────────────────
   if (
     typeof (response as any).getHeader === 'function' &&
     typeof (response as any).setHeader === 'function'
   ) {
-    const expressRes = response as any; // cast to "any" so we can call getHeader() etc.
-
-    // 1) Grab any existing 'Set-Cookie' header(s)
+    const expressRes = response as any;
     const currentSetCookie = expressRes.getHeader('Set-Cookie');
-
-    /**
-     * currentSetCookie can be:
-     *   - undefined (no Set-Cookie yet)
-     *   - string (one single Set-Cookie)
-     *   - string[] (multiple Set-Cookie lines)
-     */
     let allCookies: string[] = [];
 
     if (Array.isArray(currentSetCookie)) {
-      // Already multiple cookies
       allCookies = [...currentSetCookie];
     } else if (typeof currentSetCookie === 'string') {
-      // Just one existing cookie
       allCookies = [currentSetCookie];
     } else if (currentSetCookie != null) {
-      // Something else (rare). We'll just coerce it:
       allCookies = [String(currentSetCookie)];
     }
 
-    // 2) Append our new cookie
     allCookies.push(cookieString);
-
-    // 3) Re-set all cookies
     expressRes.setHeader('Set-Cookie', allCookies);
-
-    return;
+    return true; // SUCCESS
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Case B: Fetch-like
-  //   - If you have a Response object with response.headers.append()
-  //   - Each .append() call adds a new "Set-Cookie" header line.
   // ─────────────────────────────────────────────────────────────────────────────
   if (response.headers && typeof response.headers.append === 'function') {
-    // Fetch-like APIs natively support multiple Set-Cookie headers by
-    // calling .append('Set-Cookie', cookieString) multiple times.
     response.headers.append('Set-Cookie', cookieString);
-    return;
+    return true; // SUCCESS
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Otherwise, log a warning
+  // Otherwise
   // ─────────────────────────────────────────────────────────────────────────────
   console.warn(
     'Unable to set cookie. The response object is not recognized as Express or fetch-like.',
   );
+  return false;
 };
 
 /**
