@@ -1,3 +1,21 @@
+## [0.0.12](https://github.com/SailfinIO/oidc/compare/v0.0.11...v0.0.12) (2025-01-14)
+
+### Bug Fixes
+
+* add other express like functionality ([c6e793e](https://github.com/SailfinIO/oidc/commit/c6e793e99a28ddc395514c83601ade46ec3aeb64))
+* add testing for cookie header append ([a2ca435](https://github.com/SailfinIO/oidc/commit/a2ca4355b6ed2406f75c89f61bc335543735ad2d))
+* coverage ([04a8523](https://github.com/SailfinIO/oidc/commit/04a85233ca584fb578f57d540d79131371c6b4d0))
+* csrf token checking ([27d1ecc](https://github.com/SailfinIO/oidc/commit/27d1ecc259e66565002a68b15490994e9298b5f9))
+* debug logs ([e68c581](https://github.com/SailfinIO/oidc/commit/e68c5816537936c7c4dd0c5202f29f354e92f5e5))
+* no need to include prompt ([39b3ad0](https://github.com/SailfinIO/oidc/commit/39b3ad0afa59b55f8df811d263232fe20664b896))
+* parse express in callback ([c690308](https://github.com/SailfinIO/oidc/commit/c690308de31ee26bbeb24d72b632ae1780d5ee20))
+* pass config into cookies ([2481cd2](https://github.com/SailfinIO/oidc/commit/2481cd2e5648488648754ec0d878b245323628af))
+* patch for express ([9bc20a6](https://github.com/SailfinIO/oidc/commit/9bc20a65b7fbd06c560c39041207ac6a513a6cc5))
+* README doc updates for decorator and middleware support ([0bf45ff](https://github.com/SailfinIO/oidc/commit/0bf45ff76895d7a3fe4208c92ba54fa425bac346))
+* retrun correct bools ([1eb1fcc](https://github.com/SailfinIO/oidc/commit/1eb1fcc97b6dd102cc0fa7062e6d40e1a3e0c9e0))
+* session handling ([9f0a283](https://github.com/SailfinIO/oidc/commit/9f0a28316efa639c3d9da1856dbf4d16712aa6f4))
+* use cookie util to set header ([8801bf5](https://github.com/SailfinIO/oidc/commit/8801bf5baad12f34a467fab7b53ed0bea042be86))
+
 ## [0.0.12-beta.13](https://github.com/SailfinIO/oidc/compare/v0.0.12-beta.12...v0.0.12-beta.13) (2025-01-14)
 
 ### Bug Fixes
