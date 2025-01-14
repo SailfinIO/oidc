@@ -1,5 +1,6 @@
 // src/decorators/oidcCallback.ts
 
+import { patchExpressResponseForSetCookie } from '../utils';
 import { Client } from '../classes/Client';
 import { IStoreContext } from '../interfaces';
 import { MetadataManager } from './MetadataManager';
@@ -159,6 +160,8 @@ export const OidcCallback = (
     ) {
       const req: any = args[0];
       const res: any = args[1];
+
+      patchExpressResponseForSetCookie(res);
 
       if (!req || !res) {
         if (res) {

@@ -18,6 +18,7 @@ import {
   LoginPrompt,
   UILocales,
   SameSite,
+  SessionMode,
 } from '../enums';
 import { IClientConfig } from '../interfaces';
 import { Logger } from '../utils';
@@ -51,7 +52,9 @@ export const defaultClientConfig: Partial<IClientConfig> = {
 
   /** Session Management Configuration */
   session: {
-    mechanism: StorageMechanism.MEMORY, // Use in-memory session storage by default
+    mode: SessionMode.SERVER, // Default to server-side session management
+    serverStorage: StorageMechanism.MEMORY,
+    clientStorage: StorageMechanism.COOKIE, // For client-side tokens
     useSilentRenew: true, // Enable silent renewal of tokens
     store: undefined, // No custom session store by default
     ttl: 3600000, // Session TTL of 1 hour (in milliseconds)

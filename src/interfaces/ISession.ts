@@ -1,4 +1,5 @@
 import { IStoreContext } from './IStore';
+import { TokenSet } from './TokenSet';
 
 /**
  * Interface representing a Session for managing token lifecycle and refresh scheduling.
@@ -21,6 +22,10 @@ export interface ISession {
    * @returns { Promise<void> }
    */
   stop(context: IStoreContext): Promise<void>;
+
+  update(context: IStoreContext): Promise<void>;
+
+  save(context: IStoreContext, tokens: TokenSet): Promise<void>;
 
   /**
    * The current session ID.

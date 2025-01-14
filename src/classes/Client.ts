@@ -3,7 +3,13 @@
 import { Auth } from './Auth';
 import { UserInfo } from './UserInfo';
 import { Logger } from '../utils';
-import { GrantType, LogLevel, TokenTypeHint, StorageMechanism } from '../enums';
+import {
+  GrantType,
+  LogLevel,
+  TokenTypeHint,
+  StorageMechanism,
+  SessionMode,
+} from '../enums';
 import { Issuer } from './Issuer';
 import {
   IClientConfig,
@@ -51,20 +57,26 @@ export class Client {
         true,
       );
 
-    // Perform config validation now that logger is initialized
     this.validateConfig(this.config);
 
-    // -------------------------------------------
-    // Initialize the store instances
-    // -------------------------------------------
-    const storeInstances: StoreInstances = Store.create(
-      // fallback to memory if none specified
-      this.config.session?.mechanism || StorageMechanism.MEMORY,
-      this.config.session?.options,
-      this.logger,
-    );
-    this.sessionStore = storeInstances.sessionStore;
-    // storeInstances.store is available if you need it.
+    const sessionMode = this.config.session?.mode || SessionMode.SERVER;
+    let storeInstances: StoreInstances | null = null;
+
+    if (
+      sessionMode === SessionMode.SERVER ||
+      sessionMode === SessionMode.HYBRID
+    ) {
+      const storageMechanism =
+        this.config.session?.serverStorage || StorageMechanism.MEMORY;
+      storeInstances = Store.create(
+        storageMechanism,
+        this.config.session?.options,
+        this.logger,
+      );
+      this.sessionStore = storeInstances.sessionStore;
+    } else {
+      this.sessionStore = null; // No server-side session store needed
+    }
 
     // Initialize other dependencies
     this.issuer = new Issuer(this.config.discoveryUrl, this.logger);
@@ -95,7 +107,7 @@ export class Client {
         this.logger,
         this.tokenClient,
         this.userInfoClient,
-        this.sessionStore,
+        this.sessionStore!,
       );
 
       this.initialized = true;
@@ -278,5 +290,14 @@ export class Client {
     const logoutUrl = await this.auth.getLogoutUrl(idTokenHint);
     this.logger.info('Logout initiated', { logoutUrl });
     return logoutUrl;
+  }
+
+  public async silentRenew(context: IStoreContext): Promise<void> {
+    // If we have a refresh token, call tokenClient.refreshAccessToken()
+    await this.tokenClient.refreshAccessToken();
+
+    if (this.session) {
+      await this.session.update(context);
+    }
   }
 }

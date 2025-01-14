@@ -15,7 +15,7 @@ import {
   ILogger,
 } from '../interfaces';
 import { randomUUID } from 'crypto';
-import { Mutex, Logger, Cookie, parseCookies } from '../utils';
+import { Mutex, Logger, Cookie, parseCookies, setCookieHeader } from '../utils';
 import { SameSite } from '../enums';
 import { IStore } from '../interfaces/IStore';
 import { MemoryStore } from './MemoryStore';
@@ -90,7 +90,7 @@ export class CookieStore implements ISessionStore {
       });
 
       const serializedCookie = cookie.serialize();
-      context.response.headers.append('Set-Cookie', serializedCookie);
+      setCookieHeader(context.response, serializedCookie);
       this.logger.debug('Session set with SID', { sid });
       return sid;
     });
@@ -158,7 +158,7 @@ export class CookieStore implements ISessionStore {
       });
 
       const serializedCookie = expiredCookie.serialize();
-      context.response.headers.append('Set-Cookie', serializedCookie);
+      setCookieHeader(context.response, serializedCookie);
       this.logger.debug('Session destroyed', { sid });
     });
   }
@@ -190,7 +190,7 @@ export class CookieStore implements ISessionStore {
       });
 
       const serializedCookie = touchedCookie.serialize();
-      context.response.headers.append('Set-Cookie', serializedCookie);
+      setCookieHeader(context.response, serializedCookie);
       this.logger.debug('Session touched', { sid });
     });
   }

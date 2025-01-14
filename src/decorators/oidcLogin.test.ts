@@ -58,9 +58,13 @@ describe('OidcLogin Decorator', () => {
 
     // Default implementation for getConfig
     mockClient.getConfig.mockReturnValue({
+      clientId: 'dummy-client-id', // minimal required property
+      redirectUri: '/', // minimal required property
+      scopes: [], // minimal required property
+      discoveryUrl: 'http://dummy', // minimal required property
       session: {
-        mechanism: StorageMechanism.MEMORY, // Assuming MEMORY is a valid enum value
-        options: {}, // Provide empty options or mock as needed
+        mechanism: StorageMechanism.MEMORY,
+        options: {},
       },
     } as IClientConfig);
   });

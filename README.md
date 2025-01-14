@@ -4,7 +4,6 @@
 ![npm version](https://img.shields.io/npm/v/@sailfin/oidc.svg)
 [![CodeQL Advanced](https://github.com/SailfinIO/oidc/actions/workflows/codeql.yml/badge.svg)](https://github.com/SailfinIO/oidc/actions/workflows/codeql.yml)
 [![Build](https://github.com/SailfinIO/oidc/actions/workflows/build.yaml/badge.svg)](https://github.com/SailfinIO/oidc/actions/workflows/build.yaml)
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=SailfinIO_oidc&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=SailfinIO_oidc)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=SailfinIO_oidc&metric=coverage)](https://sonarcloud.io/summary/new_code?id=SailfinIO_oidc)
 [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=SailfinIO_oidc&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=SailfinIO_oidc)
 [![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=SailfinIO_oidc&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=SailfinIO_oidc)
@@ -30,6 +29,10 @@ This library is built for enterprise-grade TypeScript and Node.js applications, 
   - [Token Introspection and Revocation](#token-introspection-and-revocation)
   - [Logout](#logout)
   - [Logging](#logging)
+- [Example: NestJS Integration](#example-nestjs-integration)
+  - [Step 1: Create a custom provider](#step-1-create-a-custom-provider)
+  - [Step 2: Initialize the client in main.ts](#step-2-initialize-the-client-in-maints)
+  - [Step 3: Implement a Controller with OIDC Decorators](#step-3-implement-a-controller-with-oidc-decorators)
 - [Configuration Options](#configuration-options)
 - [API Reference](#api-reference)
   - [Methods](#methods)
@@ -80,9 +83,12 @@ import {
   Scopes,
   GrantType,
   StorageMechanism,
+  SessionMode,
   LogLevel,
   SameSite,
 } from '@sailfin/oidc';
+
+const isProduction = process.env.NODE_ENV === 'production';
 
 // Create a new OIDC Client instance
 const oidcClient = new Client({
@@ -92,19 +98,23 @@ const oidcClient = new Client({
   discoveryUrl: 'https://issuer.com/.well-known/openid-configuration',
   scopes: [Scopes.OpenId, Scopes.Profile, Scopes.Email],
   grantType: GrantType.AuthorizationCode,
-  // Optional session config
   session: {
-    mechanism: StorageMechanism.MEMORY, // or COOKIE, or custom store
-    useSilentRenew: false,
-    // Only needed if using cookie-based sessions
+    mode: SessionMode.HYBRID,
+    serverStorage: StorageMechanism.MEMORY,
+    clientStorage: StorageMechanism.COOKIE,
+    useSilentRenew: true, // Enable silent renewal of tokens
+    ttl: 3600000, // Session TTL of 1 hour (in milliseconds)
     cookie: {
-      name: 'my_session',
+      name: 'auth.sid', // Default session ID cookie name
+      secret: process.env.SESSION_SECRET, // Replace with a secure secret in production
       options: {
-        secure: true,
-        httpOnly: true,
-        sameSite: SameSite.STRICT,
-        path: '/',
-        maxAge: 3600,
+        secure: isProduction ? true : false, // Restrict cookies to HTTPS
+        httpOnly: true, // Prevent JavaScript access to cookies
+        sameSite: isProduction ? SameSite.NONE : SameSite.LAX, // Use Strict SameSite for CSRF protection
+        path: '/', // Default cookie path
+        maxAge: maxAge,
+        domain: isProduction ? process.env.DOMAIN : '.localhost',
+        encode: encodeURIComponent, // Use default URL encoding for cookies
       },
     },
   },
@@ -148,7 +158,8 @@ By default, the client uses an in-memory session store (StorageMechanism.MEMORY)
 
 ```typescript
 session: {
-  mechanism: StorageMechanism.COOKIE,
+  mode: SessionMode.CLIENT,
+  clientStorage: StorageMechanism.COOKIE,
   cookie: {
     name: 'oidcSession',
     options: {
@@ -242,6 +253,204 @@ Customize the logging level:
 
 ```typescript
 oidcClient.setLogLevel('debug');
+```
+
+## Example: NestJS Integration
+
+Below is an example showing how you can integrate @sailfin/oidc with a NestJS application. It demonstrates:
+
+1. Providing the Oidc Client in a Nest module (via a custom provider).
+2. Initializing the client in main.ts and applying the middleware(oidcClient).
+3. Using decorators like @OidcLogin and @OidcCallback in a controller to trigger login and handle callback flows.
+
+### Step 1: Create a custom provider
+
+```typescript
+// oidc.provider.ts
+import {
+  Client,
+  IClientConfig,
+  GrantType,
+  PkceMethod,
+  ResponseType,
+  ResponseMode,
+  Scopes,
+  StorageMechanism,
+  SameSite,
+  SessionMode,
+  LogLevel,
+} from '@sailfin/oidc';
+import { Provider, Logger } from '@nestjs/common';
+
+export const OIDC_CLIENT_PROVIDER: Provider = {
+  provide: 'OidcClient',
+  useFactory: async (): Promise<Client> => {
+    const isProduction = process.env.NODE_ENV === 'production';
+    const config: IClientConfig = {
+      clientId: process.env.SSO_CLIENT_ID,
+      clientSecret: process.env.SSO_CLIENT_SECRET,
+      redirectUri:
+        process.env.SSO_CALLBACK_URL ||
+        'http://localhost:3001/auth/sso/callback',
+      postLogoutRedirectUri:
+        process.env.SSO_POST_LOGOUT_REDIRECT_URI || 'http://localhost:3000/',
+      scopes: [
+        Scopes.OpenId,
+        Scopes.Profile,
+        Scopes.Email,
+        Scopes.OfflineAccess,
+      ],
+      discoveryUrl:
+        process.env.SSO_DISCOVERY_URL ||
+        'https://login.sailfin.io/oidc/endpoint/default/.well-known/openid-configuration',
+      grantType: GrantType.AuthorizationCode,
+      pkce: true,
+      pkceMethod: PkceMethod.S256,
+      responseType: ResponseType.Code,
+      responseMode: ResponseMode.Query,
+      session: {
+        mode: SessionMode.HYBRID,
+        serverStorage: StorageMechanism.MEMORY,
+        clientStorage: StorageMechanism.COOKIE,
+        useSilentRenew: true,
+        ttl: 3600000, // 1 hour in milliseconds
+        cookie: {
+          name: 'auth.sid',
+          secret: process.env.SESSION_SECRET,
+          options: {
+            // IMPORTANT: set secure: false for local dev on HTTP,
+            // or secure: true if you're running HTTPS.
+            secure: isProduction ? true : false,
+            httpOnly: true,
+            sameSite: isProduction ? SameSite.NONE : SameSite.LAX,
+            path: '/',
+            maxAge: 86400 * 1000,
+            domain: isProduction ? process.env.DOMAIN : '.localhost',
+            encode: encodeURIComponent,
+          },
+        },
+      },
+      logging: {
+        logLevel: LogLevel.DEBUG,
+      },
+    };
+
+    const logger = new Logger('OIDCClientProvider');
+    const oidcClient = new Client(config);
+
+    // Optionally do additional async setup here...
+
+    logger.log('OIDC Client initialized successfully');
+    return oidcClient;
+  },
+};
+```
+
+### Step 2: Initialize the client in main.ts
+
+```typescript
+// app.module.ts
+import { Module } from '@nestjs/common';
+import { OIDC_CLIENT_PROVIDER } from './oidc.provider';
+
+@Module({
+  providers: [OIDC_CLIENT_PROVIDER],
+  exports: [OIDC_CLIENT_PROVIDER],
+})
+export class AppModule {}
+```
+
+```typescript
+// main.ts
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from './app.module';
+import { Logger } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { Client, middleware } from '@sailfin/oidc';
+
+async function bootstrap() {
+  const logger = new Logger('Auth-Service');
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Example CORS setup if needed...
+  app.enableCors({
+    origin: ['http://localhost:3000'],
+    credentials: true,
+    exposedHeaders: ['set-cookie'],
+  });
+
+  // Retrieve the OIDC client from the Nest IoC container
+  const oidcClient = app.get<Client>('OidcClient');
+
+  // Apply the OIDC middleware
+  app.use(middleware(oidcClient));
+
+  await app.listen(3001);
+  logger.log(`Listening on port 3001`);
+}
+bootstrap();
+```
+
+### Step 3: Implement a Controller with OIDC Decorators
+
+```typescript
+// auth.controller.ts
+import {
+  Controller,
+  Get,
+  Inject,
+  Logger,
+  HttpStatus,
+  Res,
+  Req,
+  Post,
+  Body,
+} from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import {
+  Client,
+  IRequest,
+  IResponse,
+  OidcCallback,
+  OidcLogin,
+} from '@sailfin/oidc';
+
+@ApiTags('Auth')
+@Controller('auth')
+export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
+  constructor(
+    @Inject('OidcClient')
+    private readonly client: Client,
+  ) {}
+
+  @ApiOperation({ summary: 'Redirect to SSO login' })
+  @ApiResponse({
+    status: HttpStatus.FOUND,
+    description: 'Redirects to SSO login URL',
+  })
+  @Get('sso/login')
+  @OidcLogin()
+  login(@Req() req: IRequest, @Res() res: IResponse): void {
+    // The decorator handles redirect automatically
+  }
+
+  @Get('sso/callback')
+  @OidcCallback({ postLoginRedirectUri: 'http://localhost:3000' })
+  async handleOAuthCallback(@Req() req: IRequest, @Res() res: IResponse) {
+    // The OidcCallback decorator has already exchanged the code for tokens
+    // and stored user info in req.session.user. If you do nothing here,
+    // it will redirect to http://localhost:3000 by default.
+  }
+
+  @Post('test')
+  async testEndpoint(@Req() req, @Res() res) {
+    // Example endpoint that requires tokens from session
+    const user = req.session?.user;
+    res.json({ message: 'Hello, user!', user });
+  }
+}
 ```
 
 ## Configuration Options

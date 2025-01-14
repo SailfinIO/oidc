@@ -57,9 +57,13 @@ describe('OidcCallback Decorator', () => {
 
     // Default implementation for getConfig (session enabled)
     mockClient.getConfig.mockReturnValue({
+      clientId: 'dummy-client-id',
+      redirectUri: '/',
+      scopes: [],
+      discoveryUrl: 'http://dummy',
       session: {
-        mechanism: StorageMechanism.MEMORY, // Assuming MEMORY is a valid enum value
-        options: {}, // Provide empty options or mock as needed
+        mechanism: StorageMechanism.MEMORY,
+        options: {},
       },
     } as IClientConfig);
   });
@@ -420,12 +424,20 @@ describe('OidcCallback Decorator', () => {
     // Ensure getConfig is called twice
     mockClient.getConfig
       .mockReturnValueOnce({
+        clientId: 'dummy',
+        redirectUri: '/',
+        scopes: [],
+        discoveryUrl: 'http://dummy',
         session: {
           mechanism: StorageMechanism.MEMORY,
           options: {},
         },
       } as IClientConfig)
       .mockReturnValueOnce({
+        clientId: 'dummy',
+        redirectUri: '/',
+        scopes: [],
+        discoveryUrl: 'http://dummy',
         session: {
           mechanism: StorageMechanism.MEMORY,
           options: {},
@@ -487,12 +499,20 @@ describe('OidcCallback Decorator', () => {
     // Ensure getConfig is called twice
     mockClient.getConfig
       .mockReturnValueOnce({
+        clientId: 'dummy',
+        redirectUri: '/',
+        scopes: [],
+        discoveryUrl: 'http://dummy',
         session: {
           mechanism: StorageMechanism.MEMORY,
           options: {},
         },
       } as IClientConfig)
       .mockReturnValueOnce({
+        clientId: 'dummy',
+        redirectUri: '/',
+        scopes: [],
+        discoveryUrl: 'http://dummy',
         session: {
           mechanism: StorageMechanism.MEMORY,
           options: {},

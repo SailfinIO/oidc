@@ -11,7 +11,9 @@ import {
   ISessionStore,
   IResponse,
   IRequest,
+  IStoreContext,
 } from '../interfaces';
+import { SessionMode } from '../enums';
 
 jest.useFakeTimers();
 jest.spyOn(global, 'setTimeout');
@@ -153,7 +155,7 @@ describe('Session', () => {
 
       // Assert
       expect(sessionStore.get).toHaveBeenCalledWith('mock-sid', context);
-      expect(logger.debug).toHaveBeenCalledWith('Existing session resumed', {
+      expect(logger.debug).toHaveBeenCalledWith('Server-side session resumed', {
         // Updated line
         sid: 'mock-sid',
       });
@@ -206,12 +208,16 @@ describe('Session', () => {
         {
           cookie: mockTokens,
           user: mockUser,
+          csrfToken: expect.any(String),
         },
         context,
       );
-      expect(logger.debug).toHaveBeenCalledWith('New session created', {
-        sid: 'new-mock-sid',
-      });
+      expect(logger.debug).toHaveBeenCalledWith(
+        'New server-side session created',
+        {
+          sid: 'new-mock-sid',
+        },
+      );
       expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 60000); // (120 - 60) * 1000
       expect(logger.debug).toHaveBeenCalledWith('Scheduled token refresh in', {
         refreshTime: 60000,
@@ -285,6 +291,7 @@ describe('Session', () => {
         {
           cookie: mockTokens,
           user: undefined,
+          csrfToken: expect.any(String),
         },
         context,
       );
@@ -292,9 +299,12 @@ describe('Session', () => {
         'Failed to fetch user info during session creation',
         { error: userInfoError },
       );
-      expect(logger.debug).toHaveBeenCalledWith('New session created', {
-        sid: 'new-mock-sid',
-      });
+      expect(logger.debug).toHaveBeenCalledWith(
+        'New server-side session created',
+        {
+          sid: 'new-mock-sid',
+        },
+      );
       expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 60000); // (120 - 60) * 1000
     });
 
@@ -1004,6 +1014,211 @@ describe('Session', () => {
       expect(() => {
         (session as any).sid = invalidSid;
       }).toThrow('Session ID must be a string or null.');
+    });
+  });
+
+  describe('update', () => {
+    let context: IStoreContext;
+    let mockRequest: IRequest;
+    let mockResponse: IResponse;
+
+    beforeEach(() => {
+      // Prepare a common context and mocks for update tests
+      mockRequest = createMockRequest('http://localhost', {
+        headers: {
+          cookie: 'sid=mock-sid',
+        },
+      });
+      mockResponse = createMockResponse();
+      // Spy on exposeTokensToClient to verify client-side logic
+      jest
+        .spyOn(session as any, 'exposeTokensToClient')
+        .mockImplementation(() => {});
+      context = { request: mockRequest, response: mockResponse };
+    });
+
+    it('should log a warning if no tokens are available after refresh', async () => {
+      // Arrange: tokenClient.getTokens returns null
+      (tokenClient.getTokens as jest.Mock).mockReturnValue(null);
+
+      // Act
+      await session.update(context);
+
+      // Assert: warn logged and no further actions taken
+      expect(logger.warn).toHaveBeenCalledWith(
+        'No tokens available after refresh',
+      );
+    });
+
+    it('should expose tokens to client when in CLIENT mode', async () => {
+      // Arrange
+      config.session!.mode = SessionMode.CLIENT;
+      const tokens = {
+        access_token: 'client-token',
+        token_type: 'Bearer',
+        expires_in: 3600,
+      };
+      (tokenClient.getTokens as jest.Mock).mockReturnValue(tokens);
+      // Spy on save to ensure it's not called in client mode
+      const saveSpy = jest
+        .spyOn(session, 'save' as any)
+        .mockResolvedValue(undefined);
+
+      // Act
+      await session.update(context);
+
+      // Assert
+      expect((session as any).exposeTokensToClient).toHaveBeenCalledWith(
+        context,
+        tokens,
+      );
+      expect(saveSpy).not.toHaveBeenCalled();
+    });
+
+    it('should update session server side in SERVER mode', async () => {
+      // Arrange
+      config.session!.mode = SessionMode.SERVER;
+      const tokens = {
+        access_token: 'server-token',
+        token_type: 'Bearer',
+        expires_in: 3600,
+      };
+      (tokenClient.getTokens as jest.Mock).mockReturnValue(tokens);
+      const saveSpy = jest
+        .spyOn(session, 'save' as any)
+        .mockResolvedValue(undefined);
+
+      // Act
+      await session.update(context);
+
+      // Assert
+      expect(saveSpy).toHaveBeenCalledWith(context, tokens);
+      // client side exposure should not be called
+      expect((session as any).exposeTokensToClient).not.toHaveBeenCalled();
+    });
+
+    it('should handle HYBRID mode by both exposing tokens and updating server side', async () => {
+      // Arrange
+      config.session!.mode = SessionMode.HYBRID;
+      const tokens = {
+        access_token: 'hybrid-token',
+        token_type: 'Bearer',
+        expires_in: 3600,
+      };
+      (tokenClient.getTokens as jest.Mock).mockReturnValue(tokens);
+      const saveSpy = jest
+        .spyOn(session, 'save' as any)
+        .mockResolvedValue(undefined);
+
+      // Act
+      await session.update(context);
+
+      // Assert
+      expect((session as any).exposeTokensToClient).toHaveBeenCalledWith(
+        context,
+        tokens,
+      );
+      expect(saveSpy).toHaveBeenCalledWith(context, tokens);
+    });
+  });
+
+  describe('save', () => {
+    let context: IStoreContext;
+    let mockRequest: IRequest;
+    let mockResponse: IResponse;
+
+    beforeEach(() => {
+      mockRequest = createMockRequest('http://localhost', {
+        headers: {
+          cookie: 'sid=existing-sid',
+        },
+      });
+      // Manually assign cookies property after creation
+      (mockRequest as any).cookies = { sid: 'existing-sid' };
+
+      mockResponse = createMockResponse();
+      context = { request: mockRequest, response: mockResponse };
+    });
+
+    it('should create a new session if no sid cookie is present', async () => {
+      // Arrange
+      delete mockRequest.cookies['sid'];
+      const tokens = {
+        access_token: 'new-session-token',
+        token_type: 'Bearer',
+        expires_in: 3600,
+      };
+      (tokenClient.getTokens as jest.Mock).mockReturnValue(tokens);
+      const createNewServerSessionSpy = jest
+        .spyOn(session as any, 'createNewServerSession')
+        .mockResolvedValue(undefined);
+
+      // Act
+      await session.save(context, tokens);
+
+      // Assert
+      expect(createNewServerSessionSpy).toHaveBeenCalledWith(context, tokens);
+    });
+
+    it('should create a new session if sessionData is not found for existing sid', async () => {
+      // Arrange
+      const tokens = {
+        access_token: 'token',
+        token_type: 'Bearer',
+        expires_in: 3600,
+      };
+      (tokenClient.getTokens as jest.Mock).mockReturnValue(tokens);
+      (sessionStore.get as jest.Mock).mockResolvedValue(null);
+      const createNewServerSessionSpy = jest
+        .spyOn(session as any, 'createNewServerSession')
+        .mockResolvedValue(undefined);
+
+      // Act
+      await session.save(context, tokens);
+
+      // Assert
+      expect(createNewServerSessionSpy).toHaveBeenCalledWith(context, tokens);
+    });
+
+    it('should update an existing session with new tokens', async () => {
+      // Arrange
+      const tokens = {
+        access_token: 'updated-token',
+        token_type: 'Bearer',
+        expires_in: 3600,
+      };
+      const existingSessionData: ISessionData = {
+        cookie: {
+          access_token: 'old-token',
+          token_type: 'Bearer',
+          expires_in: 3600,
+        },
+        user: { sub: 'user789' },
+      };
+      (tokenClient.getTokens as jest.Mock).mockReturnValue(tokens);
+      (sessionStore.get as jest.Mock).mockResolvedValue(existingSessionData);
+      (sessionStore.touch as jest.Mock).mockResolvedValue(undefined);
+      const userInfo = { sub: 'user789', name: 'Alice' };
+      (userInfoClient.getUserInfo as jest.Mock).mockResolvedValue(userInfo);
+
+      // Act
+      await session.save(context, tokens);
+
+      // Assert
+      expect(sessionStore.touch).toHaveBeenCalledWith(
+        'existing-sid',
+        {
+          cookie: tokens,
+          user: userInfo,
+        },
+        context,
+      );
+      expect(logger.debug).toHaveBeenCalledWith(
+        'Server-side session updated with new tokens',
+        {
+          sid: 'existing-sid',
+        },
+      );
     });
   });
 });

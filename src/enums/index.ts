@@ -20,3 +20,4 @@ export * from './CookieAttribute';
 export * from './RequestMethod';
 export * from './RouteAction';
 export * from './AuthMethod';
+export * from './SessionMode';
