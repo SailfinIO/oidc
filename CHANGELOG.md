@@ -1,3 +1,9 @@
+## [0.0.12-beta.6](https://github.com/SailfinIO/oidc/compare/v0.0.12-beta.5...v0.0.12-beta.6) (2025-01-14)
+
+### Bug Fixes
+
+* use cookie util to set header ([8801bf5](https://github.com/SailfinIO/oidc/commit/8801bf5baad12f34a467fab7b53ed0bea042be86))
+
 ## [0.0.12-beta.5](https://github.com/SailfinIO/oidc/compare/v0.0.12-beta.4...v0.0.12-beta.5) (2025-01-13)
 
 ### Bug Fixes
