@@ -1,6 +1,6 @@
 {
   "name": "@sailfin/oidc",
-  "version": "0.0.12-beta.12",
+  "version": "0.0.12-beta.13",
   "description": "An OIDC client for Node.js",
   "author": "Michael Curtis <michael@sailfin.io>",
   "readme": "README.md",

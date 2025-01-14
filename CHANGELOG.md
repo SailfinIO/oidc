@@ -1,3 +1,9 @@
+## [0.0.12-beta.13](https://github.com/SailfinIO/oidc/compare/v0.0.12-beta.12...v0.0.12-beta.13) (2025-01-14)
+
+### Bug Fixes
+
+* README doc updates for decorator and middleware support ([0bf45ff](https://github.com/SailfinIO/oidc/commit/0bf45ff76895d7a3fe4208c92ba54fa425bac346))
+
 ## [0.0.12-beta.12](https://github.com/SailfinIO/oidc/compare/v0.0.12-beta.11...v0.0.12-beta.12) (2025-01-14)
 
 ### Bug Fixes
