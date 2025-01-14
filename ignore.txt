@@ -1,1 +1,0 @@
-Im building an npm package (@sailfin/oidc) that is a typescript oidc/oauth2 client and is using 0 dependencies. Im providing middleware a decorators to help with the login flow. right now im having an issue where the cookies are not being set due to some response context issues. Im going to share some code and logs with you and I hope you can help me determine the issue.
