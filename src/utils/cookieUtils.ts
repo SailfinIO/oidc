@@ -117,3 +117,89 @@ export const setCookieHeader = (
     'Unable to set cookie. The response object is not recognized as Express or fetch-like.',
   );
 };
+
+/**
+ * Patches a response object to behave more like an Express `res`,
+ * ensuring it has getHeader(), setHeader(), get(), set(), and append().
+ *
+ * Internally, stores multiple header values in a Map<string, string[]>.
+ * On .getHeader() / .get(), if there's only 1 value, returns that string;
+ * if more than 1, returns an array of values.
+ *
+ * This is helpful in an environment where you don't have a genuine Express
+ * response and want to run code that expects Express-like behavior.
+ */
+export const patchExpressResponseForSetCookie = (res: any): void => {
+  // We'll store multiple header values under a lowercase key
+  // (e.g. 'set-cookie' => ['session=123; HttpOnly', 'another=cookieValue']).
+  // This is similar to what Express does internally.
+  const headerStore = new Map<string, string[]>();
+
+  // Helper: retrieve all values for a header (case-insensitive).
+  const getHeaderValues = (headerName: string): string[] | undefined => {
+    const lower = headerName.toLowerCase();
+    return headerStore.get(lower);
+  };
+
+  // Helper: set a brand-new array of header values.
+  const setHeaderValues = (headerName: string, values: string[]): void => {
+    const lower = headerName.toLowerCase();
+    headerStore.set(lower, values);
+  };
+
+  // Helper: append one additional header value
+  const appendHeaderValue = (headerName: string, value: string): void => {
+    const lower = headerName.toLowerCase();
+    const existing = headerStore.get(lower) || [];
+    existing.push(value);
+    headerStore.set(lower, existing);
+  };
+
+  // (1) res.getHeader(name)
+  if (typeof res.getHeader !== 'function') {
+    res.getHeader = function (name: string): string | string[] | undefined {
+      const values = getHeaderValues(name);
+      if (!values) return undefined;
+      if (values.length === 1) return values[0];
+      return values;
+    };
+  }
+
+  // (2) res.setHeader(name, value)
+  if (typeof res.setHeader !== 'function') {
+    res.setHeader = function (name: string, value: string | string[]): void {
+      if (Array.isArray(value)) {
+        // multiple header lines
+        value.forEach((v) => appendHeaderValue(name, v));
+      } else {
+        // single header line
+        setHeaderValues(name, [value]);
+      }
+    };
+  }
+
+  // (3) res.get(name) – Express alias for retrieving a header
+  if (typeof res.get !== 'function') {
+    res.get = function (name: string): string | string[] | undefined {
+      // Reuse getHeader under the hood
+      return res.getHeader(name);
+    };
+  }
+
+  // (4) res.set(name, value) – Express alias for setting a header
+  if (typeof res.set !== 'function') {
+    res.set = function (name: string, value: string | string[]): any {
+      // Reuse setHeader under the hood
+      res.setHeader(name, value);
+      return res; // Express usually returns `this`.
+    };
+  }
+
+  // (5) res.append(name, value) – used for appending values (especially cookies)
+  if (typeof res.append !== 'function') {
+    res.append = function (name: string, value: string): any {
+      appendHeaderValue(name, value);
+      return res;
+    };
+  }
+};
