@@ -1,3 +1,9 @@
+## [0.0.12-beta.10](https://github.com/SailfinIO/oidc/compare/v0.0.12-beta.9...v0.0.12-beta.10) (2025-01-14)
+
+### Bug Fixes
+
+* no need to include prompt ([39b3ad0](https://github.com/SailfinIO/oidc/commit/39b3ad0afa59b55f8df811d263232fe20664b896))
+
 ## [0.0.12-beta.9](https://github.com/SailfinIO/oidc/compare/v0.0.12-beta.8...v0.0.12-beta.9) (2025-01-14)
 
 ### Bug Fixes
