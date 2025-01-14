@@ -152,6 +152,9 @@ export class Session implements ISession {
     ) => {
       const cookie = new Cookie(cookieName, cookieVal, options);
       const cookieString = cookie.serialize();
+      this.logger.debug('Setting cookie', { cookieName, cookieString });
+      // debug the contest.response
+      this.logger.debug('context.response', context.response);
       const success = setCookieHeader(context.response, cookieString);
 
       if (!success) {
