@@ -1,3 +1,9 @@
+## [0.0.12-beta.9](https://github.com/SailfinIO/oidc/compare/v0.0.12-beta.8...v0.0.12-beta.9) (2025-01-14)
+
+### Bug Fixes
+
+* debug logs ([e68c581](https://github.com/SailfinIO/oidc/commit/e68c5816537936c7c4dd0c5202f29f354e92f5e5))
+
 ## [0.0.12-beta.8](https://github.com/SailfinIO/oidc/compare/v0.0.12-beta.7...v0.0.12-beta.8) (2025-01-14)
 
 ### Bug Fixes
