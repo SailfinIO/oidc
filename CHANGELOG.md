@@ -1,3 +1,9 @@
+## [0.0.12-beta.11](https://github.com/SailfinIO/oidc/compare/v0.0.12-beta.10...v0.0.12-beta.11) (2025-01-14)
+
+### Bug Fixes
+
+* parse express in callback ([c690308](https://github.com/SailfinIO/oidc/commit/c690308de31ee26bbeb24d72b632ae1780d5ee20))
+
 ## [0.0.12-beta.10](https://github.com/SailfinIO/oidc/compare/v0.0.12-beta.9...v0.0.12-beta.10) (2025-01-14)
 
 ### Bug Fixes
