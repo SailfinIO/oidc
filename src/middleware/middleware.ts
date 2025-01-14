@@ -12,7 +12,7 @@ import {
 import { RequestMethod, RouteAction, SameSite, SessionMode } from '../enums';
 import { ClientError } from '../errors/ClientError';
 import { NextFunction } from '../types';
-import { Cookie, parseCookies } from '../utils';
+import { Cookie, parseCookies, setCookieHeader } from '../utils';
 
 /**
  * Middleware function compatible with Express.
@@ -131,7 +131,7 @@ export const middleware = (client: Client) => {
 
             const cookie = new Cookie(sessionCookieName, sid, options);
 
-            res.headers.append('Set-Cookie', cookie.serialize());
+            setCookieHeader(context.response, cookie.serialize());
           }
         }
 
