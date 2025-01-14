@@ -1,3 +1,9 @@
+## [0.0.12-beta.12](https://github.com/SailfinIO/oidc/compare/v0.0.12-beta.11...v0.0.12-beta.12) (2025-01-14)
+
+### Bug Fixes
+
+* retrun correct bools ([1eb1fcc](https://github.com/SailfinIO/oidc/commit/1eb1fcc97b6dd102cc0fa7062e6d40e1a3e0c9e0))
+
 ## [0.0.12-beta.11](https://github.com/SailfinIO/oidc/compare/v0.0.12-beta.10...v0.0.12-beta.11) (2025-01-14)
 
 ### Bug Fixes
