@@ -1,3 +1,9 @@
+## [0.0.12-beta.8](https://github.com/SailfinIO/oidc/compare/v0.0.12-beta.7...v0.0.12-beta.8) (2025-01-14)
+
+### Bug Fixes
+
+* add other express like functionality ([c6e793e](https://github.com/SailfinIO/oidc/commit/c6e793e99a28ddc395514c83601ade46ec3aeb64))
+
 ## [0.0.12-beta.7](https://github.com/SailfinIO/oidc/compare/v0.0.12-beta.6...v0.0.12-beta.7) (2025-01-14)
 
 ### Bug Fixes
