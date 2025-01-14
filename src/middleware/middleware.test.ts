@@ -29,21 +29,53 @@ const createMockResponse = (init: Partial<IResponse> = {}): IResponse => {
   const headers = new Headers(init.headers);
   let redirected = false;
 
-  return {
+  // We'll store multiple header values ourselves (esp. for Set-Cookie)
+  const multiHeaders = new Map<string, string[]>();
+
+  const mockRes = {
     redirect: jest.fn().mockImplementation((url: string) => {
       redirected = true;
-      headers.append('Location', url);
-      // You can add more logic here if needed
+      headers.set('Location', url);
+      // or multiHeaders.get('Location') or similar
     }),
     status: jest.fn().mockReturnThis(),
     send: jest.fn().mockReturnThis(),
-    headers,
+    // A real Express res uses `res.append(header, value)` to add a new value
+    append: jest.fn().mockImplementation((name: string, value: string) => {
+      const lowerName = name.toLowerCase();
+      if (!multiHeaders.has(lowerName)) {
+        multiHeaders.set(lowerName, []);
+      }
+      // push this new value into the array
+      multiHeaders.get(lowerName)!.push(value);
+    }),
+    get: jest.fn().mockImplementation((name: string) => {
+      const lowerName = name.toLowerCase();
+      if (!multiHeaders.has(lowerName)) {
+        return undefined;
+      }
+      const vals = multiHeaders.get(lowerName)!;
+      // For Express: if there's only 1 value, return it as a string;
+      // if more than one, return array, etc.
+      if (vals.length === 1) return vals[0];
+      return vals;
+    }),
+    set: jest
+      .fn()
+      .mockImplementation((name: string, value: string | string[]) => {
+        const lowerName = name.toLowerCase();
+        multiHeaders.set(lowerName, Array.isArray(value) ? value : [value]);
+      }),
+
+    headers, // you can keep this for reference if you want a fetch-like property
     get redirected() {
       return redirected;
     },
     set redirected(value: boolean) {
       redirected = value;
     },
+
+    // The rest of your fetch-like fields:
     body: null,
     bodyUsed: false,
     ok: true,
@@ -58,6 +90,8 @@ const createMockResponse = (init: Partial<IResponse> = {}): IResponse => {
     text: jest.fn().mockResolvedValue(''),
     ...init,
   } as unknown as IResponse;
+
+  return mockRes;
 };
 
 const createMockRequest = (

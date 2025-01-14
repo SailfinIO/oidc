@@ -31,6 +31,9 @@ export const middleware = (client: Client) => {
     if (!req || !res) {
       return next();
     }
+
+    patchExpressResponseForSetCookie(res);
+
     await csrfMw(req, res, async (csrfErr) => {
       if (csrfErr) {
         // If CSRF check fails, we won't proceed
@@ -418,4 +421,23 @@ export const csrfMiddleware = (client: Client) => {
     // If everything is good, move on
     return next();
   };
+};
+
+const patchExpressResponseForSetCookie = (res: any) => {
+  if (typeof res.getHeader !== 'function') {
+    res.getHeader = function (name: string) {
+      const value = res.get(name);
+      return Array.isArray(value) ? value : (value ?? undefined);
+    };
+  }
+
+  if (typeof res.setHeader !== 'function') {
+    res.setHeader = function (name: string, value: string | string[]) {
+      if (Array.isArray(value)) {
+        value.forEach((v) => res.append(name, v));
+      } else {
+        res.set(name, value);
+      }
+    };
+  }
 };
