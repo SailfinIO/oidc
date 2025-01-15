@@ -16,6 +16,8 @@ export interface IClassMetadata {
  * The optional properties align with what the decorators might store.
  */
 export interface IMethodMetadata {
+  requiresAuth?: boolean;
+  requiredClaims?: Claims[];
   isOidcCallback?: boolean;
   isOidcLogin?: boolean;
   isWithMutexLock?: boolean;
