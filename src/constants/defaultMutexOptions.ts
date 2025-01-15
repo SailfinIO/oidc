@@ -8,7 +8,11 @@
  * @see {@link MutexOptions}
  */
 
-import { MutexOptions, SchedulingStrategy } from '../interfaces';
+import {
+  DeadlockStrategy,
+  MutexOptions,
+  SchedulingStrategy,
+} from '../interfaces';
 
 /**
  * Default options for the Mutex class.
@@ -39,6 +43,10 @@ export const defaultMutexOptions: MutexOptions = {
     maxDelay: 0,
   },
   schedulingStrategy: SchedulingStrategy.FIFO,
+  deadlock: {
+    strategy: DeadlockStrategy.ForceRelease,
+    gracePeriod: 0,
+  },
   logger: {
     debug: console.debug.bind(console),
     info: console.info.bind(console),

@@ -119,9 +119,9 @@ export class Mutex<MutexOwner extends Owner = Owner>
         // Build deadlock information
         const deadlockInfo = { owner, mutex: this };
 
-        switch (this.options.deadlockStrategy) {
+        switch (this.options.deadlock.strategy) {
           case DeadlockStrategy.ForceRelease:
-            const gracePeriod = this.options.deadlockGracePeriod ?? 1000;
+            const gracePeriod = this.options.deadlock.gracePeriod ?? 1000;
             setTimeout(() => {
               this.forceRelease();
               // Clean up dependency graph related to this mutex and owner
@@ -153,8 +153,8 @@ export class Mutex<MutexOwner extends Owner = Owner>
             );
 
           case DeadlockStrategy.Custom:
-            if (this.options.onDeadlock) {
-              this.options.onDeadlock(deadlockInfo);
+            if (this.options.deadlock.onDeadlock) {
+              this.options.deadlock.onDeadlock(deadlockInfo);
             }
             // Fall through or throw after custom handler
             throw new MutexError(

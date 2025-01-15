@@ -297,17 +297,68 @@ export interface MutexOptions {
   schedulingStrategy?: SchedulingStrategy;
 
   /**
-   * Optional deadlock handler to customize deadlock resolution.
-   */
-  onDeadlock?: (info: { owner: Owner; mutex: IMutex<any> }) => void;
+   * Deadlock options for handling mutex deadlocks.
+   *
+   * @type {DeadlockOptions}
+   * @example
+   *
+   * ```typescript
+   * const mutex = new Mutex({ deadlock: { strategy: 'DeadlockStrategy.ForceRelease', gracePeriod: 1000 } });
+   * ```
+   **/
+  deadlock?: DeadlockOptions;
+}
+
+/**
+ * Represents the deadlock options for handling mutex deadlocks.
+ *
+ * @interface DeadlockOptions
+ * @property {DeadlockStrategy} strategy - The deadlock resolution strategy.
+ * @property {number} gracePeriod - The grace period in milliseconds to resolve deadlocks.
+ * @property {(info: { owner: Owner; mutex: IMutex<any> }) => void} onDeadlock - The callback function to invoke on deadlock.
+ *
+ * @example
+ *
+ * ```typescript
+ * const mutex = new Mutex({ deadlock: { strategy: 'DeadlockStrategy.ForceRelease', gracePeriod: 1000 } });
+ * ```
+ */
+export interface DeadlockOptions {
+  /**
+   * The deadlock resolution strategy.
+   *
+   * @type {DeadlockStrategy}
+   * @example
+   *
+   * ```typescript
+   * const mutex = new Mutex({ deadlock: { strategy: 'DeadlockStrategy.ForceRelease' } });
+   * ```
+   **/
+  strategy?: DeadlockStrategy;
 
   /**
-   * Strategy for resolving deadlocks, e.g., 'forceRelease', 'priorityElevation', or 'custom'.
-   * If 'custom' is chosen, `onDeadlock` handler must be provided.
-   */
-  deadlockStrategy?: DeadlockStrategy;
+   * The grace period in milliseconds to resolve deadlocks.
+   *
+   * @type {number}
+   * @example
+   *
+   * ```typescript
+   * const mutex = new Mutex({ deadlock: { gracePeriod: 1000 } });
+   * ```
+   **/
+  gracePeriod?: number;
 
-  deadlockGracePeriod?: number;
+  /**
+   * The callback function to invoke on deadlock.
+   *
+   * @type {(info: { owner: Owner; mutex: IMutex<any> }) => void}
+   * @example
+   *
+   * ```typescript
+   * const mutex = new Mutex({ deadlock: { onDeadlock: ({ owner }) => console.log(`Deadlock detected for owner: ${owner}`) } });
+   * ```
+   **/
+  onDeadlock?: (info: { owner: Owner; mutex: IMutex<any> }) => void;
 }
 
 /**
