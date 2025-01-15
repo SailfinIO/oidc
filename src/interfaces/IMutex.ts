@@ -295,6 +295,19 @@ export interface MutexOptions {
    * Scheduling strategy: 'fifo' | 'roundRobin' | 'weighted' | 'priorityQueue'
    */
   schedulingStrategy?: SchedulingStrategy;
+
+  /**
+   * Optional deadlock handler to customize deadlock resolution.
+   */
+  onDeadlock?: (info: { owner: Owner; mutex: IMutex<any> }) => void;
+
+  /**
+   * Strategy for resolving deadlocks, e.g., 'forceRelease', 'priorityElevation', or 'custom'.
+   * If 'custom' is chosen, `onDeadlock` handler must be provided.
+   */
+  deadlockStrategy?: DeadlockStrategy;
+
+  deadlockGracePeriod?: number;
 }
 
 /**
@@ -531,7 +544,7 @@ export interface QueueEntry<MutexOwner> {
   enqueuedAt?: number;
 }
 
-export type MutexOwner = string | { id: string; name?: string };
+export type Owner = string | { id: string; name?: string };
 
 export enum MutexOperation {
   Read = 'read',
@@ -543,6 +556,12 @@ export enum SchedulingStrategy {
   RoundRobin = 'roundRobin',
   Weighted = 'weighted',
   PriorityQueue = 'priorityQueue',
+}
+
+export enum DeadlockStrategy {
+  ForceRelease = 'forceRelease',
+  PriorityElevation = 'priorityElevation',
+  Custom = 'custom',
 }
 
 export interface MutexState<MutexOwner = unknown> {

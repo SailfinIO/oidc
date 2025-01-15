@@ -18,6 +18,8 @@ import {
   BackoffOptions,
   SchedulingStrategy,
   MutexState,
+  DeadlockStrategy,
+  Owner,
 } from '../interfaces';
 import { MutexError, ClientError } from '../errors';
 import EventEmitter from 'events';
@@ -33,7 +35,7 @@ import { MaxHeap } from '../utils/MaxHeap';
  * @class
  * @implements {IMutex}
  */
-export class Mutex<MutexOwner = unknown>
+export class Mutex<MutexOwner extends Owner = Owner>
   extends EventEmitter
   implements IMutex<MutexOwner>
 {
@@ -114,10 +116,56 @@ export class Mutex<MutexOwner = unknown>
       this.dependencyGraph.get(this)!.add(owner);
 
       if (this.detectCycle(owner, this)) {
-        // Deadlock detected, cleanup and respond accordingly
-        this.dependencyGraph.get(this)!.delete(owner);
-        // Handle deadlock resolution or throw error
-        throw new MutexError('Deadlock detected', 'DEADLOCK');
+        // Build deadlock information
+        const deadlockInfo = { owner, mutex: this };
+
+        switch (this.options.deadlockStrategy) {
+          case DeadlockStrategy.ForceRelease:
+            const gracePeriod = this.options.deadlockGracePeriod ?? 1000;
+            setTimeout(() => {
+              this.forceRelease();
+              // Clean up dependency graph related to this mutex and owner
+              const ownersSet = this.dependencyGraph.get(this);
+              if (ownersSet) {
+                ownersSet.delete(owner);
+                if (ownersSet.size === 0) {
+                  this.dependencyGraph.delete(this);
+                }
+              }
+            }, gracePeriod);
+
+            throw new MutexError(
+              'Deadlock detected. Initiating force release.',
+              'DEADLOCK',
+            );
+
+          case DeadlockStrategy.PriorityElevation:
+            // Implement priority elevation logic here.
+            // For example, elevate the priority for the current request:
+            // (You may need additional logic to identify which queue entry to boost.)
+            this.logger.warn(
+              'Priority elevation strategy triggered due to deadlock.',
+            );
+            // Optionally re-attempt acquisition here or throw an error.
+            throw new MutexError(
+              'Deadlock detected. Priority elevation strategy not fully implemented.',
+              'DEADLOCK',
+            );
+
+          case DeadlockStrategy.Custom:
+            if (this.options.onDeadlock) {
+              this.options.onDeadlock(deadlockInfo);
+            }
+            // Fall through or throw after custom handler
+            throw new MutexError(
+              'Deadlock detected. Custom handler invoked.',
+              'DEADLOCK',
+            );
+
+          default:
+            // Default behavior: throw error without special handling
+            throw new MutexError('Deadlock detected', 'DEADLOCK');
+        }
       }
     }
 
@@ -212,6 +260,24 @@ export class Mutex<MutexOwner = unknown>
     throw new MutexError('Failed to acquire the mutex lock', 'ACQUIRE_FAILED', {
       error: lastError,
     });
+  }
+
+  private forceRelease(): void {
+    // Clear queues, reset internal states, and notify waiting parties
+    this._locked = false;
+    this._owner = null;
+    this._reentrantCount = 0;
+    // Optionally clear queues and related dependencies:
+    this.clearQueue();
+    this._priorityQueue.clear(); // assuming you add a clear method
+    this.logger.warn('Forcefully released mutex to resolve deadlock');
+    this.emit('forceReleased');
+  }
+
+  private clearQueue(): void {
+    while (this._queue.length) {
+      this._queue.pop();
+    }
   }
 
   private detectCycle(owner: MutexOwner, targetMutex: Mutex<any>): boolean {

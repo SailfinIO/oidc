@@ -112,4 +112,8 @@ export class Heap<T> {
       this.heapifyDown(i);
     }
   }
+
+  public clear(): void {
+    this.items = [];
+  }
 }
