@@ -1,3 +1,9 @@
+## [0.0.13-beta.3](https://github.com/SailfinIO/oidc/compare/v0.0.13-beta.2...v0.0.13-beta.3) (2025-01-15)
+
+### Bug Fixes
+
+* interface for deadlocks ([b0c2097](https://github.com/SailfinIO/oidc/commit/b0c20970aa9d86f6484af8e621dd1048ec642756))
+
 ## [0.0.13-beta.2](https://github.com/SailfinIO/oidc/compare/v0.0.13-beta.1...v0.0.13-beta.2) (2025-01-15)
 
 ### Bug Fixes
