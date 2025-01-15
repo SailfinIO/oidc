@@ -27,7 +27,7 @@ describe('Mutex', () => {
       setTimeout: jest.fn((fn, delay) => setTimeout(fn, delay)),
       clearTimeout: jest.fn((id) => clearTimeout(id)),
     };
-    mutex = new Mutex(logger, timer);
+    mutex = new Mutex({ logger, timer });
   });
 
   afterEach(() => {
@@ -37,7 +37,7 @@ describe('Mutex', () => {
 
   describe('Constructor', () => {
     it('should create a Mutex instance with default timer if none provided', () => {
-      const defaultMutex = new Mutex(logger);
+      const defaultMutex = new Mutex({ logger });
       expect(defaultMutex).toBeInstanceOf(Mutex);
       expect(logger.debug).toHaveBeenCalledWith('Mutex instance created', {
         initialLocked: false,
@@ -46,7 +46,7 @@ describe('Mutex', () => {
     });
 
     it('should create a Mutex instance with provided timer', () => {
-      const customMutex = new Mutex(logger, timer);
+      const customMutex = new Mutex({ logger, timer });
       expect(customMutex).toBeInstanceOf(Mutex);
       expect(logger.debug).toHaveBeenCalledWith('Mutex instance created', {
         initialLocked: false,
@@ -60,7 +60,7 @@ describe('Mutex', () => {
       const unlock = await mutex.acquire();
       expect(mutex.locked).toBe(true);
       expect(logger.debug).toHaveBeenCalledWith('Attempting to acquire mutex', {
-        timeout: undefined,
+        timeout: 0,
       });
       expect(logger.debug).toHaveBeenCalledWith('Trying to acquire mutex lock');
       expect(logger.info).toHaveBeenCalledWith('Mutex lock acquired', {
@@ -360,7 +360,7 @@ describe('Mutex', () => {
       expect(fn).toHaveBeenCalled();
       expect(mutex.locked).toBe(false);
       expect(logger.debug).toHaveBeenCalledWith('runExclusive called', {
-        timeout: undefined,
+        timeout: 0,
       });
       expect(logger.debug).toHaveBeenCalledWith(
         'runExclusive acquired mutex lock',
