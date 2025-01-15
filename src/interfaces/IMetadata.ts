@@ -1,4 +1,5 @@
 import { Claims, RouteAction, Scopes } from '../enums';
+import { IMutex } from './IMutex';
 import { IRequest, IResponse } from './IStore';
 
 /**
@@ -24,6 +25,9 @@ export interface IMethodMetadata {
   requiredScopes?: Scopes[];
   isOidcCallback?: boolean;
   isOidcLogin?: boolean;
+  isWithMutexLock?: boolean;
+  mutex?: IMutex;
+  timeout?: number;
 }
 
 /**

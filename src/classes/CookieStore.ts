@@ -13,11 +13,12 @@ import {
   IStoreContext,
   CookieOptions,
   ILogger,
+  IMutex,
+  IStore,
 } from '../interfaces';
 import { randomUUID } from 'crypto';
 import { Mutex, Logger, Cookie, parseCookies, setCookieHeader } from '../utils';
 import { SameSite } from '../enums';
-import { IStore } from '../interfaces/IStore';
 import { MemoryStore } from './MemoryStore';
 
 /**
@@ -34,7 +35,7 @@ export class CookieStore implements ISessionStore {
   private readonly logger: ILogger;
   private readonly cookieName: string;
   private readonly cookieOptions: CookieOptions;
-  private readonly mutex: Mutex;
+  private readonly mutex: IMutex;
   private readonly dataStore: IStore;
 
   /**
