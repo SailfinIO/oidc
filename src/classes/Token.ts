@@ -19,6 +19,7 @@ import {
 } from '../enums';
 import { Jwt } from './Jwt';
 import { randomBytes } from 'crypto';
+import { ClaimsRecord } from '../types';
 
 export class Token implements IToken {
   private readonly logger: ILogger;
@@ -541,7 +542,7 @@ export class Token implements IToken {
    *
    * @returns A promise that resolves to an array of claim keys.
    */
-  public async getClaims(): Promise<Record<string, any>> {
+  public async getClaims(): Promise<ClaimsRecord> {
     try {
       await this.ensureToken();
     } catch (error) {
@@ -561,7 +562,8 @@ export class Token implements IToken {
         this.logger.debug('Claims extracted from JWT access token', {
           payload: jwtPayload,
         });
-        return jwtPayload;
+        // Cast or validate that jwtPayload matches ClaimsRecord structure, if desired
+        return jwtPayload as ClaimsRecord;
       } catch (error) {
         this.logger.error('Failed to verify JWT access token', { error });
         throw new ClientError('Failed to verify access token', 'DECODE_ERROR', {
@@ -578,7 +580,7 @@ export class Token implements IToken {
         this.logger.debug('Claims fetched from UserInfo endpoint', {
           userInfo,
         });
-        return userInfo;
+        return userInfo as ClaimsRecord;
       } catch (error) {
         this.logger.error('Failed to fetch user info', { error });
         throw new ClientError('Failed to fetch user info', 'USERINFO_ERROR', {

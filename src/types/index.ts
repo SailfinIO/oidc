@@ -6,3 +6,4 @@ export * from './Override';
 export * from './Address';
 export * from './KnownKeys';
 export * from './NextFunction';
+export * from './ClaimsRecord';
