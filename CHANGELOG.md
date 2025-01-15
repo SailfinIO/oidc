@@ -1,3 +1,10 @@
+## [0.0.13-beta.1](https://github.com/SailfinIO/oidc/compare/v0.0.12...v0.0.13-beta.1) (2025-01-15)
+
+### Bug Fixes
+
+* Mutex enhancements via decorators ([4536de2](https://github.com/SailfinIO/oidc/commit/4536de25a37c4a2816537c84bfd45b926dcc5559))
+* mutex options ([1d42337](https://github.com/SailfinIO/oidc/commit/1d423370bab3ce113356e5ebf5c0319a6be3b17c))
+
 ## [0.0.12-beta.14](https://github.com/SailfinIO/oidc/compare/v0.0.12-beta.13...v0.0.12-beta.14) (2025-01-15)
 
 ### Bug Fixes
