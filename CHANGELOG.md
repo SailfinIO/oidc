@@ -1,3 +1,11 @@
+## [0.0.13-beta.4](https://github.com/SailfinIO/oidc/compare/v0.0.13-beta.3...v0.0.13-beta.4) (2025-01-15)
+
+### Bug Fixes
+
+* add properties for method metadata ([c173423](https://github.com/SailfinIO/oidc/commit/c17342337cd6b3a0f1fcebdac68bf9fae7d2d79d))
+* decorator exports ([41a8e73](https://github.com/SailfinIO/oidc/commit/41a8e73761a1715b3adfdfebc52195eaefd99ff5))
+* protected routes ([4d19956](https://github.com/SailfinIO/oidc/commit/4d199560a9685ea7cb51235304814d233b785f3d))
+
 ## [0.0.13-beta.3](https://github.com/SailfinIO/oidc/compare/v0.0.13-beta.2...v0.0.13-beta.3) (2025-01-15)
 
 ### Bug Fixes
