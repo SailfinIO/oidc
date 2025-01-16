@@ -1,3 +1,9 @@
+## [0.0.13-beta.5](https://github.com/SailfinIO/oidc/compare/v0.0.13-beta.4...v0.0.13-beta.5) (2025-01-16)
+
+### Bug Fixes
+
+* add additional mutex tests ([1c2ed88](https://github.com/SailfinIO/oidc/commit/1c2ed885d936cc9200fb316b9fadea21b5191c96))
+
 ## [0.0.13-beta.4](https://github.com/SailfinIO/oidc/compare/v0.0.13-beta.3...v0.0.13-beta.4) (2025-01-15)
 
 ### Bug Fixes
