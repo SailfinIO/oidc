@@ -21,6 +21,11 @@ export class Response implements IResponse {
   private _status: ResponseStatus = StatusCode.OK;
   private _cookies: ResponseCookies | null = null;
   private _body: ResponseBody = null;
+  private _headersSent: boolean = false;
+
+  public get headersSent(): boolean {
+    return this._headersSent;
+  }
 
   public get cookies(): ResponseCookies {
     if (!this._cookies) {

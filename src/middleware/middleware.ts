@@ -47,8 +47,14 @@ export const middleware = (client: Client) => {
 
       try {
         // Parse cookies and update the request
-        req.setCookies(parseCookies(req.headers));
-        client.getLogger().debug('Parsed cookies', { cookies: req.cookies });
+        const parsedCookies = parseCookies(req.headers);
+        if (typeof req.setCookies === 'function') {
+          req.setCookies(parsedCookies);
+        } else {
+          // Fallback: assign parsed cookies to req.cookies if setCookies doesn't exist
+          (req as any).cookies = parsedCookies;
+        }
+        client.getLogger().debug('Parsed cookies', { cookies: parsedCookies });
 
         const sessionStore = client.getSessionStore();
         const sessionCookieName =
@@ -316,14 +322,16 @@ const handleError = async (
 ) => {
   console.error('OIDC Middleware Error:', error);
 
-  if (metadata?.onError) {
+  if (metadata?.onError && !res.headersSent) {
     metadata.onError(error, req, res);
-  } else {
+  } else if (!res.headersSent) {
     res.status(StatusCode.INTERNAL_SERVER_ERROR).send('Authentication failed');
   }
 
-  // Pass the error to the next middleware
-  await next(error);
+  // Only call next if headers haven't been sent
+  if (!res.headersSent) {
+    await next(error);
+  }
 };
 
 /**
@@ -396,7 +404,9 @@ export const csrfMiddleware = (client: Client) => {
       client
         .getLogger()
         .warn('Invalid CSRF token', { csrfToken, storedCsrfToken });
-      res.status(StatusCode.FORBIDDEN).send('Invalid CSRF token');
+      if (!res.headersSent) {
+        res.status(StatusCode.FORBIDDEN).send('Invalid CSRF token');
+      }
       return;
     }
 

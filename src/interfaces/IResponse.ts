@@ -15,6 +15,7 @@ export interface IResponse {
   readonly headers: ResponseHeaders;
   readonly cookies: ResponseCookies;
   readonly body: ResponseBody;
+  readonly headersSent: boolean;
   status(code: ResponseStatus): this;
   send(body: ResponseBody): this;
   json(data: object): this;
