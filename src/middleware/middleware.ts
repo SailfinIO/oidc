@@ -9,7 +9,13 @@ import {
   ISessionData,
   IStoreContext,
 } from '../interfaces';
-import { RequestMethod, RouteAction, SameSite, SessionMode } from '../enums';
+import {
+  Claims,
+  RequestMethod,
+  RouteAction,
+  SameSite,
+  SessionMode,
+} from '../enums';
 import { ClientError } from '../errors/ClientError';
 import { NextFunction } from '../types';
 import {
@@ -178,7 +184,7 @@ const handleRoute = async (
       await handleLogin(client, req, res);
       return;
     case RouteAction.Callback:
-      await handleCallback(client, req, res, metadata, next, context);
+      await handleCallback(client, req, res, metadata, context);
       break;
     case RouteAction.Protected:
       await handleProtected(client, req, res, metadata, next, context);
@@ -232,7 +238,7 @@ const handleCallback = async (
   req: IRequest,
   res: IResponse,
   metadata: IRouteMetadata,
-  next: NextFunction,
+  // next: NextFunction,
   context: IStoreContext,
 ) => {
   const host = Array.isArray(req.headers['host'])
@@ -352,11 +358,13 @@ const validateCallbackParams = (code: string | null, state: string | null) => {
  */
 const validateSpecificClaims = (
   claims: Record<string, any>,
-  requiredClaims?: string[],
+  requiredClaims?: Claims[],
 ) => {
   if (!requiredClaims?.length) return;
 
-  const missingClaims = requiredClaims.filter((claim) => !claims[claim]);
+  // Filter out required claims that are not present in the claims record
+  const missingClaims = requiredClaims.filter((claim) => !(claim in claims));
+
   if (missingClaims.length > 0) {
     throw new ClientError(
       `Missing required claims: ${missingClaims.join(', ')}`,
@@ -364,7 +372,6 @@ const validateSpecificClaims = (
     );
   }
 };
-
 export const csrfMiddleware = (client: Client) => {
   return async (req: IRequest, res: IResponse, next: NextFunction) => {
     const mode = client.getConfig().session?.mode || SessionMode.SERVER;

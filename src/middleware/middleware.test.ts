@@ -371,9 +371,9 @@ describe('OIDC Middleware', () => {
     );
     mockClient.getAccessToken.mockResolvedValue('valid_token');
     mockClient.getClaims.mockResolvedValue({
-      email: 'user@example.com',
-      roles: ['admin', 'user'],
-      sub: 'user1',
+      [Claims.Email]: 'user@example.com',
+      [Claims.Roles]: ['admin', 'user'],
+      // Do not include sub here
     });
     mockClient.getUserInfo.mockResolvedValue({ sub: 'user1' });
 
@@ -399,7 +399,6 @@ describe('OIDC Middleware', () => {
     mockClient.getClaims.mockResolvedValue({
       email: 'user@example.com',
       // 'roles' claim is missing
-      sub: 'user1',
     });
 
     const mw = middleware(mockClient);
@@ -427,7 +426,6 @@ describe('OIDC Middleware', () => {
     mockClient.getClaims.mockResolvedValue({
       email: 'user@example.com',
       roles: ['user'],
-      sub: 'user1',
     });
     mockClient.getUserInfo.mockResolvedValue({ sub: 'user1' });
 

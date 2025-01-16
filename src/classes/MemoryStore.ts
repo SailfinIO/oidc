@@ -45,7 +45,7 @@ export class MemoryStore implements IStore {
     };
     this.ttl = ttl || this.ttl;
     this.cache = new Cache<ISessionData>(this.logger, this.ttl);
-    this.mutex = new Mutex(this.logger);
+    this.mutex = new Mutex({ logger: this.logger });
   }
 
   /**

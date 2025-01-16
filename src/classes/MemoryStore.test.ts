@@ -36,8 +36,8 @@ describe('MemoryStore', () => {
     >;
     (Cache as jest.Mock).mockReturnValue(cacheMock);
 
-    mutexMock = new Mutex(logger) as jest.Mocked<Mutex>;
-    (Mutex as jest.Mock).mockReturnValue(mutexMock);
+    mutexMock = new Mutex({ logger }) as jest.Mocked<Mutex>;
+    (Mutex as unknown as jest.Mock).mockReturnValue(mutexMock);
 
     memoryStore = new MemoryStore(logger);
   });

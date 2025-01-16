@@ -1,6 +1,14 @@
 import { Mutex } from './Mutex';
-import { ILogger, ITimer } from '../interfaces';
-import { MutexError } from '../errors/MutexError';
+import {
+  DeadlockStrategy,
+  ILogger,
+  ITimer,
+  MutexOperation,
+  SchedulingStrategy,
+} from '../interfaces';
+import { MutexError, ClientError } from '../errors';
+import { MutexRegistry } from './MutexRegistry';
+import { defaultMutexOptions } from '../constants/defaultMutexOptions';
 
 describe('Mutex', () => {
   let logger: ILogger;
@@ -27,7 +35,10 @@ describe('Mutex', () => {
       setTimeout: jest.fn((fn, delay) => setTimeout(fn, delay)),
       clearTimeout: jest.fn((id) => clearTimeout(id)),
     };
-    mutex = new Mutex(logger, timer);
+    mutex = new Mutex<string>({
+      logger,
+      timer,
+    });
   });
 
   afterEach(() => {
@@ -37,7 +48,7 @@ describe('Mutex', () => {
 
   describe('Constructor', () => {
     it('should create a Mutex instance with default timer if none provided', () => {
-      const defaultMutex = new Mutex(logger);
+      const defaultMutex = new Mutex({ logger });
       expect(defaultMutex).toBeInstanceOf(Mutex);
       expect(logger.debug).toHaveBeenCalledWith('Mutex instance created', {
         initialLocked: false,
@@ -46,12 +57,57 @@ describe('Mutex', () => {
     });
 
     it('should create a Mutex instance with provided timer', () => {
-      const customMutex = new Mutex(logger, timer);
+      const customMutex = new Mutex({ logger, timer });
       expect(customMutex).toBeInstanceOf(Mutex);
       expect(logger.debug).toHaveBeenCalledWith('Mutex instance created', {
         initialLocked: false,
         initialQueueLength: 0,
       });
+    });
+
+    it('should have correct default values', () => {
+      expect(defaultMutexOptions.defaultTimeout).toBe(0);
+      expect(defaultMutexOptions.fairness).toBe(true);
+      expect(defaultMutexOptions.reentrant).toBe(false);
+      expect(defaultMutexOptions.priority).toMatchObject({
+        adjustmentFactor: 1,
+        adjustmentExponent: 1,
+        maxIncrement: Infinity,
+      });
+      expect(defaultMutexOptions.cancelOnError).toBe(false);
+      expect(defaultMutexOptions.backoff).toMatchObject({
+        maxAttempts: 1,
+        initialDelay: 0,
+        factor: 1,
+        maxDelay: 0,
+      });
+      expect(defaultMutexOptions.schedulingStrategy).toBe(
+        SchedulingStrategy.FIFO,
+      );
+      expect(defaultMutexOptions.deadlock.strategy).toBe(
+        DeadlockStrategy.ForceRelease,
+      );
+      // Check logger functions exist
+      expect(typeof defaultMutexOptions.logger.debug).toBe('function');
+      expect(typeof defaultMutexOptions.timer.setTimeout).toBe('function');
+    });
+
+    it('should have default scheduling strategy', () => {
+      // Access the private options via casting for testing purposes.
+      const options = (mutex as any).options;
+      expect(options.schedulingStrategy).toBe(SchedulingStrategy.FIFO);
+    });
+
+    // Additional tests to verify behavior based on defaults:
+    it('should use default timeout when not specified', async () => {
+      const spySetTimeout = jest.spyOn(defaultMutexOptions.timer, 'setTimeout');
+
+      // Acquire with no explicit timeout should use defaultTimeout (0)
+      const unlock = await mutex.acquire();
+      expect(spySetTimeout).not.toHaveBeenCalled(); // since defaultTimeout = 0, no timer setup
+
+      unlock();
+      spySetTimeout.mockRestore();
     });
   });
 
@@ -60,7 +116,7 @@ describe('Mutex', () => {
       const unlock = await mutex.acquire();
       expect(mutex.locked).toBe(true);
       expect(logger.debug).toHaveBeenCalledWith('Attempting to acquire mutex', {
-        timeout: undefined,
+        timeout: 0,
       });
       expect(logger.debug).toHaveBeenCalledWith('Trying to acquire mutex lock');
       expect(logger.info).toHaveBeenCalledWith('Mutex lock acquired', {
@@ -360,7 +416,7 @@ describe('Mutex', () => {
       expect(fn).toHaveBeenCalled();
       expect(mutex.locked).toBe(false);
       expect(logger.debug).toHaveBeenCalledWith('runExclusive called', {
-        timeout: undefined,
+        timeout: 0,
       });
       expect(logger.debug).toHaveBeenCalledWith(
         'runExclusive acquired mutex lock',
@@ -485,6 +541,379 @@ describe('Mutex', () => {
         queueLength: 0,
       });
       unlock2();
+    });
+  });
+  describe('tryAcquire', () => {
+    it('should acquire lock immediately when unlocked', () => {
+      const unlock = mutex.tryAcquire('owner1');
+      expect(typeof unlock).toBe('function');
+      expect(mutex.locked).toBe(true);
+      unlock!();
+      expect(mutex.locked).toBe(false);
+    });
+
+    it('should return null if mutex is already locked', async () => {
+      const unlock = await mutex.acquire();
+      const result = mutex.tryAcquire('owner2');
+      expect(result).toBeNull();
+      unlock();
+    });
+
+    it('should handle reentrant acquisition when enabled', async () => {
+      // Enable reentrant option
+      mutex = new Mutex<string>({ logger, timer, reentrant: true });
+      const unlock1 = await mutex.acquire(0, 'owner1');
+      const reentrantUnlock = mutex.tryAcquire('owner1');
+      expect(typeof reentrantUnlock).toBe('function');
+      reentrantUnlock!();
+      // Still locked due to original lock
+      expect(mutex.locked).toBe(true);
+      unlock1();
+      expect(mutex.locked).toBe(false);
+    });
+  });
+
+  describe('readLock and writeLock', () => {
+    it('should allow multiple simultaneous read locks when no writer is active', async () => {
+      const unlockRead1 = await mutex.readLock(0, 'reader1');
+      const unlockRead2 = await mutex.readLock(0, 'reader2');
+      // Access private readerCount via casting for testing purposes
+      expect((mutex as any).readerCount).toBe(2);
+      unlockRead1();
+      expect((mutex as any).readerCount).toBe(1);
+      unlockRead2();
+      expect((mutex as any).readerCount).toBe(0);
+    });
+
+    it('should defer readLock if writer is active', async () => {
+      const unlockWrite = await mutex.writeLock(0, 'writer1');
+
+      // Start readLock while writer is active
+      const readPromise = mutex.readLock(500, 'reader1');
+
+      expect((mutex as any).readerCount).toBe(0);
+      expect((mutex as any).writerActive).toBe(true);
+
+      // Release the writer to allow the read lock to proceed
+      unlockWrite();
+
+      // Advance timers to process any pending callbacks
+      jest.runAllTimers();
+
+      // Await the readPromise resolution
+      const unlockRead = await readPromise;
+      expect((mutex as any).readerCount).toBeGreaterThanOrEqual(1);
+
+      unlockRead();
+
+      // Optionally, advance timers again if there are any further timeouts
+      jest.runAllTimers();
+
+      expect((mutex as any).readerCount).toBe(0);
+    });
+
+    it('should allow writeLock when no readers or writers', async () => {
+      const unlock = await mutex.writeLock(0, 'writer1');
+      expect((mutex as any).writerActive).toBe(true);
+      unlock();
+      expect((mutex as any).writerActive).toBe(false);
+    });
+
+    it('should defer writeLock if readers are active', async () => {
+      const unlockRead = await mutex.readLock(0, 'reader1');
+
+      let writeLockAcquired = false;
+      const writePromise = mutex.writeLock(0, 'writer1').then((unlock) => {
+        writeLockAcquired = true;
+        return unlock;
+      });
+
+      // Write lock should not be acquired while reader is active.
+      expect(writeLockAcquired).toBe(false);
+
+      // Release reader to allow writer to proceed.
+      unlockRead();
+      const writeUnlock = await writePromise;
+      expect(writeLockAcquired).toBe(true);
+      writeUnlock();
+      expect((mutex as any).writerActive).toBe(false);
+    }, 10000); // Extend timeout for this test
+
+    it('should process a read queue entry when no writer is active and no writer waiting', () => {
+      // Prepare a read type queue entry
+      const resolver = jest.fn();
+      const readEntry = {
+        resolver,
+        priority: 0,
+        owner: 'reader',
+        type: MutexOperation.Read,
+        weight: 1,
+        enqueuedAt: Date.now(),
+      };
+
+      // Ensure no writer is active and no waiting writer in queue.
+      (mutex as any).writerActive = false;
+      (mutex as any)._queue = []; // empty queue; no other writer waiting
+
+      // Call handleQueueEntry with the read entry.
+      (mutex as any).handleQueueEntry(readEntry);
+
+      // It should call resolver and increment readerCount.
+      expect(resolver).toHaveBeenCalled();
+      expect((mutex as any).readerCount).toBe(1);
+    });
+
+    it('should skip a read queue entry when a writer is active', () => {
+      const resolver = jest.fn();
+      const readEntry = {
+        resolver,
+        priority: 0,
+        owner: 'reader',
+        type: MutexOperation.Read,
+        weight: 1,
+        enqueuedAt: Date.now(),
+      };
+
+      (mutex as any).writerActive = true; // Simulate active writer
+
+      (mutex as any).handleQueueEntry(readEntry);
+
+      // Resolver should not be called because writer is active.
+      expect(resolver).not.toHaveBeenCalled();
+      // readerCount should remain unchanged.
+      expect((mutex as any).readerCount).toBe(0);
+    });
+
+    it('should process a write queue entry when no writer active and no readers', () => {
+      const resolver = jest.fn();
+      const writeEntry = {
+        resolver,
+        priority: 0,
+        owner: 'writer',
+        type: MutexOperation.Write,
+        weight: 1,
+        enqueuedAt: Date.now(),
+      };
+
+      // Ensure no writer and no readers
+      (mutex as any).writerActive = false;
+      (mutex as any).readerCount = 0;
+
+      (mutex as any).handleQueueEntry(writeEntry);
+
+      // For a write, it should call resolver and set writerActive true.
+      expect(resolver).toHaveBeenCalled();
+      expect((mutex as any).writerActive).toBe(true);
+    });
+
+    it('should skip a write queue entry if readers are active', () => {
+      const resolver = jest.fn();
+      const writeEntry = {
+        resolver,
+        priority: 0,
+        owner: 'writer',
+        type: MutexOperation.Write,
+        weight: 1,
+        enqueuedAt: Date.now(),
+      };
+
+      // Simulate active readers
+      (mutex as any).writerActive = false;
+      (mutex as any).readerCount = 1;
+
+      (mutex as any).handleQueueEntry(writeEntry);
+
+      // Resolver should not be called because readers are active.
+      expect(resolver).not.toHaveBeenCalled();
+      expect((mutex as any).writerActive).toBe(false);
+    });
+  });
+
+  describe('Reentrant Behavior', () => {
+    it('should handle reentrant locks correctly without deadlock', async () => {
+      mutex = new Mutex<string>({
+        logger,
+        timer,
+        reentrant: true,
+        deadlock: { strategy: DeadlockStrategy.ForceRelease, gracePeriod: 10 },
+      });
+      try {
+        const unlock1 = await mutex.acquire(undefined, 'owner1');
+        expect(mutex.locked).toBe(true);
+        const reentrantUnlock1 = await mutex.acquire(undefined, 'owner1');
+        expect(mutex.locked).toBe(true);
+        reentrantUnlock1();
+        // Still locked because original acquisition hasn't been released
+        expect(mutex.locked).toBe(true);
+        unlock1();
+        expect(mutex.locked).toBe(false);
+      } catch (e) {
+        throw new Error(`Unexpected deadlock error: ${e}`);
+      }
+    });
+  });
+
+  describe('dump', () => {
+    it('should return a snapshot of the current mutex state', async () => {
+      const unlock = await mutex.acquire(undefined, 'owner1');
+      // Enqueue a readLock to populate the queue.
+      const pendingReadPromise = mutex.readLock(100, 'reader1');
+
+      const state = mutex.dump();
+
+      expect(state.locked).toBe(true);
+      expect(state.currentOwner).toBe('owner1');
+      // Check that queueLength is a non-negative number.
+      expect(state.queueLength).toBeGreaterThanOrEqual(0);
+      expect(Array.isArray(state.queue)).toBe(true);
+      expect(Array.isArray(state.priorityQueue)).toBe(true);
+      expect(state.dependencyGraph).toBeInstanceOf(Object);
+      expect(state.ownerHolds).toBeInstanceOf(Object);
+
+      unlock();
+      try {
+        const readUnlock = await pendingReadPromise;
+        readUnlock();
+      } catch {
+        // ignore readLock timeouts
+      }
+    });
+  });
+
+  describe('forceRelease', () => {
+    it('should forcefully release mutex and clear queues', async () => {
+      mutex = new Mutex<string>({
+        logger,
+        timer,
+        deadlock: { strategy: DeadlockStrategy.ForceRelease, gracePeriod: 10 },
+      });
+
+      const unlock = await mutex.acquire(undefined, 'owner1');
+      const acquirePromise = mutex.acquire(0, 'owner2');
+      expect(mutex.locked).toBe(true);
+
+      (mutex as any).forceRelease();
+
+      expect(mutex.locked).toBe(false);
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Forcefully released mutex to resolve deadlock',
+      );
+      expect((mutex as any)._queue.length).toBe(0);
+      await expect(acquirePromise).rejects.toThrow(MutexError);
+
+      try {
+        unlock();
+      } catch {}
+    }, 10000); // Extend timeout for this test
+  });
+
+  describe('Dependency and Deadlock Detection', () => {
+    it('should detect cycle and throw Deadlock error', async () => {
+      const mutex1 = new Mutex<string>({
+        logger,
+        timer,
+        deadlock: { strategy: DeadlockStrategy.ForceRelease },
+      });
+      const mutex2 = new Mutex<string>({
+        logger,
+        timer,
+        deadlock: { strategy: DeadlockStrategy.ForceRelease },
+      });
+
+      const registry = MutexRegistry.instance;
+      // Simulate that owner1 holds mutex2 and is waiting for mutex1
+      registry.addHold('owner1', mutex2);
+      registry.addWaiter(mutex1, 'owner1');
+      // Try detecting a cycle.
+      const cycleDetected = (mutex as any).detectCycle('owner1', mutex2);
+      // If cycle isn't detected as expected, log current state for debugging.
+      if (!cycleDetected) {
+        console.warn(
+          'Cycle was not detected as expected. Check dependency graph setup.',
+        );
+      }
+      expect(cycleDetected).toBe(true);
+    });
+  });
+
+  describe('Priority Adjustment', () => {
+    it('should adjust priorities based on waiting time', () => {
+      // Create entries in priority queue for testing adjustPriorities
+      const entry = {
+        resolver: jest.fn(),
+        priority: 1,
+        owner: 'owner1',
+        type: MutexOperation.Write,
+        weight: 1,
+        enqueuedAt: Date.now() - 5000, // 5 seconds ago
+      };
+      (mutex as any)._priorityQueue.insert(entry);
+
+      // Setup minimal priority options for calculation
+      mutex['options'].priority = {
+        adjustmentInterval: 1000,
+        adjustmentFactor: 1,
+        adjustmentExponent: 1,
+        maxIncrement: 10,
+      };
+
+      (mutex as any).adjustPriorities();
+
+      const adjustedEntry = (mutex as any)._priorityQueue.toArray()[0];
+      // Since waitingTime ~ 5s, adjustment ~ 5*factor = 5; new priority should be 1+5
+      expect(adjustedEntry.priority).toBeGreaterThanOrEqual(6);
+    });
+
+    it('should calculate adjustment correctly', () => {
+      mutex['options'].priority = {
+        adjustmentFactor: 2,
+        adjustmentExponent: 2,
+        maxIncrement: 20,
+      };
+
+      const adjustment = (mutex as any).calculateAdjustment(4000); // 4 sec waiting
+      // adjustment = factor * (4^2) = 2 * 16 = 32, but maxIncrement is 20
+      expect(adjustment).toBe(20);
+    });
+  });
+
+  describe('safeRelease and clearTimer', () => {
+    it('should safely release without throwing', () => {
+      const unlock = jest.fn();
+      (mutex as any).safeRelease(unlock);
+      expect(unlock).toHaveBeenCalled();
+    });
+
+    it('should handle error in safeRelease gracefully', () => {
+      const errorFn = jest.fn(() => {
+        throw new Error('Fail');
+      });
+      expect(() => (mutex as any).safeRelease(errorFn)).not.toThrow();
+    });
+
+    it('should clear timer and log debug message', () => {
+      const fakeTimerId = 123;
+      (mutex as any).clearTimer(fakeTimerId);
+      expect(timer.clearTimeout).toHaveBeenCalledWith(fakeTimerId);
+      expect(logger.debug).toHaveBeenCalledWith(
+        'Timeout cleared after acquiring mutex',
+      );
+    });
+  });
+
+  describe('handleExecutionError', () => {
+    it('should throw MutexError wrapping non-ClientError', () => {
+      const error = new Error('random error');
+      expect(() => {
+        (mutex as any).handleExecutionError(error);
+      }).toThrow(MutexError);
+    });
+
+    it('should rethrow ClientError', () => {
+      const clientError = new ClientError('client error');
+      expect(() => {
+        (mutex as any).handleExecutionError(clientError);
+      }).toThrow(clientError);
     });
   });
 });

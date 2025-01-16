@@ -171,7 +171,7 @@ describe('MetadataManager', () => {
 
   describe('Method Metadata', () => {
     it('sets and merges method metadata', () => {
-      const metadata: Partial<IMethodMetadata> = { automaticRefresh: true };
+      const metadata: Partial<IMethodMetadata> = { isOidcCallback: true };
       MetadataManager.setMethodMetadata(TestClass, 'someMethod', metadata);
 
       expect(methodCacheMock.get).toHaveBeenCalledWith(
@@ -193,7 +193,7 @@ describe('MetadataManager', () => {
 
     it('overwrites existing method metadata with the same keys', () => {
       const initialMetadata: Partial<IMethodMetadata> = {
-        automaticRefresh: true,
+        isOidcCallback: true,
       };
       methodCacheMock.get.mockReturnValueOnce(initialMetadata);
 
@@ -204,7 +204,7 @@ describe('MetadataManager', () => {
       );
 
       const updatedMetadata: Partial<IMethodMetadata> = {
-        automaticRefresh: false,
+        isOidcCallback: false,
       };
       methodCacheMock.get.mockReturnValueOnce(initialMetadata);
       MetadataManager.setMethodMetadata(
@@ -215,20 +215,20 @@ describe('MetadataManager', () => {
 
       expect(methodCacheMock.set).toHaveBeenCalledWith(
         'method:ctor_1:someMethod',
-        { automaticRefresh: false },
+        { isOidcCallback: false },
       );
 
-      methodCacheMock.get.mockReturnValueOnce({ automaticRefresh: false });
+      methodCacheMock.get.mockReturnValueOnce({ isOidcCallback: false });
       const result = MetadataManager.getMethodMetadata(TestClass, 'someMethod');
       expect(methodCacheMock.get).toHaveBeenCalledWith(
         'method:ctor_1:someMethod',
       );
-      expect(result).toEqual({ automaticRefresh: false });
+      expect(result).toEqual({ isOidcCallback: false });
     });
 
     it('handles multiple methods independently', () => {
-      const metadata1: Partial<IMethodMetadata> = { automaticRefresh: true };
-      const metadata2: Partial<IMethodMetadata> = { requiresAuth: true };
+      const metadata1: Partial<IMethodMetadata> = { isOidcCallback: true };
+      const metadata2: Partial<IMethodMetadata> = { isOidcLogin: true };
 
       // Set method metadata
       MetadataManager.setMethodMetadata(TestClass, 'methodOne', metadata1);
@@ -268,7 +268,7 @@ describe('MetadataManager', () => {
     it('handles invalid targets gracefully', () => {
       expect(() =>
         MetadataManager.setMethodMetadata(null as any, 'method', {
-          automaticRefresh: true,
+          isOidcCallback: true,
         }),
       ).toThrow(
         'setMethodMetadata expects a constructor function as the targetConstructor.',
@@ -276,7 +276,7 @@ describe('MetadataManager', () => {
 
       expect(() =>
         MetadataManager.setMethodMetadata(undefined as any, 'method', {
-          automaticRefresh: true,
+          isOidcCallback: true,
         }),
       ).toThrow(
         'setMethodMetadata expects a constructor function as the targetConstructor.',
@@ -298,13 +298,13 @@ describe('MetadataManager', () => {
     it('handles invalid propertyKeys gracefully', () => {
       expect(() =>
         MetadataManager.setMethodMetadata(TestClass, null as any, {
-          automaticRefresh: true,
+          isOidcCallback: true,
         }),
       ).toThrow('setMethodMetadata expects a string as the propertyKey.');
 
       expect(() =>
         MetadataManager.setMethodMetadata(TestClass, undefined as any, {
-          automaticRefresh: true,
+          isOidcCallback: true,
         }),
       ).toThrow('setMethodMetadata expects a string as the propertyKey.');
 
@@ -324,7 +324,7 @@ describe('MetadataManager', () => {
       MetadataManager.setClassMetadata(TestClass, { foo: 'bar' });
       // Set method metadata
       MetadataManager.setMethodMetadata(TestClass, 'someMethod', {
-        requiresAuth: true,
+        isOidcLogin: true,
       });
       // Set route metadata
       MetadataManager.setRouteMetadata('GET', '/login', { requiresAuth: true });
@@ -335,7 +335,7 @@ describe('MetadataManager', () => {
       });
       expect(methodCacheMock.set).toHaveBeenCalledWith(
         'method:ctor_1:someMethod',
-        { requiresAuth: true },
+        { isOidcLogin: true },
       );
       expect(routeCacheMock.set).toHaveBeenCalledWith('route:GET:/login', {
         requiresAuth: true,

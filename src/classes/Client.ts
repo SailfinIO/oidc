@@ -31,6 +31,7 @@ import { Token } from './Token';
 import { Session } from './Session';
 import { Store, StoreInstances } from './Store';
 import { defaultClientConfig } from '../config/defaultClientConfig';
+import { ClaimsRecord } from '../types';
 
 export class Client {
   private readonly config: IClientConfig;
@@ -272,7 +273,7 @@ export class Client {
    *
    * @returns A promise that resolves to an array of claim keys.
    */
-  public async getClaims(): Promise<Record<string, any>> {
+  public async getClaims(): Promise<ClaimsRecord> {
     await this.ensureInitialized();
     return this.tokenClient.getClaims();
   }

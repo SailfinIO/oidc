@@ -3,6 +3,7 @@
 import { TokenSet } from './TokenSet';
 import { ITokenIntrospectionResponse } from './ITokenIntrospectionResponse';
 import { TokenTypeHint } from '../enums/TokenTypeHint';
+import { ClaimsRecord } from '../types';
 
 export interface IToken {
   /**
@@ -78,5 +79,5 @@ export interface IToken {
    * Retrieves claims from the access token.
    * @returns A promise that resolves to an array of claim keys.
    */
-  getClaims(): Promise<Record<string, any>>;
+  getClaims(): Promise<ClaimsRecord>;
 }

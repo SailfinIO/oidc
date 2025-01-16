@@ -1,6 +1,48 @@
-## [0.0.12](https://github.com/SailfinIO/oidc/compare/v0.0.11...v0.0.12) (2025-01-14)
+## [0.0.13-beta.6](https://github.com/SailfinIO/oidc/compare/v0.0.13-beta.5...v0.0.13-beta.6) (2025-01-16)
 
 ### Bug Fixes
+
+* testing handle queue entry ([f237ba9](https://github.com/SailfinIO/oidc/commit/f237ba92c55ae1edfac133b6062d8fa4858e1bef))
+
+## [0.0.13-beta.5](https://github.com/SailfinIO/oidc/compare/v0.0.13-beta.4...v0.0.13-beta.5) (2025-01-16)
+
+### Bug Fixes
+
+* add additional mutex tests ([1c2ed88](https://github.com/SailfinIO/oidc/commit/1c2ed885d936cc9200fb316b9fadea21b5191c96))
+
+## [0.0.13-beta.4](https://github.com/SailfinIO/oidc/compare/v0.0.13-beta.3...v0.0.13-beta.4) (2025-01-15)
+
+### Bug Fixes
+
+* add properties for method metadata ([c173423](https://github.com/SailfinIO/oidc/commit/c17342337cd6b3a0f1fcebdac68bf9fae7d2d79d))
+* decorator exports ([41a8e73](https://github.com/SailfinIO/oidc/commit/41a8e73761a1715b3adfdfebc52195eaefd99ff5))
+* protected routes ([4d19956](https://github.com/SailfinIO/oidc/commit/4d199560a9685ea7cb51235304814d233b785f3d))
+
+## [0.0.13-beta.3](https://github.com/SailfinIO/oidc/compare/v0.0.13-beta.2...v0.0.13-beta.3) (2025-01-15)
+
+### Bug Fixes
+
+* interface for deadlocks ([b0c2097](https://github.com/SailfinIO/oidc/commit/b0c20970aa9d86f6484af8e621dd1048ec642756))
+
+## [0.0.13-beta.2](https://github.com/SailfinIO/oidc/compare/v0.0.13-beta.1...v0.0.13-beta.2) (2025-01-15)
+
+### Bug Fixes
+
+* deadlocking ([92d2212](https://github.com/SailfinIO/oidc/commit/92d2212e429914e618c2e116b7b470bf8db71e41))
+
+## [0.0.13-beta.1](https://github.com/SailfinIO/oidc/compare/v0.0.12...v0.0.13-beta.1) (2025-01-15)
+
+### Bug Fixes
+
+* Mutex enhancements via decorators ([4536de2](https://github.com/SailfinIO/oidc/commit/4536de25a37c4a2816537c84bfd45b926dcc5559))
+* mutex options ([1d42337](https://github.com/SailfinIO/oidc/commit/1d423370bab3ce113356e5ebf5c0319a6be3b17c))
+
+## [0.0.12-beta.14](https://github.com/SailfinIO/oidc/compare/v0.0.12-beta.13...v0.0.12-beta.14) (2025-01-15)
+
+### Bug Fixes
+
+* Mutex enhancements via decorators ([4536de2](https://github.com/SailfinIO/oidc/commit/4536de25a37c4a2816537c84bfd45b926dcc5559))
+## [0.0.12](https://github.com/SailfinIO/oidc/compare/v0.0.11...v0.0.12) (2025-01-14)
 
 * add other express like functionality ([c6e793e](https://github.com/SailfinIO/oidc/commit/c6e793e99a28ddc395514c83601ade46ec3aeb64))
 * add testing for cookie header append ([a2ca435](https://github.com/SailfinIO/oidc/commit/a2ca4355b6ed2406f75c89f61bc335543735ad2d))
@@ -15,6 +57,7 @@
 * retrun correct bools ([1eb1fcc](https://github.com/SailfinIO/oidc/commit/1eb1fcc97b6dd102cc0fa7062e6d40e1a3e0c9e0))
 * session handling ([9f0a283](https://github.com/SailfinIO/oidc/commit/9f0a28316efa639c3d9da1856dbf4d16712aa6f4))
 * use cookie util to set header ([8801bf5](https://github.com/SailfinIO/oidc/commit/8801bf5baad12f34a467fab7b53ed0bea042be86))
+
 
 ## [0.0.12-beta.13](https://github.com/SailfinIO/oidc/compare/v0.0.12-beta.12...v0.0.12-beta.13) (2025-01-14)
 
