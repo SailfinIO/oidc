@@ -92,10 +92,17 @@ export class Session implements ISession {
       const userInfo = await this.userInfoClient.getUserInfo();
 
       const currentSession = context.request.session || {}; // Get the current session or default to an empty object
-      context.request.setSession({
-        ...currentSession,
-        user: userInfo,
-      });
+      if (typeof context.request.setSession === 'function') {
+        context.request.setSession({
+          ...currentSession,
+          user: userInfo,
+        });
+      } else {
+        (context.request as any).session = {
+          ...currentSession,
+          user: userInfo,
+        };
+      }
 
       this.logger.debug('User info fetched for client-side session');
     } catch (error) {
@@ -120,7 +127,12 @@ export class Session implements ISession {
       const sessionData = await this.sessionStore.get(sid, context);
       if (sessionData) {
         this.sid = sid;
-        context.request.setSession(sessionData);
+        if (typeof context.request.setSession === 'function') {
+          context.request.setSession(sessionData);
+        } else {
+          // Fallback: assign sessionData directly
+          (context.request as any).session = sessionData;
+        }
         this.logger.debug('Server-side session resumed', { sid });
         this.scheduleTokenRefresh(context);
         return;
@@ -143,20 +155,28 @@ export class Session implements ISession {
   }
 
   private exposeTokensToClient(context: IStoreContext, tokens: TokenSet): void {
-    if (!context.response) {
-      this.logger.warn('No response object, skipping exposeTokensToClient');
+    if (!context.response || context.response.headersSent) {
+      this.logger.warn(
+        'Response already sent or not available, skipping token exposure.',
+      );
       return;
     }
 
-    // We wrap setCookieHeader calls in try/catch to detect if setting the cookie fails
     const setCookieSafe = (
       cookieName: string,
       cookieVal: string,
       options: CookieOptions,
     ): void => {
       try {
-        context.response?.cookie(cookieName, cookieVal, options);
-        this.logger.debug(`Cookie set successfully`, { cookieName, options });
+        if (context.response && !context.response.headersSent) {
+          context.response.cookie(cookieName, cookieVal, options);
+          this.logger.debug(`Cookie set successfully`, { cookieName, options });
+        } else {
+          this.logger.warn(
+            'Response headers already sent. Skipping setting cookie:',
+            cookieName,
+          );
+        }
       } catch (error) {
         this.logger.error(
           `Failed to set ${cookieName} cookie. Error: ${error.message}`,
@@ -266,7 +286,12 @@ export class Session implements ISession {
     }
 
     this.sid = sid;
-    context.request.setSession(sessionData);
+    if (typeof context.request.setSession === 'function') {
+      context.request.setSession(sessionData);
+    } else {
+      // Fallback: assign sessionData directly
+      (context.request as any).session = sessionData;
+    }
     this.logger.debug('New server-side session created', { sid });
 
     const sessionCookieName = this.config.session?.cookie?.name || 'sid';
