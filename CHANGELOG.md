@@ -1,3 +1,9 @@
+## [0.0.14-beta.4](https://github.com/SailfinIO/oidc/compare/v0.0.14-beta.3...v0.0.14-beta.4) (2025-01-16)
+
+### Bug Fixes
+
+* check for session sessting ([85f67ef](https://github.com/SailfinIO/oidc/commit/85f67ef2d06034db97bec8c3b4d1e57d5f87b0f6))
+
 ## [0.0.14-beta.3](https://github.com/SailfinIO/oidc/compare/v0.0.14-beta.2...v0.0.14-beta.3) (2025-01-16)
 
 ### Bug Fixes
