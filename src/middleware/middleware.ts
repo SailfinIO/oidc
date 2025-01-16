@@ -316,10 +316,10 @@ const handleError = async (
 ) => {
   console.error('OIDC Middleware Error:', error);
 
-  if (metadata.onError) {
+  if (metadata?.onError) {
     metadata.onError(error, req, res);
   } else {
-    res.status(500).send('Authentication failed');
+    res.status(StatusCode.INTERNAL_SERVER_ERROR).send('Authentication failed');
   }
 
   // Pass the error to the next middleware

@@ -10,8 +10,16 @@ import { parse } from './Cookie';
  * @returns {RequestCookies} The parsed cookies as a key-value object.
  */
 export const parseCookies = (headers: RequestHeaders): RequestCookies => {
-  // Fetch the 'cookie' header in a case-insensitive manner
-  const cookieHeader = headers.get('cookie') || headers.get('COOKIE');
+  let cookieHeader: string | undefined;
+
+  // Check if headers has a get method (e.g., Headers instance)
+  if (typeof headers.get === 'function') {
+    cookieHeader = headers.get('cookie') || headers.get('COOKIE');
+  }
+  // Otherwise, treat headers as a plain object
+  else if (typeof headers === 'object' && headers !== null) {
+    cookieHeader = (headers as any)['cookie'] || (headers as any)['COOKIE'];
+  }
 
   if (!cookieHeader) {
     return {}; // Return an empty object if no cookies are present
