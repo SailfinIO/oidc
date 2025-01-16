@@ -1,3 +1,9 @@
+## [0.0.14-beta.3](https://github.com/SailfinIO/oidc/compare/v0.0.14-beta.2...v0.0.14-beta.3) (2025-01-16)
+
+### Bug Fixes
+
+* checks for plain objects ([ebaaf09](https://github.com/SailfinIO/oidc/commit/ebaaf09857e43a2253456373a30d670d727ba4a1))
+
 ## [0.0.14-beta.2](https://github.com/SailfinIO/oidc/compare/v0.0.14-beta.1...v0.0.14-beta.2) (2025-01-16)
 
 ### Bug Fixes
