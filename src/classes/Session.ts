@@ -11,9 +11,10 @@ import {
   ISessionData,
   IUser,
   TokenSet,
+  CookieOptions,
 } from '../interfaces';
 import { ClientError } from '../errors';
-import { Cookie, parseCookies, setCookieHeader } from '../utils';
+import { parseCookies } from '../utils';
 import { SameSite, SessionMode, StorageMechanism } from '../enums';
 import { randomBytes } from 'crypto';
 
@@ -89,10 +90,13 @@ export class Session implements ISession {
     // Optionally fetch user info and store it in request.session
     try {
       const userInfo = await this.userInfoClient.getUserInfo();
-      context.request.session = {
-        ...context.request.session,
+
+      const currentSession = context.request.session || {}; // Get the current session or default to an empty object
+      context.request.setSession({
+        ...currentSession,
         user: userInfo,
-      };
+      });
+
       this.logger.debug('User info fetched for client-side session');
     } catch (error) {
       this.logger.warn('Failed to fetch user info for client-side session', {
@@ -116,7 +120,7 @@ export class Session implements ISession {
       const sessionData = await this.sessionStore.get(sid, context);
       if (sessionData) {
         this.sid = sid;
-        context.request.session = sessionData;
+        context.request.setSession(sessionData);
         this.logger.debug('Server-side session resumed', { sid });
         this.scheduleTokenRefresh(context);
         return;
@@ -148,21 +152,16 @@ export class Session implements ISession {
     const setCookieSafe = (
       cookieName: string,
       cookieVal: string,
-      options: any,
-    ) => {
-      const cookie = new Cookie(cookieName, cookieVal, options);
-      const cookieString = cookie.serialize();
-      this.logger.debug('Setting cookie', { cookieName, cookieString });
-      // debug the contest.response
-      this.logger.debug('context.response', context.response);
-      const success = setCookieHeader(context.response, cookieString);
-
-      if (!success) {
+      options: CookieOptions,
+    ): void => {
+      try {
+        context.response?.cookie(cookieName, cookieVal, options);
+        this.logger.debug(`Cookie set successfully`, { cookieName, options });
+      } catch (error) {
         this.logger.error(
-          `Failed to set ${cookieName} cookie. Possibly the response object is unrecognized by setCookieHeader.`,
+          `Failed to set ${cookieName} cookie. Error: ${error.message}`,
+          error,
         );
-      } else {
-        this.logger.debug(`${cookieName} cookie set successfully.`);
       }
     };
 
@@ -200,18 +199,22 @@ export class Session implements ISession {
 
   private clearSessionCookie(context: IStoreContext): void {
     const sessionCookieName = this.config.session?.cookie?.name || 'sid';
-    const expiredCookie = new Cookie(sessionCookieName, '', {
-      httpOnly: this.config.session?.cookie?.options?.httpOnly ?? true,
-      secure: this.config.session?.cookie?.options?.secure ?? true,
-      sameSite:
-        this.config.session?.cookie?.options?.sameSite ?? SameSite.STRICT,
-      path: this.config.session?.cookie?.options?.path ?? '/',
-      expires: new Date(0),
-    });
 
-    // No need to check success for clearing session, but we could log
-    setCookieHeader(context.response, expiredCookie.serialize());
-    this.logger.debug(`Cleared session cookie ${sessionCookieName}`);
+    try {
+      context.response?.clearCookie(sessionCookieName, {
+        httpOnly: this.config.session?.cookie?.options?.httpOnly ?? true,
+        secure: this.config.session?.cookie?.options?.secure ?? true,
+        sameSite:
+          this.config.session?.cookie?.options?.sameSite ?? SameSite.STRICT,
+        path: this.config.session?.cookie?.options?.path ?? '/',
+      });
+      this.logger.debug(`Cleared session cookie: ${sessionCookieName}`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to clear session cookie ${sessionCookieName}. Error: ${error.message}`,
+        error,
+      );
+    }
   }
 
   private async createNewServerSession(
@@ -263,28 +266,30 @@ export class Session implements ISession {
     }
 
     this.sid = sid;
-    context.request.session = sessionData;
+    context.request.setSession(sessionData);
     this.logger.debug('New server-side session created', { sid });
 
     const sessionCookieName = this.config.session?.cookie?.name || 'sid';
 
     // Safely set the session cookie
-    const sessionCookie = new Cookie(sessionCookieName, sid, {
-      httpOnly: this.config.session?.cookie?.options?.httpOnly ?? true,
-      secure: this.config.session?.cookie?.options?.secure ?? true,
-      sameSite:
-        this.config.session?.cookie?.options?.sameSite ?? SameSite.STRICT,
-      path: this.config.session?.cookie?.options?.path ?? '/',
-      maxAge: this.config.session?.ttl ? this.config.session.ttl / 1000 : 3600, // Default 1 hour
-    });
-
-    const success = setCookieHeader(
-      context.response,
-      sessionCookie.serialize(),
-    );
-    if (!success) {
+    try {
+      context.response?.cookie(sessionCookieName, sid, {
+        httpOnly: this.config.session?.cookie?.options?.httpOnly ?? true,
+        secure: this.config.session?.cookie?.options?.secure ?? true,
+        sameSite:
+          this.config.session?.cookie?.options?.sameSite ?? SameSite.STRICT,
+        path: this.config.session?.cookie?.options?.path ?? '/',
+        maxAge: this.config.session?.ttl
+          ? this.config.session.ttl / 1000
+          : 3600, // Default 1 hour
+      });
+      this.logger.debug(
+        `Session cookie "${sessionCookieName}" set successfully.`,
+      );
+    } catch (error) {
       this.logger.error(
-        `Failed to set server-side session cookie "${sessionCookieName}". Check if the response object is recognized.`,
+        `Failed to set server-side session cookie "${sessionCookieName}".`,
+        error,
       );
     }
 
@@ -293,23 +298,18 @@ export class Session implements ISession {
     context.request.session.csrfToken = csrfToken;
 
     // Set CSRF token in a separate cookie
-    const csrfCookie = new Cookie('csrf_token', csrfToken, {
-      httpOnly: this.config.session?.cookie?.options?.httpOnly ?? true,
-      secure: this.config.session?.cookie?.options?.secure ?? true,
-      sameSite:
-        this.config.session?.cookie?.options?.sameSite ?? SameSite.STRICT,
-      path: this.config.session?.cookie?.options?.path ?? '/',
-      maxAge: 3600, // 1 hour
-    });
-
-    const csrfSuccess = setCookieHeader(
-      context.response,
-      csrfCookie.serialize(),
-    );
-    if (!csrfSuccess) {
-      this.logger.warn(
-        'Failed to set CSRF cookie. Check if response is recognized.',
-      );
+    try {
+      context.response?.cookie('csrf_token', csrfToken, {
+        httpOnly: this.config.session?.cookie?.options?.httpOnly ?? true,
+        secure: this.config.session?.cookie?.options?.secure ?? true,
+        sameSite:
+          this.config.session?.cookie?.options?.sameSite ?? SameSite.STRICT,
+        path: this.config.session?.cookie?.options?.path ?? '/',
+        maxAge: 3600, // 1 hour
+      });
+      this.logger.debug(`CSRF cookie set successfully.`);
+    } catch (error) {
+      this.logger.warn('Failed to set CSRF cookie.', error);
     }
 
     // Schedule token refresh

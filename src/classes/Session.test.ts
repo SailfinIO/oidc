@@ -14,53 +14,12 @@ import {
   IStoreContext,
 } from '../interfaces';
 import { SessionMode } from '../enums';
+import { Request } from './Request';
+import { Response } from './Response';
 
 jest.useFakeTimers();
 jest.spyOn(global, 'setTimeout');
 jest.spyOn(global, 'clearTimeout');
-
-const createMockResponse = (init: Partial<IResponse> = {}): IResponse => {
-  return {
-    // Mock the redirect method
-    redirect: jest.fn(),
-
-    // Mock the status method
-    status: jest.fn().mockReturnThis(),
-
-    // Mock the send method
-    send: jest.fn().mockReturnThis(),
-
-    // Additional properties if needed
-    headers: new Headers(),
-    body: null,
-    bodyUsed: false,
-    ok: true,
-    redirected: false,
-    statusText: 'OK',
-    type: 'basic',
-    url: 'http://localhost',
-    clone: jest.fn(),
-    arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
-    blob: jest.fn().mockResolvedValue(new Blob()),
-    formData: jest.fn().mockResolvedValue(new FormData()),
-    json: jest.fn().mockResolvedValue({}),
-    text: jest.fn().mockResolvedValue(''),
-  } as unknown as IResponse;
-};
-
-const createMockRequest = (
-  url: string = 'http://localhost',
-  init: RequestInit = {},
-  query: Record<string, any> = {},
-  session?: ISessionData,
-): IRequest => {
-  const request = new Request(url, init) as IRequest;
-  request.query = query;
-  if (session) {
-    request.session = session;
-  }
-  return request;
-};
 
 describe('Session', () => {
   let config: Partial<IClientConfig>;
@@ -69,6 +28,8 @@ describe('Session', () => {
   let userInfoClient: IUserInfo;
   let sessionStore: ISessionStore;
   let session: ISession;
+  let mockRequest: IRequest;
+  let mockResponse: IResponse;
 
   beforeEach(() => {
     config = {
@@ -114,6 +75,22 @@ describe('Session', () => {
       userInfoClient,
       sessionStore,
     );
+
+    mockRequest = new Request()
+      .setUrl('http://localhost')
+      .setHeaders({
+        cookie: 'sid=mock-sid',
+        'content-type': 'application/json',
+      })
+      .setMethod('GET')
+      .setQuery({ key: 'value' })
+      .setParams({ id: '123' })
+      .setBody({ example: 'body' })
+      .setIp('127.0.0.1')
+      .setIps(['127.0.0.1'])
+      .setCookies({ sid: 'mock-sid' });
+
+    mockResponse = new Response();
   });
 
   afterEach(() => {
@@ -139,14 +116,6 @@ describe('Session', () => {
       (tokenClient.getTokens as jest.Mock).mockReturnValue(
         mockSessionData.cookie,
       );
-
-      const mockRequest = createMockRequest('http://localhost', {
-        headers: {
-          cookie: 'sid=mock-sid',
-        },
-      });
-
-      const mockResponse = createMockResponse();
 
       const context = { request: mockRequest, response: mockResponse };
 
@@ -187,15 +156,21 @@ describe('Session', () => {
       (sessionStore.set as jest.Mock).mockResolvedValue('new-mock-sid');
 
       // Mock request and response objects with empty cookie
-      const mockRequest = createMockRequest('http://localhost', {
-        headers: {
+      const mockRequest = new Request()
+        .setUrl('http://localhost')
+        .setHeaders({
           cookie: '',
-        },
-      });
+        })
+        .setMethod('GET')
+        .setQuery({ key: 'value' })
+        .setParams({ id: '123' })
+        .setBody({ example: 'body' })
+        .setIp('127.0.0.1')
+        .setIps(['127.0.0.1'])
+        .setCookies({ sid: 'mock-sid' });
 
-      const mockResponse = createMockResponse();
       // Optionally, mock the append method if needed
-      mockResponse.headers.append = jest.fn();
+      mockResponse.setHeader = jest.fn();
 
       const context = { request: mockRequest, response: mockResponse };
 
@@ -233,13 +208,20 @@ describe('Session', () => {
       (tokenClient.getTokens as jest.Mock).mockReturnValue(null);
 
       // Mock request and response objects
-      const mockRequest = createMockRequest('http://localhost', {
-        headers: {
+      const mockRequest = new Request()
+        .setUrl('http://localhost')
+        .setHeaders({
           cookie: '',
-        },
-      });
+        })
+        .setMethod('GET')
+        .setQuery({ key: 'value' })
+        .setParams({ id: '123' })
+        .setBody({ example: 'body' })
+        .setIp('127.0.0.1')
+        .setIps(['127.0.0.1'])
+        .setCookies({ sid: 'mock-sid' });
 
-      const mockResponse = createMockResponse();
+      const mockResponse = new Response();
       const context = { request: mockRequest, response: mockResponse };
 
       // Act & Assert
@@ -273,13 +255,20 @@ describe('Session', () => {
       (sessionStore.set as jest.Mock).mockResolvedValue('new-mock-sid');
 
       // Mock request and response objects
-      const mockRequest = createMockRequest('http://localhost', {
-        headers: {
+      const mockRequest = new Request()
+        .setUrl('http://localhost')
+        .setHeaders({
           cookie: '',
-        },
-      });
+        })
+        .setMethod('GET')
+        .setQuery({ key: 'value' })
+        .setParams({ id: '123' })
+        .setBody({ example: 'body' })
+        .setIp('127.0.0.1')
+        .setIps(['127.0.0.1'])
+        .setCookies({ sid: 'mock-sid' });
 
-      const mockResponse = createMockResponse();
+      const mockResponse = new Response();
 
       const context = { request: mockRequest, response: mockResponse };
 
@@ -311,7 +300,7 @@ describe('Session', () => {
     it('should throw an error if request is missing in context', async () => {
       // Arrange
 
-      const mockResponse = createMockResponse();
+      const mockResponse = new Response();
       const context = { request: undefined, response: mockResponse };
 
       // Act & Assert
@@ -322,11 +311,6 @@ describe('Session', () => {
 
     it('should throw an error if response is missing in context', async () => {
       // Arrange
-      const mockRequest = createMockRequest('http://localhost', {
-        headers: {
-          cookie: 'sid=mock-sid',
-        },
-      });
 
       const context = { request: mockRequest, response: undefined };
 
@@ -369,14 +353,6 @@ describe('Session', () => {
       // Mock sessionStore.destroy to handle destroying the session
       (sessionStore.destroy as jest.Mock).mockResolvedValue(undefined);
 
-      const mockRequest = createMockRequest('http://localhost', {
-        headers: {
-          cookie: 'sid=mock-sid',
-        },
-      });
-
-      const mockResponse = createMockResponse();
-
       const context = { request: mockRequest, response: mockResponse };
 
       // Act: Start the session first
@@ -396,14 +372,7 @@ describe('Session', () => {
     });
 
     it('should do nothing if there is no session timer', () => {
-      const mockRequest = createMockRequest('http://localhost', {
-        headers: {
-          cookie: 'sid=mock-sid',
-        },
-      });
-
-      const mockResponse = createMockResponse();
-
+      // Arrange
       const context = { request: mockRequest, response: mockResponse };
       // Act
       session.stop(context);
@@ -457,17 +426,8 @@ describe('Session', () => {
       // Mock sessionStore.touch to simulate updating session
       (sessionStore.touch as jest.Mock).mockResolvedValue(undefined);
 
-      // Mock request and response objects
-      const mockRequest = createMockRequest('http://localhost', {
-        headers: {
-          cookie: 'sid=mock-sid',
-        },
-      });
-
-      const mockResponse = createMockResponse();
-
       // Optionally, mock the append method if needed
-      mockResponse.headers.append = jest.fn();
+      mockResponse.setHeader = jest.fn();
 
       const context = { request: mockRequest, response: mockResponse };
 
@@ -525,15 +485,6 @@ describe('Session', () => {
         refreshError,
       );
 
-      // Mock request and response objects
-      const mockRequest = createMockRequest('http://localhost', {
-        headers: {
-          cookie: 'sid=mock-sid',
-        },
-      });
-
-      const mockResponse = createMockResponse();
-
       const context = { request: mockRequest, response: mockResponse };
 
       // Act
@@ -571,17 +522,8 @@ describe('Session', () => {
       // Mock sessionStore.set to return a new sid
       (sessionStore.set as jest.Mock).mockResolvedValue('mock-sid');
 
-      // Mock request and response objects
-      const mockRequest = createMockRequest('http://localhost', {
-        headers: {
-          cookie: 'sid=mock-sid',
-        },
-      });
-
-      const mockResponse = createMockResponse();
-
       // Optionally, mock the append method if needed
-      mockResponse.headers.append = jest.fn();
+      mockResponse.append = jest.fn();
 
       const context = { request: mockRequest, response: mockResponse };
 
@@ -614,16 +556,6 @@ describe('Session', () => {
 
       // Mock sessionStore.set to return a new sid
       (sessionStore.set as jest.Mock).mockResolvedValue('mock-sid');
-
-      // Mock request and response objects
-      const mockRequest = createMockRequest('http://localhost', {
-        headers: {
-          cookie: 'sid=mock-sid',
-        },
-      });
-
-      const mockResponse = createMockResponse();
-      mockResponse.headers.append = jest.fn();
 
       const context = { request: mockRequest, response: mockResponse };
 
@@ -665,15 +597,6 @@ describe('Session', () => {
 
       // Mock sessionStore.set to return a new sid (not used in this path)
       (sessionStore.set as jest.Mock).mockResolvedValue('mock-sid');
-
-      // Mock request and response objects
-      const mockRequest = createMockRequest('http://localhost', {
-        headers: {
-          cookie: 'sid=mock-sid',
-        },
-      });
-
-      const mockResponse = createMockResponse();
 
       const context = { request: mockRequest, response: mockResponse };
 
@@ -722,17 +645,6 @@ describe('Session', () => {
       // Mock sessionStore.set to return a new sid
       (sessionStore.set as jest.Mock).mockResolvedValue('mock-sid');
 
-      // Mock request and response objects
-      const mockRequest = createMockRequest('http://localhost', {
-        headers: {
-          cookie: 'sid=mock-sid',
-        },
-      });
-
-      const mockResponse = createMockResponse();
-
-      mockResponse.headers.append = jest.fn();
-
       const context = { request: mockRequest, response: mockResponse };
 
       // Act
@@ -772,17 +684,6 @@ describe('Session', () => {
 
       // Mock sessionStore.set to return a new sid
       (sessionStore.set as jest.Mock).mockResolvedValue('mock-sid');
-
-      // Mock request and response objects
-      const mockRequest = createMockRequest('http://localhost', {
-        headers: {
-          cookie: 'sid=mock-sid',
-        },
-      });
-
-      const mockResponse = createMockResponse();
-      // Optionally, mock the append method if needed
-      mockResponse.headers.append = jest.fn();
 
       const context = { request: mockRequest, response: mockResponse };
 
@@ -830,15 +731,6 @@ describe('Session', () => {
         .spyOn(session as any, 'refreshToken')
         .mockResolvedValue(undefined);
 
-      // Create mock Request and Response objects
-      const mockRequest = createMockRequest('http://localhost', {
-        headers: {
-          cookie: `sid=${newSid}`,
-        },
-      });
-
-      const mockResponse = createMockResponse();
-
       const context = { request: mockRequest, response: mockResponse };
 
       // Act: Start the session
@@ -878,15 +770,21 @@ describe('Session', () => {
       (tokenClient.getTokens as jest.Mock).mockResolvedValue(null);
 
       // Mock request and response objects
-      const mockRequest = new Request('http://localhost', {
-        headers: {
+      const mockRequest = new Request()
+        .setUrl('http://localhost')
+        .setHeaders({
           cookie: 'sid=mock-sid',
-        },
-      });
+          'content-type': 'application/json',
+        })
+        .setMethod('GET')
+        .setQuery({ key: 'value' })
+        .setParams({ id: '123' })
+        .setBody({ example: 'body' })
+        .setIp('127.0.0.1')
+        .setIps(['127.0.0.1'])
+        .setCookies({ sid: 'mock-sid' });
 
-      const mockResponse = new Response(null, {
-        headers: new Headers(),
-      });
+      const mockResponse = new Response();
 
       const context = { request: mockRequest, response: mockResponse };
 
@@ -929,17 +827,22 @@ describe('Session', () => {
 
       // Mock sessionStore.touch to simulate updating session
       (sessionStore.touch as jest.Mock).mockResolvedValue(undefined);
-
       // Mock request and response objects
-      const mockRequest = new Request('http://localhost', {
-        headers: {
+      const mockRequest = new Request()
+        .setUrl('http://localhost')
+        .setHeaders({
           cookie: 'sid=mock-sid',
-        },
-      });
+          'content-type': 'application/json',
+        })
+        .setMethod('GET')
+        .setQuery({ key: 'value' })
+        .setParams({ id: '123' })
+        .setBody({ example: 'body' })
+        .setIp('127.0.0.1')
+        .setIps(['127.0.0.1'])
+        .setCookies({ sid: 'mock-sid' });
 
-      const mockResponse = new Response(null, {
-        headers: new Headers(),
-      });
+      const mockResponse = new Response();
 
       const context = { request: mockRequest, response: mockResponse };
 
@@ -1023,13 +926,6 @@ describe('Session', () => {
     let mockResponse: IResponse;
 
     beforeEach(() => {
-      // Prepare a common context and mocks for update tests
-      mockRequest = createMockRequest('http://localhost', {
-        headers: {
-          cookie: 'sid=mock-sid',
-        },
-      });
-      mockResponse = createMockResponse();
       // Spy on exposeTokensToClient to verify client-side logic
       jest
         .spyOn(session as any, 'exposeTokensToClient')
@@ -1128,21 +1024,38 @@ describe('Session', () => {
     let mockResponse: IResponse;
 
     beforeEach(() => {
-      mockRequest = createMockRequest('http://localhost', {
-        headers: {
-          cookie: 'sid=existing-sid',
-        },
-      });
-      // Manually assign cookies property after creation
-      (mockRequest as any).cookies = { sid: 'existing-sid' };
+      const mockRequest = new Request()
+        .setUrl('http://localhost')
+        .setHeaders({
+          cookie: 'sid=mock-sid',
+          'content-type': 'application/json',
+        })
+        .setMethod('GET')
+        .setQuery({ key: 'value' })
+        .setParams({ id: '123' })
+        .setBody({ example: 'body' })
+        .setIp('127.0.0.1')
+        .setIps(['127.0.0.1'])
+        .setCookies({ sid: 'mock-sid' });
 
-      mockResponse = createMockResponse();
       context = { request: mockRequest, response: mockResponse };
     });
 
     it('should create a new session if no sid cookie is present', async () => {
       // Arrange
-      delete mockRequest.cookies['sid'];
+      mockRequest = new Request()
+        .setUrl('http://localhost')
+        .setHeaders({
+          cookie: '',
+          'content-type': 'application/json',
+        })
+        .setMethod('GET')
+        .setQuery({ key: 'value' })
+        .setParams({ id: '123' })
+        .setBody({ example: 'body' })
+        .setIp('127.0.0.1')
+        .setIps(['127.0.0.1'])
+        .setCookies({});
       const tokens = {
         access_token: 'new-session-token',
         token_type: 'Bearer',
@@ -1206,7 +1119,7 @@ describe('Session', () => {
 
       // Assert
       expect(sessionStore.touch).toHaveBeenCalledWith(
-        'existing-sid',
+        'mock-sid',
         {
           cookie: tokens,
           user: userInfo,
@@ -1216,7 +1129,7 @@ describe('Session', () => {
       expect(logger.debug).toHaveBeenCalledWith(
         'Server-side session updated with new tokens',
         {
-          sid: 'existing-sid',
+          sid: 'mock-sid',
         },
       );
     });

@@ -19,98 +19,62 @@ import {
   RouteAction,
   SameSite,
   SessionMode,
+  StatusCode,
 } from '../enums';
 import { ClientError } from '../errors';
+import { Request } from '../classes';
 
 jest.mock('../classes/Client');
 jest.mock('../decorators/MetadataManager');
 
-const createMockResponse = (init: Partial<IResponse> = {}): IResponse => {
-  const headers = new Headers(init.headers);
-  let redirected = false;
+const createMockRequest = (
+  url: string,
+  options: {
+    headers?: Record<string, string>;
+    method?: RequestMethod;
+    body?: any;
+    query?: Record<string, any>;
+  } = {},
+): IRequest => {
+  const {
+    headers = {},
+    method = RequestMethod.GET,
+    body = null,
+    query = {},
+  } = options;
 
-  // We'll store multiple header values ourselves (esp. for Set-Cookie)
-  const multiHeaders = new Map<string, string[]>();
+  const req = new Request()
+    .setUrl(url)
+    .setHeaders(headers)
+    .setMethod(method)
+    .setQuery(query)
+    .setBody(body);
 
-  const mockRes = {
-    redirect: jest.fn().mockImplementation((url: string) => {
-      redirected = true;
-      headers.set('Location', url);
-      // or multiHeaders.get('Location') or similar
-    }),
-    status: jest.fn().mockReturnThis(),
-    send: jest.fn().mockReturnThis(),
-    // A real Express res uses `res.append(header, value)` to add a new value
-    append: jest.fn().mockImplementation((name: string, value: string) => {
-      const lowerName = name.toLowerCase();
-      if (!multiHeaders.has(lowerName)) {
-        multiHeaders.set(lowerName, []);
-      }
-      // push this new value into the array
-      multiHeaders.get(lowerName)!.push(value);
-    }),
-    get: jest.fn().mockImplementation((name: string) => {
-      const lowerName = name.toLowerCase();
-      if (!multiHeaders.has(lowerName)) {
-        return undefined;
-      }
-      const vals = multiHeaders.get(lowerName)!;
-      // For Express: if there's only 1 value, return it as a string;
-      // if more than one, return array, etc.
-      if (vals.length === 1) return vals[0];
-      return vals;
-    }),
-    set: jest
-      .fn()
-      .mockImplementation((name: string, value: string | string[]) => {
-        const lowerName = name.toLowerCase();
-        multiHeaders.set(lowerName, Array.isArray(value) ? value : [value]);
-      }),
+  // If cookies are provided in headers, parse and set them
+  if (headers.cookie) {
+    const cookiePairs = headers.cookie
+      .split(';')
+      .map((c) => c.trim().split('='));
+    const cookies = cookiePairs.reduce(
+      (acc: Record<string, string>, [key, value]) => {
+        acc[key] = value;
+        return acc;
+      },
+      {},
+    );
+    req.setCookies(cookies);
+  }
 
-    headers, // you can keep this for reference if you want a fetch-like property
-    get redirected() {
-      return redirected;
-    },
-    set redirected(value: boolean) {
-      redirected = value;
-    },
-
-    // The rest of your fetch-like fields:
-    body: null,
-    bodyUsed: false,
-    ok: true,
-    statusText: 'OK',
-    type: 'basic',
-    url: 'http://localhost',
-    clone: jest.fn(),
-    arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
-    blob: jest.fn().mockResolvedValue(new Blob()),
-    formData: jest.fn().mockResolvedValue(new FormData()),
-    json: jest.fn().mockResolvedValue({}),
-    text: jest.fn().mockResolvedValue(''),
-    ...init,
-  } as unknown as IResponse;
-
-  return mockRes;
+  return req;
 };
 
-const createMockRequest = (
-  url: string = 'http://localhost',
-  init: RequestInit = {},
-  query: Record<string, any> = {},
-  session?: ISessionData,
-): IRequest => {
-  const request = new Request(url, init) as IRequest;
-  request.query = query;
-  request.session = session || {};
-  // Mock headers.get('host')
-  Object.defineProperty(request.headers, 'get', {
-    value: jest.fn((header: string) => {
-      if (header.toLowerCase() === 'host') return 'localhost';
-      return null;
-    }),
-  });
-  return request;
+const createMockResponse = (): IResponse => {
+  return {
+    redirect: jest.fn(),
+    status: jest.fn().mockReturnThis(),
+    send: jest.fn(),
+    cookie: jest.fn(),
+  } as unknown as IResponse;
 };
 
 const mockSessionStore: ISessionStore = {
@@ -169,12 +133,19 @@ describe('OIDC Middleware', () => {
 
     mockClient.getConfig.mockReturnValue(mockConfig);
 
-    mockRequest = createMockRequest('http://localhost', {
-      headers: {
-        // Headers are mocked below
-        cookie: 'sid=mock_sid',
-      },
-    });
+    mockRequest = new Request()
+      .setUrl('http://localhost')
+      .setHeaders({
+        cookie: 'sid=mock-sid',
+        'content-type': 'application/json',
+      })
+      .setMethod('GET')
+      .setQuery({ key: 'value' })
+      .setParams({ id: '123' })
+      .setBody({ example: 'body' })
+      .setIp('127.0.0.1')
+      .setIps(['127.0.0.1'])
+      .setCookies({ sid: 'mock-sid' });
 
     mockResponse = createMockResponse();
 
@@ -260,16 +231,19 @@ describe('OIDC Middleware', () => {
       cookie: undefined,
     };
 
-    mockRequest = createMockRequest(
-      'http://localhost/callback?code=123&state=abc',
-      {
-        headers: {
-          cookie: 'sid=mock_sid',
-        },
-      },
-      {},
-      initialSession,
-    );
+    const mockRequest = new Request()
+      .setUrl('http://localhost/callback?code=123&state=abc')
+      .setHeaders({
+        cookie: '',
+      })
+      .setMethod('GET')
+      .setQuery({ key: 'value' })
+      .setParams({ id: '123' })
+      .setBody({ example: 'body' })
+      .setIp('127.0.0.1')
+      .setIps(['127.0.0.1'])
+      .setCookies({ sid: 'mock_sid' })
+      .setSession(initialSession);
 
     mockClient.getConfig.mockReturnValue(mockConfig);
     mockClient.getUserInfo.mockResolvedValue({ sub: 'user1' });
@@ -477,16 +451,19 @@ describe('OIDC Middleware', () => {
       user: undefined,
       cookie: undefined,
     };
-    mockRequest = createMockRequest(
-      'http://localhost/callback?code=123&state=abc',
-      {
-        headers: {
-          cookie: 'sid=mock_sid',
-        },
-      },
-      {},
-      initialSession,
-    );
+    const mockRequest = new Request()
+      .setUrl('http://localhost/callback?code=123&state=abc')
+      .setHeaders({
+        cookie: '',
+      })
+      .setMethod('GET')
+      .setQuery({ key: 'value' })
+      .setParams({ id: '123' })
+      .setBody({ example: 'body' })
+      .setIp('127.0.0.1')
+      .setIps(['127.0.0.1'])
+      .setCookies({ sid: 'mock_sid' })
+      .setSession(initialSession);
 
     const routeMetadata: IRouteMetadata = {
       action: RouteAction.Callback,
@@ -522,16 +499,20 @@ describe('OIDC Middleware', () => {
 
   it('should throw ClientError if session is missing', async () => {
     // Setup the request without a session
-    mockRequest = createMockRequest(
-      'http://localhost/callback?code=123&state=abc',
-      {
-        headers: {
-          cookie: 'sid=mock_sid',
-        },
-      },
-      {},
-      undefined, // Session is missing
-    );
+    const mockRequest = new Request()
+      .setUrl('http://localhost/callback?code=123&state=abc')
+      .setHeaders({
+        cookie: '',
+      })
+      .setMethod('GET')
+      .setQuery({ key: 'value' })
+      .setParams({ id: '123' })
+      .setBody({ example: 'body' })
+      .setIp('127.0.0.1')
+      .setIps(['127.0.0.1'])
+      .setCookies({ sid: 'mock_sid' })
+      .setSession(undefined);
+
     mockClient.getConfig.mockReturnValue(mockConfig);
 
     const routeMetadata: IRouteMetadata = {
@@ -575,16 +556,20 @@ describe('OIDC Middleware', () => {
       user: undefined,
       cookie: undefined,
     };
-    mockRequest = createMockRequest(
-      'http://localhost/callback?code=123&state=abc',
-      {
-        headers: {
-          cookie: 'sid=mock_sid',
-        },
-      },
-      {},
-      initialSession,
-    );
+    const mockRequest = new Request()
+      .setUrl('http://localhost/callback?code=123&state=abc')
+      .setHeaders({
+        cookie: '',
+      })
+      .setMethod('GET')
+      .setQuery({ key: 'value' })
+      .setParams({ id: '123' })
+      .setBody({ example: 'body' })
+      .setIp('127.0.0.1')
+      .setIps(['127.0.0.1'])
+      .setCookies({ sid: 'mock_sid' })
+      .setSession(initialSession);
+
     mockClient.getConfig.mockReturnValue(mockConfig);
 
     const routeMetadata: IRouteMetadata = {
@@ -632,16 +617,20 @@ describe('OIDC Middleware', () => {
       cookie: undefined,
     };
 
-    mockRequest = createMockRequest(
-      'http://localhost/callback?code=123&state=abc',
-      {
-        headers: {
-          cookie: 'sid=mock_sid',
-        },
-      },
-      {},
-      initialSession,
-    );
+    const mockRequest = new Request()
+      .setUrl('http://localhost/callback?code=123&state=abc')
+      .setHeaders({
+        cookie: '',
+      })
+      .setMethod('GET')
+      .setQuery({ key: 'value' })
+      .setParams({ id: '123' })
+      .setBody({ example: 'body' })
+      .setIp('127.0.0.1')
+      .setIps(['127.0.0.1'])
+      .setCookies({ sid: 'mock_sid' })
+      .setSession(initialSession);
+
     mockClient.getConfig.mockReturnValue(mockConfig);
 
     const routeMetadata: IRouteMetadata = {
@@ -689,6 +678,17 @@ describe('OIDC Middleware', () => {
     let mockResponse: IResponse;
     let mockNext: jest.Mock;
 
+    // Helper to create a request with given method and headers as a Map.
+    function createTestRequest(
+      method: RequestMethod,
+      headers: Record<string, string> = {},
+    ): IRequest {
+      const req = new Request()
+        .setUrl('http://localhost')
+        .setMethod(method)
+        .setHeaders(headers);
+      return req;
+    }
     beforeEach(() => {
       mockClient = {
         getLogger: jest.fn().mockReturnValue({
@@ -699,7 +699,6 @@ describe('OIDC Middleware', () => {
         getConfig: jest.fn(),
       } as unknown as jest.Mocked<Client>;
 
-      mockRequest = createMockRequest('http://localhost');
       mockResponse = createMockResponse();
       mockNext = jest.fn();
     });
@@ -709,6 +708,7 @@ describe('OIDC Middleware', () => {
         session: { mode: SessionMode.CLIENT },
       } as IClientConfig);
 
+      mockRequest = createTestRequest(RequestMethod.POST);
       const mw = csrfMiddleware(mockClient);
       await mw(mockRequest, mockResponse, mockNext);
 
@@ -722,10 +722,7 @@ describe('OIDC Middleware', () => {
         session: { mode: SessionMode.SERVER },
       } as IClientConfig);
 
-      mockRequest = createMockRequest('http://localhost', {
-        method: RequestMethod.GET,
-      });
-
+      mockRequest = createTestRequest(RequestMethod.GET);
       const mw = csrfMiddleware(mockClient);
       await mw(mockRequest, mockResponse, mockNext);
 
@@ -739,10 +736,7 @@ describe('OIDC Middleware', () => {
         session: { mode: SessionMode.SERVER },
       } as IClientConfig);
 
-      mockRequest = createMockRequest('http://localhost', {
-        method: RequestMethod.HEAD,
-      });
-
+      mockRequest = createTestRequest(RequestMethod.HEAD);
       const mw = csrfMiddleware(mockClient);
       await mw(mockRequest, mockResponse, mockNext);
 
@@ -756,10 +750,7 @@ describe('OIDC Middleware', () => {
         session: { mode: SessionMode.SERVER },
       } as IClientConfig);
 
-      mockRequest = createMockRequest('http://localhost', {
-        method: RequestMethod.OPTIONS,
-      });
-
+      mockRequest = createTestRequest(RequestMethod.OPTIONS);
       const mw = csrfMiddleware(mockClient);
       await mw(mockRequest, mockResponse, mockNext);
 
@@ -773,16 +764,12 @@ describe('OIDC Middleware', () => {
         session: { mode: SessionMode.SERVER },
       } as IClientConfig);
 
-      mockRequest = createMockRequest('http://localhost', {
-        method: RequestMethod.POST,
-      });
-      // No 'x-csrf-token' header set
-
+      mockRequest = createTestRequest(RequestMethod.POST);
       const mw = csrfMiddleware(mockClient);
       await mw(mockRequest, mockResponse, mockNext);
 
       expect(mockNext).not.toHaveBeenCalled();
-      expect(mockResponse.status).toHaveBeenCalledWith(403);
+      expect(mockResponse.status).toHaveBeenCalledWith(StatusCode.FORBIDDEN);
       expect(mockResponse.send).toHaveBeenCalledWith('Invalid CSRF token');
     });
 
@@ -791,19 +778,17 @@ describe('OIDC Middleware', () => {
         session: { mode: SessionMode.SERVER },
       } as IClientConfig);
 
-      mockRequest = createMockRequest('http://localhost', {
-        method: RequestMethod.POST,
+      // Set up a POST request with an incorrect CSRF token in headers.
+      mockRequest = createTestRequest(RequestMethod.POST, {
+        'x-csrf-token': 'mismatch_token',
       });
-      // Simulate an incoming CSRF token that does not match
-      (mockRequest.headers as any)['x-csrf-token'] = 'mismatch_token';
-      // Simulate a session that has a different token
-      mockRequest.session = { csrfToken: 'real_token' } as ISessionData;
+      mockRequest.setSession({ csrfToken: 'real_token' } as any);
 
       const mw = csrfMiddleware(mockClient);
       await mw(mockRequest, mockResponse, mockNext);
 
       expect(mockNext).not.toHaveBeenCalled();
-      expect(mockResponse.status).toHaveBeenCalledWith(403);
+      expect(mockResponse.status).toHaveBeenCalledWith(StatusCode.FORBIDDEN);
       expect(mockResponse.send).toHaveBeenCalledWith('Invalid CSRF token');
     });
 
@@ -812,23 +797,11 @@ describe('OIDC Middleware', () => {
         session: { mode: SessionMode.SERVER },
       } as IClientConfig);
 
-      mockRequest = createMockRequest('http://localhost', {
-        method: RequestMethod.POST,
-        headers: {
-          'x-csrf-token': 'real_token',
-        },
+      // Set up a POST request with a correct CSRF token in headers.
+      mockRequest = createTestRequest(RequestMethod.POST, {
+        'x-csrf-token': 'real_token',
       });
-      (mockRequest.headers as any)['x-csrf-token'] = 'real_token';
-      // Override the get method to return the CSRF token when requested
-      (mockRequest.headers.get as jest.Mock).mockImplementation(
-        (header: string) => {
-          if (header.toLowerCase() === 'host') return 'localhost';
-          if (header.toLowerCase() === 'x-csrf-token') return 'real_token';
-          return null;
-        },
-      );
-
-      mockRequest.session = { csrfToken: 'real_token' } as ISessionData;
+      mockRequest.setSession({ csrfToken: 'real_token' } as any);
 
       const mw = csrfMiddleware(mockClient);
       await mw(mockRequest, mockResponse, mockNext);

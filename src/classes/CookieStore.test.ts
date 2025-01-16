@@ -9,53 +9,14 @@ import {
 } from '../interfaces';
 import { SameSite } from '../enums';
 import { Cookie } from '../utils/Cookie';
-
-const createMockResponse = (init: Partial<IResponse> = {}): IResponse => {
-  return {
-    // Mock the redirect method
-    redirect: jest.fn(),
-
-    // Mock the status method
-    status: jest.fn().mockReturnThis(),
-
-    // Mock the send method
-    send: jest.fn().mockReturnThis(),
-
-    // Additional properties if needed
-    headers: new Headers(),
-    body: null,
-    bodyUsed: false,
-    ok: true,
-    redirected: false,
-    statusText: 'OK',
-    type: 'basic',
-    url: 'http://localhost',
-    clone: jest.fn(),
-    arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
-    blob: jest.fn().mockResolvedValue(new Blob()),
-    formData: jest.fn().mockResolvedValue(new FormData()),
-    json: jest.fn().mockResolvedValue({}),
-    text: jest.fn().mockResolvedValue(''),
-  } as unknown as IResponse;
-};
-
-const createMockRequest = (
-  url: string = 'http://localhost',
-  init: RequestInit = {},
-  query: Record<string, any> = {},
-  session?: ISessionData,
-): IRequest => {
-  const request = new Request(url, init) as IRequest;
-  request.query = query;
-  if (session) {
-    request.session = session;
-  }
-  return request;
-};
+import { Request } from './Request';
+import { Response } from './Response';
 
 describe('CookieStore', () => {
   let cookieStore: CookieStore;
   let context: IStoreContext;
+  let mockRequest: IRequest;
+  let mockResponse: IResponse;
 
   const mockUser: IUser = { sub: 'user123' };
   const mockCookie = {
@@ -64,14 +25,28 @@ describe('CookieStore', () => {
     expires_in: 3600,
     token_type: 'Bearer',
   };
-
-  const mockRequest = createMockRequest('http://localhost', {
-    headers: {
+  mockRequest = new Request()
+    .setUrl('http://localhost')
+    .setHeaders({
       cookie: 'sid=mock-sid',
-    },
-  });
+      'content-type': 'application/json',
+    })
+    .setMethod('GET')
+    .setQuery({ key: 'value' })
+    .setParams({ id: '123' })
+    .setBody({ example: 'body' })
+    .setIp('127.0.0.1')
+    .setIps(['127.0.0.1'])
 
-  const mockResponse = createMockResponse();
+    .setCookies({
+      sid: 'mock-sid',
+      access_token: 'mockAccessToken',
+      refresh_token: 'mockRefreshToken',
+      expires_in: '3600',
+      token_type: 'Bearer',
+    });
+
+  mockResponse = new Response();
 
   beforeEach(() => {
     const memoryStore = new MemoryStore();
@@ -87,18 +62,30 @@ describe('CookieStore', () => {
       memoryStore,
     );
     context = { request: mockRequest, response: mockResponse };
-    // Mock the append method on response headers
-    context.response.headers.append = jest.fn();
   });
 
   it('should set a new session and return a session ID', async () => {
+    // Create spies on the methods you want to inspect
+    const cookieSpy = jest.spyOn(mockResponse, 'cookie');
+
     const data: ISessionData = { cookie: mockCookie, user: mockUser };
     const sid = await cookieStore.set(data, context);
+
     expect(sid).toBeDefined();
-    expect(mockResponse.headers.append).toHaveBeenCalledWith(
-      'Set-Cookie',
-      expect.stringContaining('test_sid=' + sid),
+    expect(cookieSpy).toHaveBeenCalledWith(
+      'test_sid', // cookie name
+      sid, // cookie value
+      expect.objectContaining({
+        httpOnly: true,
+        secure: false, // This should match your cookieOptions in test setup
+        sameSite: SameSite.STRICT, // Assuming SameSite.STRICT resolves to 'Strict'
+        path: '/',
+        maxAge: 100, // from cookieOptions in your test setup
+      }),
     );
+
+    // Restore the spy if needed
+    cookieSpy.mockRestore();
   });
 
   it('should return null if request object is missing', async () => {
@@ -122,12 +109,22 @@ describe('CookieStore', () => {
     const data: ISessionData = { cookie: mockCookie, user: mockUser };
     const sid = await cookieStore.set(data, context);
 
-    // Set the 'test_sid' cookie in the 'Cookie' header
-    context.request = createMockRequest('http://localhost', {
-      headers: {
-        cookie: `test_sid=${sid}`,
-      },
-    });
+    // Create a new request that includes the correct cookie name and value
+    const newRequest = new Request()
+      .setUrl('http://localhost')
+      .setHeaders({
+        cookie: `test_sid=${sid}`, // Use 'test_sid' to match CookieStore
+        'content-type': 'application/json',
+      })
+      .setMethod('GET')
+      .setQuery({ key: 'value' })
+      .setParams({ id: '123' })
+      .setBody({ example: 'body' })
+      .setIp('127.0.0.1')
+      .setIps(['127.0.0.1']);
+
+    // Update the context with the new request
+    context.request = newRequest;
 
     const session = await cookieStore.get(sid, context);
     expect(session).toEqual(data);
@@ -140,18 +137,25 @@ describe('CookieStore', () => {
   });
 
   it('should destroy the session and expire the cookie', async () => {
+    const appendSpy = jest.spyOn(mockResponse, 'append');
+
     const sid = await cookieStore.set(
       { cookie: mockCookie, user: mockUser },
       context,
     );
     await cookieStore.destroy(sid, context);
-    expect(mockResponse.headers.append).toHaveBeenCalledWith(
+
+    expect(appendSpy).toHaveBeenCalledWith(
       'Set-Cookie',
       expect.stringContaining('test_sid=;'),
     );
+
+    appendSpy.mockRestore();
   });
 
   it('should touch session and reset cookie maxAge', async () => {
+    const appendSpy = jest.spyOn(mockResponse, 'append');
+
     const sid = await cookieStore.set(
       { cookie: mockCookie, user: mockUser },
       context,
@@ -161,10 +165,13 @@ describe('CookieStore', () => {
       { cookie: mockCookie, user: mockUser },
       context,
     );
-    expect(mockResponse.headers.append).toHaveBeenCalledWith(
+
+    expect(appendSpy).toHaveBeenCalledWith(
       'Set-Cookie',
       expect.stringContaining(`test_sid=${sid}`),
     );
+
+    appendSpy.mockRestore();
   });
 
   it('should use MemoryStore by default if no dataStore is provided', () => {
@@ -208,9 +215,7 @@ describe('CookieStore', () => {
     const sid = await cookieStore.set(data, context);
 
     // Remove the cookie header
-    context.request = createMockRequest('http://localhost', {
-      headers: {},
-    });
+    mockRequest.headers.delete('Cookie');
 
     const session = await cookieStore.get(sid, context);
     expect(session).toBeNull();
@@ -235,11 +240,7 @@ describe('CookieStore', () => {
     const sid = await cookieStore.set(data, context);
 
     // Set the 'test_sid' cookie to a different name
-    context.request = createMockRequest('http://localhost', {
-      headers: {
-        cookie: `other_cookie=${sid}`,
-      },
-    });
+    mockRequest.headers.set('Cookie', `other_cookie=${sid}`);
 
     const session = await cookieStore.get(sid, context);
     expect(session).toBeNull();

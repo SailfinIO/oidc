@@ -1,6 +1,7 @@
-import { Claims, RouteAction, Scopes } from '../enums';
+import { Claims, RouteAction } from '../enums';
 import { IMutex } from './IMutex';
-import { IRequest, IResponse } from './IStore';
+import { IRequest } from './IRequest';
+import { IResponse } from './IResponse';
 
 /**
  * Metadata that might be stored at the class level.

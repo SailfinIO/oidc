@@ -15,3 +15,5 @@ export * from './Session';
 export * from './Store';
 export * from './MemoryStore';
 export * from './CookieStore';
+export * from './Response';
+export * from './Request';

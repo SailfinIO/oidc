@@ -15,15 +15,11 @@ import {
   RouteAction,
   SameSite,
   SessionMode,
+  StatusCode,
 } from '../enums';
 import { ClientError } from '../errors/ClientError';
 import { NextFunction } from '../types';
-import {
-  Cookie,
-  parseCookies,
-  patchExpressResponseForSetCookie,
-  setCookieHeader,
-} from '../utils';
+import { parseCookies } from '../utils';
 
 /**
  * Middleware function compatible with Express.
@@ -43,21 +39,17 @@ export const middleware = (client: Client) => {
       return next();
     }
 
-    patchExpressResponseForSetCookie(res);
-
     await csrfMw(req, res, async (csrfErr) => {
       if (csrfErr) {
-        // If CSRF check fails, we won't proceed
         return next(csrfErr);
       }
-      let routeMetadata: IRouteMetadata | null = null; // Declare outside
+      let routeMetadata: IRouteMetadata | null = null;
 
       try {
-        // Parse cookies from headers
-        req.cookies = parseCookies(req.headers);
+        // Parse cookies and update the request
+        req.setCookies(parseCookies(req.headers));
         client.getLogger().debug('Parsed cookies', { cookies: req.cookies });
 
-        // Initialize session
         const sessionStore = client.getSessionStore();
         const sessionCookieName =
           client.getConfig().session?.cookie?.name || 'sid';
@@ -70,7 +62,7 @@ export const middleware = (client: Client) => {
             response: res,
           });
           if (sessionData) {
-            req.session = sessionData;
+            req.setSession(sessionData);
             client.getLogger().debug('Session loaded', { sid, sessionData });
           } else {
             client.getLogger().warn('Invalid sid, clearing session', { sid });
@@ -78,16 +70,14 @@ export const middleware = (client: Client) => {
           }
         }
 
-        // Continue with existing middleware logic
         const { method, url } = req;
         let pathname: string;
 
         try {
-          const host = Array.isArray(req.headers['host'])
-            ? req.headers['host'][0]
-            : req.headers['host'] || 'localhost';
+          const host =
+            (req.headers.get && req.headers.get('host')) || 'localhost';
           const baseUrl = `http://${host}`;
-          pathname = new URL(url, baseUrl).pathname;
+          pathname = new URL(url || '', baseUrl).pathname;
         } catch (error) {
           client.getLogger().error('Invalid URL', { url, error });
           await next(error);
@@ -100,14 +90,13 @@ export const middleware = (client: Client) => {
         );
 
         if (!routeMetadata) {
-          await next();
-          return;
+          return next();
         }
 
         const context: IStoreContext = {
           request: req,
           response: res,
-          extra: {}, // Populate as needed
+          extra: {},
           user: undefined,
         };
 
@@ -119,22 +108,23 @@ export const middleware = (client: Client) => {
         if (sessionStore) {
           if (sid) {
             // Update existing session
-            await sessionStore.touch(sid, req.session, {
+            await sessionStore.touch(sid, req.session!, {
               request: req,
               response: res,
             });
             client.getLogger().debug('Session touched', { sid });
           } else if (req.session) {
-            // Create new session
+            // Create new session; the store will generate the SID
             sid = await sessionStore.set(req.session, {
               request: req,
               response: res,
             });
+
             client
               .getLogger()
               .debug('New session created', { sid, sessionData: req.session });
 
-            // Set session cookie
+            // Set session cookie on the response
             const options = client.getConfig().session?.cookie?.options || {
               httpOnly: true,
               secure: true,
@@ -143,19 +133,19 @@ export const middleware = (client: Client) => {
               maxAge: 3600, // 1 hour
             };
 
-            const cookie = new Cookie(sessionCookieName, sid, options);
-
-            setCookieHeader(context.response, cookie.serialize());
+            res.cookie(sessionCookieName, sid, options);
           }
         }
 
-        // Only call next() if the response hasn't been sent (e.g., no redirect)
-        if (!res.redirected) {
+        // Only proceed to the next middleware if the action is not terminal
+        if (
+          routeMetadata.action !== RouteAction.Login &&
+          routeMetadata.action !== RouteAction.Callback
+        ) {
           await next();
         }
       } catch (error) {
-        // Pass the actual routeMetadata to handleError
-        await handleError(error, routeMetadata, req, res, next);
+        await handleError(error, routeMetadata!, req, res, next);
       }
     });
   };
@@ -209,13 +199,14 @@ const handleLogin = async (client: Client, req: IRequest, res: IResponse) => {
 
   // Initialize session if it doesn't exist
   if (!req.session) {
-    req.session = {};
+    req.setSession({ state: {}, user: undefined });
   }
   if (!req.session.state) {
     req.session.state = {};
   }
 
   // Store state and codeVerifier in session
+  req.setSession({ state: req.session.state, user: req.session.user });
   req.session.state[state] = { codeVerifier, createdAt: Date.now() };
 
   res.redirect(authUrl);
@@ -257,10 +248,10 @@ const handleCallback = async (
   const user = await client.getUserInfo();
   if (client.getConfig().session) {
     context.user = user;
-    req.session = {
+    req.setSession({
       ...req.session,
       user,
-    };
+    });
   }
 
   res.redirect(metadata.postLoginRedirectUri || '/');
@@ -299,10 +290,10 @@ const handleProtected = async (
 
   const user = await client.getUserInfo();
   context.user = user;
-  req.session = {
+  req.setSession({
     ...req.session,
     user,
-  };
+  });
 
   await next();
 };
@@ -372,6 +363,7 @@ const validateSpecificClaims = (
     );
   }
 };
+
 export const csrfMiddleware = (client: Client) => {
   return async (req: IRequest, res: IResponse, next: NextFunction) => {
     const mode = client.getConfig().session?.mode || SessionMode.SERVER;
@@ -381,7 +373,7 @@ export const csrfMiddleware = (client: Client) => {
       return next();
     }
 
-    // Skip for safe methods (GET, HEAD, OPTIONS)
+    // Skip enforcement for safe HTTP methods
     if (
       req.method === RequestMethod.GET ||
       req.method === RequestMethod.HEAD ||
@@ -393,27 +385,8 @@ export const csrfMiddleware = (client: Client) => {
     // --------------------------------------------
     // 1. Extract CSRF token from request headers
     // --------------------------------------------
-    let csrfToken: string | undefined;
-
-    // If req.headers is a native "Headers" instance
-    if (req.headers instanceof Headers) {
-      csrfToken = req.headers.get('x-csrf-token') || undefined;
-    }
-    // Otherwise, if it's a plain object
-    else if (typeof req.headers === 'object' && req.headers !== null) {
-      for (const key in req.headers as Record<string, any>) {
-        if (key.toLowerCase() === 'x-csrf-token') {
-          const val = req.headers[key];
-          if (Array.isArray(val)) {
-            // If somehow multiple token headers were sent, pick the last or the first
-            csrfToken = (val as string[])[(val as string[]).length - 1];
-          } else if (typeof val === 'string') {
-            csrfToken = val;
-          }
-          break;
-        }
-      }
-    }
+    // Given IRequest.headers is a Map<string, string>, we can directly retrieve the token.
+    const csrfToken = req.headers.get('x-csrf-token') || undefined;
 
     // --------------------------------------------
     // 2. Compare extracted token to stored token
@@ -423,14 +396,11 @@ export const csrfMiddleware = (client: Client) => {
       client
         .getLogger()
         .warn('Invalid CSRF token', { csrfToken, storedCsrfToken });
-      // If your response object is fetch-like or Express-like,
-      // this should still work. Otherwise, see your cookieUtils
-      // approach (e.g. set status code, send text, etc.).
-      res.status(403).send('Invalid CSRF token');
+      res.status(StatusCode.FORBIDDEN).send('Invalid CSRF token');
       return;
     }
 
-    // If everything is good, move on
+    // If token is valid, proceed to next middleware/handler
     return next();
   };
 };

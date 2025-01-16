@@ -31,7 +31,7 @@ export interface ISessionData {
    *
    * @type {IUser | undefined}
    */
-  user?: IUser;
+  user?: IUser | undefined;
 
   /**
    * Stores per-request states mapped to their PKCE codeVerifier or other metadata.
@@ -47,9 +47,13 @@ export interface ISessionData {
   >;
 
   /**
-   * Contains the CSRF token associated with the session.
+   * Contains the Cross-Site Request Forgery (CSRF) token associated with the session.
    *
    * @type {string | undefined}
+   * @remarks This field is optional and may not be present in all sessions.
+   * @see {@link https://en.wikipedia.org/wiki/Cross-site_request_forgery}
+   * @see {@link https://owasp.org/www-community/attacks/csrf}
+   *
    */
   csrfToken?: string | undefined;
 }

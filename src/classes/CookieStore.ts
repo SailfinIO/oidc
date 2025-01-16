@@ -17,7 +17,7 @@ import {
   IStore,
 } from '../interfaces';
 import { randomUUID } from 'crypto';
-import { Mutex, Logger, Cookie, parseCookies, setCookieHeader } from '../utils';
+import { Mutex, Logger, parseCookies } from '../utils';
 import { SameSite } from '../enums';
 import { MemoryStore } from './MemoryStore';
 
@@ -84,14 +84,7 @@ export class CookieStore implements ISessionStore {
     return this.mutex.runExclusive(async () => {
       const sid = randomUUID();
       await this.dataStore.set(sid, data, context);
-
-      const cookie = new Cookie(this.cookieName, sid, {
-        ...this.cookieOptions,
-        maxAge: this.cookieOptions.maxAge,
-      });
-
-      const serializedCookie = cookie.serialize();
-      setCookieHeader(context.response, serializedCookie);
+      context.response.cookie(this.cookieName, sid, this.cookieOptions);
       this.logger.debug('Session set with SID', { sid });
       return sid;
     });
@@ -153,13 +146,7 @@ export class CookieStore implements ISessionStore {
     return this.mutex.runExclusive(async () => {
       await this.dataStore.destroy(sid, context);
 
-      const expiredCookie = new Cookie(this.cookieName, '', {
-        ...this.cookieOptions,
-        maxAge: 0,
-      });
-
-      const serializedCookie = expiredCookie.serialize();
-      setCookieHeader(context.response, serializedCookie);
+      context.response.clearCookie(this.cookieName, this.cookieOptions);
       this.logger.debug('Session destroyed', { sid });
     });
   }
@@ -185,13 +172,11 @@ export class CookieStore implements ISessionStore {
     return this.mutex.runExclusive(async () => {
       await this.dataStore.touch(sid, session, context);
 
-      const touchedCookie = new Cookie(this.cookieName, sid, {
+      context.response.cookie(this.cookieName, sid, {
         ...this.cookieOptions,
         maxAge: this.cookieOptions.maxAge,
       });
 
-      const serializedCookie = touchedCookie.serialize();
-      setCookieHeader(context.response, serializedCookie);
       this.logger.debug('Session touched', { sid });
     });
   }

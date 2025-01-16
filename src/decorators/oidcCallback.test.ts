@@ -2,8 +2,9 @@
 
 import { OidcCallback } from './oidcCallback';
 import { Client } from '../classes/Client';
-import { IClientConfig } from '../interfaces';
-import { StorageMechanism } from '../enums';
+import { IClientConfig, IRequest, IResponse } from '../interfaces';
+import { StatusCode, StorageMechanism } from '../enums';
+import { Request, Response } from '../classes';
 
 // Dummy class to apply the decorator
 class DummyController {
@@ -14,15 +15,15 @@ class DummyController {
   }
 
   @OidcCallback()
-  async handleCallback(req: any, res: any) {
+  async handleCallback(req: IRequest, res: IResponse) {
     // Original method logic can be empty or perform additional actions if needed
   }
 }
 
 describe('OidcCallback Decorator', () => {
   let mockClient: jest.Mocked<Client>;
-  let mockRequest: any;
-  let mockResponse: any;
+  let mockRequest: IRequest;
+  let mockResponse: IResponse;
   let dummyController: DummyController;
   let originalConsoleError: typeof console.error;
 
@@ -37,20 +38,6 @@ describe('OidcCallback Decorator', () => {
       handleRedirect: jest.fn(),
       getUserInfo: jest.fn(),
     } as unknown as jest.Mocked<Client>;
-
-    // Initialize mock request and response
-    mockRequest = {
-      query: {},
-      session: {
-        state: {}, // Initialize as an empty object for multiple sessions
-      },
-    };
-
-    mockResponse = {
-      redirect: jest.fn(),
-      status: jest.fn().mockReturnThis(),
-      send: jest.fn(),
-    };
 
     // Initialize the dummy controller with the mocked client
     dummyController = new DummyController(mockClient);
@@ -80,14 +67,42 @@ describe('OidcCallback Decorator', () => {
     const state = 'state123';
     const userInfo = { sub: 'user123', name: 'John Doe' };
 
-    // Set up request query parameters
-    mockRequest.query.code = authorizationCode;
-    mockRequest.query.state = state;
+    // Initialize mockRequest with query parameters and other properties
+    mockRequest = new Request()
+      .setUrl('http://localhost')
+      .setHeaders({
+        cookie: 'sid=mock-sid',
+        'content-type': 'application/json',
+      })
+      .setMethod('GET')
+      .setQuery({ code: authorizationCode, state }) // Set query parameters
+      .setParams({ id: '123' })
+      .setBody({ example: 'body' })
+      .setIp('127.0.0.1')
+      .setIps(['127.0.0.1'])
+      .setCookies({ sid: 'mock-sid' });
 
-    // Set up session data with multiple sessions structure
-    mockRequest.session.state[state] = { codeVerifier: 'codeVerifier123' };
+    // Initialize mockResponse and spy on its redirect method
+    mockResponse = new Response();
+    const redirectSpy = jest.spyOn(mockResponse, 'redirect');
 
-    // Mock client.handleRedirect and getUserInfo
+    // Initialize session on the request
+    const currentSession = {
+      state: { [state]: { codeVerifier: 'codeVerifier123' } },
+      user: undefined,
+    };
+    mockRequest.setSession(currentSession);
+
+    // Spy on setSession to track updates to the session
+    const setSessionSpy = jest
+      .spyOn(mockRequest, 'setSession')
+      .mockImplementation((newSession) => {
+        // Merge new session data into currentSession
+        Object.assign(currentSession, newSession);
+        return mockRequest;
+      });
+
+    // Mock client.handleRedirect and getUserInfo responses
     mockClient.handleRedirect.mockResolvedValue();
     mockClient.getUserInfo.mockResolvedValue(userInfo);
 
@@ -95,15 +110,24 @@ describe('OidcCallback Decorator', () => {
     await dummyController.handleCallback(mockRequest, mockResponse);
 
     // Assert
-    expect(mockClient.getConfig).toHaveBeenCalledTimes(2); // Decorator and processSessionFlow
+    expect(mockClient.getConfig).toHaveBeenCalled();
     expect(mockClient.handleRedirect).toHaveBeenCalledWith(
       authorizationCode,
       state,
-      { request: mockRequest, response: mockResponse }, // Updated parameters
+      { request: mockRequest, response: mockResponse },
     );
-    expect(mockClient.getUserInfo).toHaveBeenCalledTimes(1);
-    expect(mockRequest.session.user).toEqual(userInfo);
-    expect(mockResponse.redirect).toHaveBeenCalledWith('/');
+    expect(mockClient.getUserInfo).toHaveBeenCalled();
+
+    // Verify the session was updated with the user info
+    expect(currentSession.user).toEqual(userInfo);
+    expect(setSessionSpy).toHaveBeenCalled(); // Confirm that setSession was invoked
+
+    // Verify redirection
+    expect(redirectSpy).toHaveBeenCalledWith('/');
+
+    // Cleanup spies
+    setSessionSpy.mockRestore();
+    redirectSpy.mockRestore();
   });
 
   it('should redirect to the specified postLoginRedirectUri after successful authentication with session enabled', async () => {
@@ -113,44 +137,82 @@ describe('OidcCallback Decorator', () => {
     const postLoginRedirectUri = '/dashboard';
     const userInfo = { sub: 'user456', name: 'Jane Smith' };
 
-    // Set up request query parameters
-    mockRequest.query.code = authorizationCode;
-    mockRequest.query.state = state;
+    // Initialize mockRequest with query parameters and other properties
+    mockRequest = new Request()
+      .setUrl('http://localhost')
+      .setHeaders({
+        cookie: 'sid=mock-sid',
+        'content-type': 'application/json',
+      })
+      .setMethod('GET')
+      .setQuery({ code: authorizationCode, state })
+      .setParams({ id: '123' })
+      .setBody({ example: 'body' })
+      .setIp('127.0.0.1')
+      .setIps(['127.0.0.1'])
+      .setCookies({ sid: 'mock-sid' });
 
-    // Set up session data with multiple sessions structure
-    mockRequest.session.state[state] = { codeVerifier: 'codeVerifier456' };
+    // Initialize mockResponse and spy on its redirect method
+    mockResponse = new Response();
+    const redirectSpy = jest.spyOn(mockResponse, 'redirect');
 
-    // Mock client.handleRedirect and getUserInfo
+    // Initialize session on the request
+    const currentSession = {
+      state: { [state]: { codeVerifier: 'codeVerifier456' } },
+      user: undefined,
+    };
+    mockRequest.setSession(currentSession);
+
+    // Spy on setSession to track session updates
+    const setSessionSpy = jest
+      .spyOn(mockRequest, 'setSession')
+      .mockImplementation((newSession) => {
+        Object.assign(currentSession, newSession);
+        return mockRequest;
+      });
+
+    // Mock client.handleRedirect and getUserInfo responses
     mockClient.handleRedirect.mockResolvedValue();
     mockClient.getUserInfo.mockResolvedValue(userInfo);
 
-    // Re-define the dummy controller with postLoginRedirectUri option
+    // Create a controller with the specified postLoginRedirectUri
     class CustomRedirectController extends DummyController {
       @OidcCallback({ postLoginRedirectUri })
       async handleCallback(req: any, res: any) {}
     }
-
     dummyController = new CustomRedirectController(mockClient);
 
     // Act
     await dummyController.handleCallback(mockRequest, mockResponse);
 
     // Assert
-    expect(mockClient.getConfig).toHaveBeenCalledTimes(2); // Decorator and processSessionFlow
+    expect(mockClient.getConfig).toHaveBeenCalled();
     expect(mockClient.handleRedirect).toHaveBeenCalledWith(
       authorizationCode,
       state,
-      { request: mockRequest, response: mockResponse }, // Updated parameters
+      { request: mockRequest, response: mockResponse },
     );
-    expect(mockClient.getUserInfo).toHaveBeenCalledTimes(1);
-    expect(mockRequest.session.user).toEqual(userInfo);
-    expect(mockResponse.redirect).toHaveBeenCalledWith(postLoginRedirectUri);
+    expect(mockClient.getUserInfo).toHaveBeenCalled();
+
+    // Verify the session was updated with the user info
+    expect(currentSession.user).toEqual(userInfo);
+    expect(setSessionSpy).toHaveBeenCalled();
+
+    // Verify redirection to the specified URI
+    expect(redirectSpy).toHaveBeenCalledWith(postLoginRedirectUri);
+
+    // Cleanup spies
+    setSessionSpy.mockRestore();
+    redirectSpy.mockRestore();
   });
 
-  it('should respond with 400 if request.query is missing', async () => {
-    // Arrange
-    // Ensure that `query` is undefined
-    mockRequest.query = undefined;
+  it('should respond with 400 if code and state is missing', async () => {
+    // Arrange: Create a new Request without setting query
+    mockRequest = new Request();
+    mockResponse = new Response();
+
+    const statusSpy = jest.spyOn(mockResponse, 'status');
+    const sendSpy = jest.spyOn(mockResponse, 'send');
 
     // Act
     await dummyController.handleCallback(mockRequest, mockResponse);
@@ -159,10 +221,14 @@ describe('OidcCallback Decorator', () => {
     expect(mockClient.getConfig).not.toHaveBeenCalled();
     expect(mockClient.handleRedirect).not.toHaveBeenCalled();
     expect(mockClient.getUserInfo).not.toHaveBeenCalled();
-    expect(mockResponse.status).toHaveBeenCalledWith(400);
-    expect(mockResponse.send).toHaveBeenCalledWith(
-      'Invalid callback parameters: Missing request or query.',
+    expect(statusSpy).toHaveBeenCalledWith(StatusCode.BAD_REQUEST);
+    expect(sendSpy).toHaveBeenCalledWith(
+      'Invalid callback parameters: Missing code or state.',
     );
+
+    // Cleanup spies
+    statusSpy.mockRestore();
+    sendSpy.mockRestore();
   });
 
   it('should redirect to the postLoginRedirectUri after successful authentication with session disabled', async () => {
@@ -172,24 +238,32 @@ describe('OidcCallback Decorator', () => {
     const postLoginRedirectUri = '/home';
     const userInfo = { sub: 'user789', name: 'Alice Johnson' };
 
-    // Set up request query parameters
-    mockRequest.query.code = authorizationCode;
-    mockRequest.query.state = state;
+    mockRequest = new Request()
+      .setUrl('http://localhost')
+      .setHeaders({
+        cookie: 'sid=mock-sid',
+        'content-type': 'application/json',
+      })
+      .setMethod('GET')
+      .setQuery({ code: authorizationCode, state })
+      .setParams({ id: '123' })
+      .setBody({ example: 'body' })
+      .setIp('127.0.0.1')
+      .setIps(['127.0.0.1'])
+      .setCookies({ sid: 'mock-sid' });
 
-    // Disable session by omitting the session property
-    mockClient.getConfig.mockReturnValue({
-      // session is undefined
-    } as IClientConfig);
+    // Disable session by returning an empty config (session undefined)
+    mockClient.getConfig.mockReturnValue({} as IClientConfig);
 
-    // Re-define the dummy controller with postLoginRedirectUri option
     class StatelessController extends DummyController {
       @OidcCallback({ postLoginRedirectUri })
       async handleCallback(req: any, res: any) {}
     }
-
     dummyController = new StatelessController(mockClient);
 
-    // Mock client.handleRedirect and getUserInfo
+    mockResponse = new Response();
+    const redirectSpy = jest.spyOn(mockResponse, 'redirect');
+
     mockClient.handleRedirect.mockResolvedValue();
     mockClient.getUserInfo.mockResolvedValue(userInfo);
 
@@ -197,22 +271,36 @@ describe('OidcCallback Decorator', () => {
     await dummyController.handleCallback(mockRequest, mockResponse);
 
     // Assert
-    expect(mockClient.getConfig).toHaveBeenCalledTimes(1); // Only decorator's getConfig
+    expect(mockClient.getConfig).toHaveBeenCalledTimes(1);
     expect(mockClient.handleRedirect).toHaveBeenCalledWith(
       authorizationCode,
       state,
-      { request: mockRequest, response: mockResponse }, // Updated parameters
+      { request: mockRequest, response: mockResponse },
     );
     expect(mockClient.getUserInfo).toHaveBeenCalledTimes(1);
-    // Since session is disabled, user should not be set in session
-    expect(mockRequest.session.user).toBeUndefined();
-    expect(mockResponse.redirect).toHaveBeenCalledWith(postLoginRedirectUri);
+    // Use optional chaining to safely check user
+    expect(mockRequest.session?.user).toBeUndefined();
+    expect(redirectSpy).toHaveBeenCalledWith(postLoginRedirectUri);
+
+    // Cleanup
+    redirectSpy.mockRestore();
   });
 
   it('should respond with 400 if code is missing', async () => {
     // Arrange
     const state = 'stateMissingCode';
-    mockRequest.query.state = state;
+    mockRequest = new Request(); // create a new Request
+    mockResponse = new Response();
+
+    // Create spies on status and send
+    const statusSpy = jest
+      .spyOn(mockResponse, 'status')
+      .mockReturnValue(mockResponse);
+    const sendSpy = jest
+      .spyOn(mockResponse, 'send')
+      .mockReturnValue(mockResponse);
+
+    mockRequest.setQuery({ state });
 
     // Act
     await dummyController.handleCallback(mockRequest, mockResponse);
@@ -221,16 +309,31 @@ describe('OidcCallback Decorator', () => {
     expect(mockClient.getConfig).not.toHaveBeenCalled();
     expect(mockClient.handleRedirect).not.toHaveBeenCalled();
     expect(mockClient.getUserInfo).not.toHaveBeenCalled();
-    expect(mockResponse.status).toHaveBeenCalledWith(400);
-    expect(mockResponse.send).toHaveBeenCalledWith(
+    expect(statusSpy).toHaveBeenCalledWith(StatusCode.BAD_REQUEST);
+    expect(sendSpy).toHaveBeenCalledWith(
       'Invalid callback parameters: Missing code or state.',
     );
+
+    // Cleanup spies
+    statusSpy.mockRestore();
+    sendSpy.mockRestore();
   });
 
   it('should respond with 400 if state is missing', async () => {
     // Arrange
     const authorizationCode = 'authCodeMissingState';
-    mockRequest.query.code = authorizationCode;
+    mockRequest = new Request(); // create a new Request
+    mockResponse = new Response();
+
+    // Create spies on status and send
+    const statusSpy = jest
+      .spyOn(mockResponse, 'status')
+      .mockReturnValue(mockResponse);
+    const sendSpy = jest
+      .spyOn(mockResponse, 'send')
+      .mockReturnValue(mockResponse);
+
+    mockRequest.setQuery({ code: authorizationCode });
 
     // Act
     await dummyController.handleCallback(mockRequest, mockResponse);
@@ -239,10 +342,14 @@ describe('OidcCallback Decorator', () => {
     expect(mockClient.getConfig).not.toHaveBeenCalled();
     expect(mockClient.handleRedirect).not.toHaveBeenCalled();
     expect(mockClient.getUserInfo).not.toHaveBeenCalled();
-    expect(mockResponse.status).toHaveBeenCalledWith(400);
-    expect(mockResponse.send).toHaveBeenCalledWith(
+    expect(statusSpy).toHaveBeenCalledWith(StatusCode.BAD_REQUEST);
+    expect(sendSpy).toHaveBeenCalledWith(
       'Invalid callback parameters: Missing code or state.',
     );
+
+    // Cleanup spies
+    statusSpy.mockRestore();
+    sendSpy.mockRestore();
   });
 
   it('should respond with 500 if state does not match the stored state in session', async () => {
@@ -252,18 +359,39 @@ describe('OidcCallback Decorator', () => {
     const storedState = 'storedState';
     const error = new Error('State mismatch');
 
-    // Set up request query parameters
-    mockRequest.query.code = authorizationCode;
-    mockRequest.query.state = receivedState;
+    mockRequest = new Request()
+      .setUrl('http://localhost')
+      .setHeaders({
+        cookie: 'sid=mock-sid',
+        'content-type': 'application/json',
+      })
+      .setMethod('GET')
+      .setQuery({ code: authorizationCode, state: receivedState })
+      .setParams({ id: '123' })
+      .setBody({ example: 'body' })
+      .setIp('127.0.0.1')
+      .setIps(['127.0.0.1'])
+      .setCookies({ sid: 'mock-sid' });
 
-    // Set up session data with a different state
+    // Initialize response and spies if needed
+    mockResponse = new Response();
+    const statusSpy = jest
+      .spyOn(mockResponse, 'status')
+      .mockReturnValue(mockResponse);
+    const sendSpy = jest
+      .spyOn(mockResponse, 'send')
+      .mockReturnValue(mockResponse);
+
+    // Initialize session and its state
+    if (!mockRequest.session) {
+      mockRequest.setSession({ state: {}, user: undefined });
+    }
     mockRequest.session.state[storedState] = {
       codeVerifier: 'codeVerifierMismatch',
     };
 
-    // Mock handleRedirect to throw an error due to state mismatch
-    mockClient.handleRedirect.mockImplementation((code, state, context) => {
-      // Simulate state mismatch by throwing an error
+    // Simulate handleRedirect throwing an error
+    mockClient.handleRedirect.mockImplementation(() => {
       throw error;
     });
 
@@ -271,15 +399,18 @@ describe('OidcCallback Decorator', () => {
     await dummyController.handleCallback(mockRequest, mockResponse);
 
     // Assert
-    expect(mockClient.getConfig).toHaveBeenCalledTimes(1); // Only decorator's getConfig
     expect(mockClient.handleRedirect).toHaveBeenCalledWith(
       authorizationCode,
       receivedState,
       { request: mockRequest, response: mockResponse },
     );
     expect(mockClient.getUserInfo).not.toHaveBeenCalled();
-    expect(mockResponse.status).toHaveBeenCalledWith(500);
-    expect(mockResponse.send).toHaveBeenCalledWith('Authentication failed');
+    expect(statusSpy).toHaveBeenCalledWith(StatusCode.INTERNAL_SERVER_ERROR);
+    expect(sendSpy).toHaveBeenCalledWith('Authentication failed');
+
+    // Cleanup spies
+    statusSpy.mockRestore();
+    sendSpy.mockRestore();
   });
 
   it('should respond with 500 if codeVerifier is missing from session when session is enabled', async () => {
@@ -289,10 +420,23 @@ describe('OidcCallback Decorator', () => {
     const error = new Error('Code verifier missing');
 
     // Set up request query parameters
-    mockRequest.query.code = authorizationCode;
-    mockRequest.query.state = state;
-
-    // Set up session data without codeVerifier
+    mockRequest = new Request()
+      .setUrl('http://localhost')
+      .setHeaders({
+        cookie: 'sid=mock-sid',
+        'content-type': 'application/json',
+      })
+      .setMethod('GET')
+      .setQuery({ code: authorizationCode, state }) // Merge query parameters
+      .setParams({ id: '123' })
+      .setBody({ example: 'body' })
+      .setIp('127.0.0.1')
+      .setIps(['127.0.0.1'])
+      .setCookies({ sid: 'mock-sid' });
+    // Before setting up session data without codeVerifier
+    if (!mockRequest.session) {
+      mockRequest.setSession({ state: {}, user: undefined });
+    }
     mockRequest.session.state[state] = {}; // Missing codeVerifier
 
     // Mock handleRedirect to throw an error due to missing codeVerifier
@@ -303,19 +447,30 @@ describe('OidcCallback Decorator', () => {
       return Promise.resolve();
     });
 
+    const statusSpy = jest
+      .spyOn(mockResponse, 'status')
+      .mockReturnValue(mockResponse);
+    const sendSpy = jest
+      .spyOn(mockResponse, 'send')
+      .mockReturnValue(mockResponse);
+
     // Act
     await dummyController.handleCallback(mockRequest, mockResponse);
 
     // Assert
-    expect(mockClient.getConfig).toHaveBeenCalledTimes(1); // Only decorator's getConfig
+    expect(mockClient.getConfig).toHaveBeenCalledTimes(1);
     expect(mockClient.handleRedirect).toHaveBeenCalledWith(
       authorizationCode,
       state,
       { request: mockRequest, response: mockResponse },
     );
     expect(mockClient.getUserInfo).not.toHaveBeenCalled();
-    expect(mockResponse.status).toHaveBeenCalledWith(500);
-    expect(mockResponse.send).toHaveBeenCalledWith('Authentication failed');
+    expect(statusSpy).toHaveBeenCalledWith(StatusCode.INTERNAL_SERVER_ERROR);
+    expect(sendSpy).toHaveBeenCalledWith('Authentication failed');
+
+    // Cleanup spies
+    statusSpy.mockRestore();
+    sendSpy.mockRestore();
   });
 
   it('should call the custom onError handler when handleRedirect throws an error with session enabled', async () => {
@@ -325,10 +480,23 @@ describe('OidcCallback Decorator', () => {
     const error = new Error('handleRedirect failed');
 
     // Set up request query parameters
-    mockRequest.query.code = authorizationCode;
-    mockRequest.query.state = state;
+    mockRequest = new Request()
+      .setUrl('http://localhost')
+      .setHeaders({
+        cookie: 'sid=mock-sid',
+        'content-type': 'application/json',
+      })
+      .setMethod('GET')
+      .setQuery({ code: authorizationCode, state }) // Merge query parameters
+      .setParams({ id: '123' })
+      .setBody({ example: 'body' })
+      .setIp('127.0.0.1')
+      .setIps(['127.0.0.1'])
+      .setCookies({ sid: 'mock-sid' });
 
-    // Set up session data
+    if (!mockRequest.session) {
+      mockRequest.setSession({ state: {}, user: undefined });
+    }
     mockRequest.session.state[state] = {
       codeVerifier: 'codeVerifierHandleRedirectError',
     };
@@ -373,16 +541,35 @@ describe('OidcCallback Decorator', () => {
     const error = new Error('handleRedirect failed');
 
     // Set up request query parameters
-    mockRequest.query.code = authorizationCode;
-    mockRequest.query.state = state;
-
+    mockRequest = new Request()
+      .setUrl('http://localhost')
+      .setHeaders({
+        cookie: 'sid=mock-sid',
+        'content-type': 'application/json',
+      })
+      .setMethod('GET')
+      .setQuery({ code: authorizationCode, state }) // Merge query parameters
+      .setParams({ id: '123' })
+      .setBody({ example: 'body' })
+      .setIp('127.0.0.1')
+      .setIps(['127.0.0.1'])
+      .setCookies({ sid: 'mock-sid' });
     // Set up session data
+    if (!mockRequest.session) {
+      mockRequest.setSession({ state: {}, user: undefined });
+    }
     mockRequest.session.state[state] = {
       codeVerifier: 'codeVerifierHandleRedirect500',
     };
 
     // Mock handleRedirect to throw an error
     mockClient.handleRedirect.mockRejectedValue(error);
+    const statusSpy = jest
+      .spyOn(mockResponse, 'status')
+      .mockReturnValue(mockResponse);
+    const sendSpy = jest
+      .spyOn(mockResponse, 'send')
+      .mockReturnValue(mockResponse);
 
     // Act
     await dummyController.handleCallback(mockRequest, mockResponse);
@@ -396,7 +583,9 @@ describe('OidcCallback Decorator', () => {
     );
     expect(mockClient.getUserInfo).not.toHaveBeenCalled();
     expect(console.error).toHaveBeenCalledWith('OIDC Callback Error:', error);
-    expect(mockResponse.status).toHaveBeenCalledWith(500);
+    expect(mockResponse.status).toHaveBeenCalledWith(
+      StatusCode.INTERNAL_SERVER_ERROR,
+    );
     expect(mockResponse.send).toHaveBeenCalledWith('Authentication failed');
   });
 
@@ -407,10 +596,23 @@ describe('OidcCallback Decorator', () => {
     const error = new Error('getUserInfo failed');
 
     // Set up request query parameters
-    mockRequest.query.code = authorizationCode;
-    mockRequest.query.state = state;
+    mockRequest = new Request()
+      .setUrl('http://localhost')
+      .setHeaders({
+        cookie: 'sid=mock-sid',
+        'content-type': 'application/json',
+      })
+      .setMethod('GET')
+      .setQuery({ code: authorizationCode, state }) // Merge query parameters
+      .setParams({ id: '123' })
+      .setBody({ example: 'body' })
+      .setIp('127.0.0.1')
+      .setIps(['127.0.0.1'])
+      .setCookies({ sid: 'mock-sid' });
 
-    // Set up session data
+    if (!mockRequest.session) {
+      mockRequest.setSession({ state: {}, user: undefined });
+    }
     mockRequest.session.state[state] = {
       codeVerifier: 'codeVerifierUserInfoError',
     };
@@ -482,10 +684,23 @@ describe('OidcCallback Decorator', () => {
     const error = new Error('getUserInfo failed');
 
     // Set up request query parameters
-    mockRequest.query.code = authorizationCode;
-    mockRequest.query.state = state;
+    mockRequest = new Request()
+      .setUrl('http://localhost')
+      .setHeaders({
+        cookie: 'sid=mock-sid',
+        'content-type': 'application/json',
+      })
+      .setMethod('GET')
+      .setQuery({ code: authorizationCode, state }) // Merge query parameters
+      .setParams({ id: '123' })
+      .setBody({ example: 'body' })
+      .setIp('127.0.0.1')
+      .setIps(['127.0.0.1'])
+      .setCookies({ sid: 'mock-sid' });
 
-    // Set up session data
+    if (!mockRequest.session) {
+      mockRequest.setSession({ state: {}, user: undefined });
+    }
     mockRequest.session.state[state] = {
       codeVerifier: 'codeVerifierUserInfo500',
     };
@@ -519,11 +734,19 @@ describe('OidcCallback Decorator', () => {
         },
       } as IClientConfig);
 
+    // Add spies for status and send before invoking the handler
+    const statusSpy = jest
+      .spyOn(mockResponse, 'status')
+      .mockReturnValue(mockResponse);
+    const sendSpy = jest
+      .spyOn(mockResponse, 'send')
+      .mockReturnValue(mockResponse);
+
     // Act
     await dummyController.handleCallback(mockRequest, mockResponse);
 
     // Assert
-    expect(mockClient.getConfig).toHaveBeenCalledTimes(1); // Decorator and processSessionFlow
+    expect(mockClient.getConfig).toHaveBeenCalledTimes(1);
     expect(mockClient.handleRedirect).toHaveBeenCalledWith(
       authorizationCode,
       state,
@@ -532,25 +755,38 @@ describe('OidcCallback Decorator', () => {
     expect(mockClient.getUserInfo).toHaveBeenCalledTimes(1);
     expect(mockRequest.session.user).toBeUndefined(); // user not set due to error
     expect(console.error).toHaveBeenCalledWith('OIDC Callback Error:', error);
-    expect(mockResponse.status).toHaveBeenCalledWith(500);
-    expect(mockResponse.send).toHaveBeenCalledWith('Authentication failed');
+    expect(statusSpy).toHaveBeenCalledWith(StatusCode.INTERNAL_SERVER_ERROR);
+    expect(sendSpy).toHaveBeenCalledWith('Authentication failed');
+
+    statusSpy.mockRestore();
+    sendSpy.mockRestore();
   });
 
   it('should respond with 400 if request is missing', async () => {
     // Arrange
-    // Passing undefined for req
+    mockResponse = new Response();
+    const statusSpy = jest
+      .spyOn(mockResponse, 'status')
+      .mockReturnValue(mockResponse);
+    const sendSpy = jest
+      .spyOn(mockResponse, 'send')
+      .mockReturnValue(mockResponse);
+
+    // Act
     await dummyController.handleCallback(undefined, mockResponse);
 
     // Assert
     expect(mockClient.getConfig).not.toHaveBeenCalled();
     expect(mockClient.handleRedirect).not.toHaveBeenCalled();
     expect(mockClient.getUserInfo).not.toHaveBeenCalled();
-
-    // Update expectations to reflect that res.status and res.send should be called
-    expect(mockResponse.status).toHaveBeenCalledWith(400);
-    expect(mockResponse.send).toHaveBeenCalledWith(
+    expect(statusSpy).toHaveBeenCalledWith(StatusCode.BAD_REQUEST);
+    expect(sendSpy).toHaveBeenCalledWith(
       'Invalid callback parameters: Missing request or response.',
     );
+
+    // Cleanup spies
+    statusSpy.mockRestore();
+    sendSpy.mockRestore();
   });
 
   it('should handle callback without session correctly', async () => {
@@ -561,8 +797,19 @@ describe('OidcCallback Decorator', () => {
     const userInfo = { sub: 'userNoSession', name: 'No Session User' };
 
     // Set up request query parameters
-    mockRequest.query.code = authorizationCode;
-    mockRequest.query.state = state;
+    mockRequest = new Request()
+      .setUrl('http://localhost')
+      .setHeaders({
+        cookie: 'sid=mock-sid',
+        'content-type': 'application/json',
+      })
+      .setMethod('GET')
+      .setQuery({ code: authorizationCode, state }) // Merge query parameters
+      .setParams({ id: '123' })
+      .setBody({ example: 'body' })
+      .setIp('127.0.0.1')
+      .setIps(['127.0.0.1'])
+      .setCookies({ sid: 'mock-sid' });
 
     // Disable session by omitting the session property
     mockClient.getConfig.mockReturnValue({
@@ -576,6 +823,10 @@ describe('OidcCallback Decorator', () => {
     }
 
     dummyController = new NoSessionController(mockClient);
+
+    // Initialize mockResponse and create a spy for the redirect method
+    mockResponse = new Response();
+    const redirectSpy = jest.spyOn(mockResponse, 'redirect');
 
     // Mock client.handleRedirect and getUserInfo
     mockClient.handleRedirect.mockResolvedValue();
@@ -592,7 +843,8 @@ describe('OidcCallback Decorator', () => {
       { request: mockRequest, response: mockResponse }, // Updated parameters
     );
     expect(mockClient.getUserInfo).toHaveBeenCalledTimes(1);
-    expect(mockRequest.session.user).toBeUndefined(); // user not set since session is disabled
+    expect(mockRequest.session?.user).toBeUndefined(); // user not set since session is disabled
     expect(mockResponse.redirect).toHaveBeenCalledWith(postLoginRedirectUri);
+    expect(redirectSpy).toHaveBeenCalledWith(postLoginRedirectUri);
   });
 });

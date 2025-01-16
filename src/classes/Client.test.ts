@@ -19,6 +19,7 @@ import { Store } from './Store';
 import * as utils from '../utils';
 import { Session } from './Session';
 import { defaultClientConfig } from '../config/defaultClientConfig';
+import { Request } from './Request';
 
 // Set environment variables if needed
 process.env.OIDC_CLIENT_LOG_LEVEL = 'DEBUG';
@@ -63,15 +64,16 @@ const createMockResponse = (init: Partial<IResponse> = {}): IResponse => {
 
 const createMockRequest = (
   url: string = 'http://localhost',
-  init: RequestInit = {},
+  init: Partial<RequestInit> = {},
   query: Record<string, any> = {},
   session?: ISessionData,
-): IRequest => {
-  const request = new Request(url, init) as IRequest;
-  request.query = query;
-  if (session) {
-    request.session = session;
-  }
+): Request => {
+  const request = new Request();
+  request
+    .setUrl(url)
+    .setQuery(query)
+    .setMethod(init.method || 'GET');
+  if (session) request.setSession(session);
   return request;
 };
 
