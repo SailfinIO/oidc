@@ -1,3 +1,9 @@
+## [0.0.13-beta.6](https://github.com/SailfinIO/oidc/compare/v0.0.13-beta.5...v0.0.13-beta.6) (2025-01-16)
+
+### Bug Fixes
+
+* testing handle queue entry ([f237ba9](https://github.com/SailfinIO/oidc/commit/f237ba92c55ae1edfac133b6062d8fa4858e1bef))
+
 ## [0.0.13-beta.5](https://github.com/SailfinIO/oidc/compare/v0.0.13-beta.4...v0.0.13-beta.5) (2025-01-16)
 
 ### Bug Fixes
