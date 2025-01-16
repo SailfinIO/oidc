@@ -4,9 +4,11 @@ import {
   ILogger,
   ITimer,
   MutexOperation,
+  SchedulingStrategy,
 } from '../interfaces';
 import { MutexError, ClientError } from '../errors';
 import { MutexRegistry } from './MutexRegistry';
+import { defaultMutexOptions } from '../constants/defaultMutexOptions';
 
 describe('Mutex', () => {
   let logger: ILogger;
@@ -36,7 +38,6 @@ describe('Mutex', () => {
     mutex = new Mutex<string>({
       logger,
       timer,
-      deadlock: { strategy: DeadlockStrategy.ForceRelease },
     });
   });
 
@@ -62,6 +63,51 @@ describe('Mutex', () => {
         initialLocked: false,
         initialQueueLength: 0,
       });
+    });
+
+    it('should have correct default values', () => {
+      expect(defaultMutexOptions.defaultTimeout).toBe(0);
+      expect(defaultMutexOptions.fairness).toBe(true);
+      expect(defaultMutexOptions.reentrant).toBe(false);
+      expect(defaultMutexOptions.priority).toMatchObject({
+        adjustmentFactor: 1,
+        adjustmentExponent: 1,
+        maxIncrement: Infinity,
+      });
+      expect(defaultMutexOptions.cancelOnError).toBe(false);
+      expect(defaultMutexOptions.backoff).toMatchObject({
+        maxAttempts: 1,
+        initialDelay: 0,
+        factor: 1,
+        maxDelay: 0,
+      });
+      expect(defaultMutexOptions.schedulingStrategy).toBe(
+        SchedulingStrategy.FIFO,
+      );
+      expect(defaultMutexOptions.deadlock.strategy).toBe(
+        DeadlockStrategy.ForceRelease,
+      );
+      // Check logger functions exist
+      expect(typeof defaultMutexOptions.logger.debug).toBe('function');
+      expect(typeof defaultMutexOptions.timer.setTimeout).toBe('function');
+    });
+
+    it('should have default scheduling strategy', () => {
+      // Access the private options via casting for testing purposes.
+      const options = (mutex as any).options;
+      expect(options.schedulingStrategy).toBe(SchedulingStrategy.FIFO);
+    });
+
+    // Additional tests to verify behavior based on defaults:
+    it('should use default timeout when not specified', async () => {
+      const spySetTimeout = jest.spyOn(defaultMutexOptions.timer, 'setTimeout');
+
+      // Acquire with no explicit timeout should use defaultTimeout (0)
+      const unlock = await mutex.acquire();
+      expect(spySetTimeout).not.toHaveBeenCalled(); // since defaultTimeout = 0, no timer setup
+
+      unlock();
+      spySetTimeout.mockRestore();
     });
   });
 
@@ -592,6 +638,95 @@ describe('Mutex', () => {
       writeUnlock();
       expect((mutex as any).writerActive).toBe(false);
     }, 10000); // Extend timeout for this test
+
+    it('should process a read queue entry when no writer is active and no writer waiting', () => {
+      // Prepare a read type queue entry
+      const resolver = jest.fn();
+      const readEntry = {
+        resolver,
+        priority: 0,
+        owner: 'reader',
+        type: MutexOperation.Read,
+        weight: 1,
+        enqueuedAt: Date.now(),
+      };
+
+      // Ensure no writer is active and no waiting writer in queue.
+      (mutex as any).writerActive = false;
+      (mutex as any)._queue = []; // empty queue; no other writer waiting
+
+      // Call handleQueueEntry with the read entry.
+      (mutex as any).handleQueueEntry(readEntry);
+
+      // It should call resolver and increment readerCount.
+      expect(resolver).toHaveBeenCalled();
+      expect((mutex as any).readerCount).toBe(1);
+    });
+
+    it('should skip a read queue entry when a writer is active', () => {
+      const resolver = jest.fn();
+      const readEntry = {
+        resolver,
+        priority: 0,
+        owner: 'reader',
+        type: MutexOperation.Read,
+        weight: 1,
+        enqueuedAt: Date.now(),
+      };
+
+      (mutex as any).writerActive = true; // Simulate active writer
+
+      (mutex as any).handleQueueEntry(readEntry);
+
+      // Resolver should not be called because writer is active.
+      expect(resolver).not.toHaveBeenCalled();
+      // readerCount should remain unchanged.
+      expect((mutex as any).readerCount).toBe(0);
+    });
+
+    it('should process a write queue entry when no writer active and no readers', () => {
+      const resolver = jest.fn();
+      const writeEntry = {
+        resolver,
+        priority: 0,
+        owner: 'writer',
+        type: MutexOperation.Write,
+        weight: 1,
+        enqueuedAt: Date.now(),
+      };
+
+      // Ensure no writer and no readers
+      (mutex as any).writerActive = false;
+      (mutex as any).readerCount = 0;
+
+      (mutex as any).handleQueueEntry(writeEntry);
+
+      // For a write, it should call resolver and set writerActive true.
+      expect(resolver).toHaveBeenCalled();
+      expect((mutex as any).writerActive).toBe(true);
+    });
+
+    it('should skip a write queue entry if readers are active', () => {
+      const resolver = jest.fn();
+      const writeEntry = {
+        resolver,
+        priority: 0,
+        owner: 'writer',
+        type: MutexOperation.Write,
+        weight: 1,
+        enqueuedAt: Date.now(),
+      };
+
+      // Simulate active readers
+      (mutex as any).writerActive = false;
+      (mutex as any).readerCount = 1;
+
+      (mutex as any).handleQueueEntry(writeEntry);
+
+      // Resolver should not be called because readers are active.
+      expect(resolver).not.toHaveBeenCalled();
+      expect((mutex as any).writerActive).toBe(false);
+    });
   });
 
   describe('Reentrant Behavior', () => {

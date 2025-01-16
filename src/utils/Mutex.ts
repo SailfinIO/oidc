@@ -515,7 +515,6 @@ export class Mutex<MutexOwner extends Owner = Owner>
         next.resolver();
       }
     }
-    // Optionally continue processing if conditions allow.
   }
 
   private adjustPriorities(): void {
