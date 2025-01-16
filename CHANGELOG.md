@@ -1,3 +1,9 @@
+## [0.0.14-beta.1](https://github.com/SailfinIO/oidc/compare/v0.0.13...v0.0.14-beta.1) (2025-01-16)
+
+### Bug Fixes
+
+* use custom response and request ([b7b2369](https://github.com/SailfinIO/oidc/commit/b7b2369e4e76359ee856b5b5113a81d4a352c8ad))
+
 ## [0.0.13-beta.7](https://github.com/SailfinIO/oidc/compare/v0.0.13-beta.6...v0.0.13-beta.7) (2025-01-16)
 
 ### Bug Fixes
