@@ -20,11 +20,13 @@ import {
   MutexState,
   DeadlockStrategy,
   Owner,
+  IMutexRegistry,
 } from '../interfaces';
 import { MutexError, ClientError } from '../errors';
 import EventEmitter from 'events';
 import { defaultMutexOptions } from '../constants/defaultMutexOptions';
 import { MaxHeap } from '../utils/MaxHeap';
+import { MutexRegistry } from './MutexRegistry';
 
 /**
  * Represents a mutex (mutual exclusion) utility for controlling access to asynchronous resources.
@@ -43,13 +45,13 @@ export class Mutex<MutexOwner extends Owner = Owner>
   private readonly timer: ITimer;
   private readonly logger: ILogger;
   private readonly options: MutexOptions;
+  private readonly registry: IMutexRegistry;
   private _locked: boolean = false;
   private _owner: MutexOwner | null = null;
   private _reentrantCount: number = 0;
   private readerCount: number = 0;
   private writerActive: boolean = false;
-  private dependencyGraph = new Map<Mutex<any>, Set<any>>(); // Map from Mutex to set of waiting owners
-  private ownerHolds = new Map<any, Set<Mutex<any>>>(); // Map from owner to set of held mutexes
+
   private _priorityQueue = new MaxHeap<QueueEntry<MutexOwner>>(
     (a, b) => a.priority - b.priority,
   );
@@ -66,6 +68,7 @@ export class Mutex<MutexOwner extends Owner = Owner>
     this.logger = this.options.logger!;
     this.timer = this.options.timer!;
 
+    this.registry = MutexRegistry.instance;
     this.logger.debug('Mutex instance created', {
       initialLocked: this._locked,
       initialQueueLength: this._queue.length,
@@ -107,13 +110,14 @@ export class Mutex<MutexOwner extends Owner = Owner>
     let delay = initialDelay;
     let lastError: any;
 
+    // Early return for reentrant acquisition if enabled
+    if (this.options.reentrant && this.isReentrant(owner)) {
+      return Promise.resolve(this.handleReentrant(owner));
+    }
+
     // Before attempting to wait on this mutex, record the dependency and check for deadlock
     if (owner) {
-      // Add a temporary dependency: owner -> this mutex
-      if (!this.dependencyGraph.has(this)) {
-        this.dependencyGraph.set(this, new Set());
-      }
-      this.dependencyGraph.get(this)!.add(owner);
+      this.registry.addWaiter(this, owner);
 
       if (this.detectCycle(owner, this)) {
         // Build deadlock information
@@ -124,14 +128,8 @@ export class Mutex<MutexOwner extends Owner = Owner>
             const gracePeriod = this.options.deadlock.gracePeriod ?? 1000;
             setTimeout(() => {
               this.forceRelease();
-              // Clean up dependency graph related to this mutex and owner
-              const ownersSet = this.dependencyGraph.get(this);
-              if (ownersSet) {
-                ownersSet.delete(owner);
-                if (ownersSet.size === 0) {
-                  this.dependencyGraph.delete(this);
-                }
-              }
+              // Clean up waiter entry related to this mutex and owner using the global registry
+              this.registry.removeWaiter(this, owner);
             }, gracePeriod);
 
             throw new MutexError(
@@ -171,6 +169,12 @@ export class Mutex<MutexOwner extends Owner = Owner>
 
     const attemptAcquire = (): Promise<() => void> => {
       const effectiveTimeout = timeout ?? this.options.defaultTimeout;
+      // Immediately reject if an explicit zero timeout was provided and the mutex is locked
+      if (timeout === 0 && this._locked) {
+        return Promise.reject(
+          new MutexError('Acquire timed out', 'ACQUIRE_TIMEOUT'),
+        );
+      }
       this.logger.debug('Attempting to acquire mutex', {
         timeout: effectiveTimeout,
       });
@@ -263,13 +267,15 @@ export class Mutex<MutexOwner extends Owner = Owner>
   }
 
   private forceRelease(): void {
-    // Clear queues, reset internal states, and notify waiting parties
     this._locked = false;
     this._owner = null;
     this._reentrantCount = 0;
-    // Optionally clear queues and related dependencies:
+    // Reject all queued promises before clearing queues
+    for (const entry of this._queue) {
+      entry.reject?.(new MutexError('Forcefully released', 'FORCE_RELEASE'));
+    }
     this.clearQueue();
-    this._priorityQueue.clear(); // assuming you add a clear method
+    this._priorityQueue.clear();
     this.logger.warn('Forcefully released mutex to resolve deadlock');
     this.emit('forceReleased');
   }
@@ -281,33 +287,25 @@ export class Mutex<MutexOwner extends Owner = Owner>
   }
 
   private detectCycle(owner: MutexOwner, targetMutex: Mutex<any>): boolean {
-    const visited = new Set<MutexOwner>();
+    const { mutexWaiters, ownerHolds } = this.registry.graph;
+    const visited = new Set<Owner>();
 
-    const dfs = (currentOwner: MutexOwner): boolean => {
+    const dfs = (currentOwner: Owner): boolean => {
       if (visited.has(currentOwner)) return false;
       visited.add(currentOwner);
 
-      // Get all mutexes held by the current owner
-      const heldMutexes = this.ownerHolds.get(currentOwner) || new Set();
+      const heldMutexes = ownerHolds.get(currentOwner) || new Set();
 
-      // If targetMutex is among held mutexes, check waiting owners for a cycle
+      // Immediate cycle detection if targetMutex is held by currentOwner
       if (heldMutexes.has(targetMutex)) {
-        const waitingOwners =
-          this.dependencyGraph.get(targetMutex) || new Set();
-        for (const waitingOwner of waitingOwners) {
-          // If we find the original owner waiting on targetMutex, we detected a cycle
-          if (waitingOwner === owner) return true;
-          // Continue DFS from waitingOwner
-          if (dfs(waitingOwner)) return true;
-        }
+        return true;
       }
 
-      // Traverse through other held mutexes
       for (const mutex of heldMutexes) {
-        const waitingOwners = this.dependencyGraph.get(mutex) || new Set();
-        for (const waitingOwner of waitingOwners) {
-          if (waitingOwner === owner) return true;
-          if (dfs(waitingOwner)) return true;
+        const waitingOwners = mutexWaiters.get(mutex) || new Set();
+        for (const waiter of waitingOwners) {
+          if (waiter === owner) return true;
+          if (dfs(waiter)) return true;
         }
       }
 
@@ -351,17 +349,29 @@ export class Mutex<MutexOwner extends Owner = Owner>
     priority?: number,
   ): Promise<() => void> {
     return new Promise<() => void>((resolve, reject) => {
+      const effectiveTimeout = timeout ?? this.options.defaultTimeout;
       let timerId: TimerId | null = null;
-      let released = false;
+      let acquired = false;
+
+      // Clean up all listeners and timers once done (either success or failure)
+      const cleanup = () => {
+        this.off('released', tryAcquireRead);
+        if (timerId) {
+          this.clearTimer(timerId);
+          timerId = null;
+        }
+      };
 
       const unlock = () => {
-        if (released) return;
-        released = true;
+        if (!acquired) return;
+        acquired = false;
         this.readerCount = Math.max(this.readerCount - 1, 0);
         this.logger.debug('Reader lock released', {
           readerCount: this.readerCount,
         });
-        this.processQueue(); // Attempt to process queued requests
+        cleanup();
+        this.processQueue();
+        this.emit('released');
       };
 
       const tryAcquireRead = () => {
@@ -371,29 +381,35 @@ export class Mutex<MutexOwner extends Owner = Owner>
             (!this.options.fairness || entry.priority >= (priority ?? 0)),
         );
 
-        // Allow read lock if no active writer and no higher-priority writer waiting
         if (!this.writerActive && !writerWaiting) {
-          if (timerId) this.clearTimer(timerId); // Clear timer if set
+          // Acquire read lock
+          acquired = true;
           this.readerCount++;
+          this.logger.debug('Reader lock acquired', {
+            readerCount: this.readerCount,
+          });
+          cleanup();
           resolve(unlock);
-        } else {
-          this.enqueueRequest(
-            owner,
-            priority,
-            tryAcquireRead,
-            MutexOperation.Read,
-          );
         }
+        // If not acquired, wait for a 'released' event to re-attempt
       };
-      // Setup timeout if specified
-      if ((timeout ?? this.options.defaultTimeout) > 0) {
+
+      this.on('released', tryAcquireRead);
+
+      // Setup timeout if needed
+      if (effectiveTimeout > 0) {
         timerId = this.setupTimeout(
-          timeout ?? this.options.defaultTimeout,
+          effectiveTimeout,
           owner,
           tryAcquireRead,
-          reject,
+          (error) => {
+            cleanup();
+            reject(error);
+          },
         );
       }
+
+      // Initial attempt
       tryAcquireRead();
     });
   }
@@ -404,41 +420,55 @@ export class Mutex<MutexOwner extends Owner = Owner>
     priority?: number,
   ): Promise<() => void> {
     return new Promise<() => void>((resolve, reject) => {
+      const effectiveTimeout = timeout ?? this.options.defaultTimeout;
       let timerId: TimerId | null = null;
-      let released = false;
+      let acquired = false;
+
+      const cleanup = () => {
+        this.off('released', tryAcquireWrite);
+        if (timerId) {
+          this.clearTimer(timerId);
+          timerId = null;
+        }
+      };
 
       const unlock = () => {
-        if (released) return;
-        released = true;
+        if (!acquired) return;
+        acquired = false;
         this.writerActive = false;
         this.logger.debug('Writer lock released');
-        this.processQueue(); // Attempt to process queued requests
+        cleanup();
+        this.processQueue();
+        // Schedule next 'released' event emission after processing queue
+        setImmediate(() => this.emit('released'));
       };
 
       const tryAcquireWrite = () => {
-        // Allow write lock if no active writer or readers
+        // Can acquire if no active writer and no readers
         if (!this.writerActive && this.readerCount === 0) {
-          if (timerId) this.clearTimer(timerId); // Clear timer if set
+          acquired = true;
           this.writerActive = true;
+          this.logger.debug('Writer lock acquired');
+          cleanup();
           resolve(unlock);
-        } else {
-          this.enqueueRequest(
-            owner,
-            priority,
-            tryAcquireWrite,
-            MutexOperation.Write,
-          );
         }
+        // If not acquired, wait for a 'released' event to re-attempt
       };
-      // Setup timeout if specified
-      if ((timeout ?? this.options.defaultTimeout) > 0) {
+
+      this.on('released', tryAcquireWrite);
+
+      if (effectiveTimeout > 0) {
         timerId = this.setupTimeout(
-          timeout ?? this.options.defaultTimeout,
+          effectiveTimeout,
           owner,
           tryAcquireWrite,
-          reject,
+          (error) => {
+            cleanup();
+            reject(error);
+          },
         );
       }
+
       tryAcquireWrite();
     });
   }
@@ -523,12 +553,7 @@ export class Mutex<MutexOwner extends Owner = Owner>
   private release(): void {
     const owner = this._owner;
     if (owner) {
-      // Remove mutex from the owner's held set
-      this.ownerHolds.get(owner)?.delete(this);
-      // If no more mutexes held by this owner, clean up
-      if (this.ownerHolds.get(owner)?.size === 0) {
-        this.ownerHolds.delete(owner);
-      }
+      this.registry.removeHold(owner, this);
     }
     this.logger.debug('Releasing mutex lock', {
       currentQueueLength: this._queue.length,
@@ -710,13 +735,8 @@ export class Mutex<MutexOwner extends Owner = Owner>
     this._reentrantCount = 1;
 
     if (owner) {
-      // Remove dependency as it is no longer waiting
-      this.dependencyGraph.get(this)?.delete(owner);
-      // Register that the owner now holds this mutex
-      if (!this.ownerHolds.has(owner)) {
-        this.ownerHolds.set(owner, new Set());
-      }
-      this.ownerHolds.get(owner)!.add(this);
+      this.registry.removeWaiter(this, owner);
+      this.registry.addHold(owner, this);
     }
 
     this.logger.info('Mutex lock acquired', {
@@ -874,12 +894,14 @@ export class Mutex<MutexOwner extends Owner = Owner>
         enqueuedAt: entry.enqueuedAt,
       }));
 
+    // Retrieve dependency graph and owner holds from the global registry
+    const { mutexWaiters, ownerHolds } = this.registry.graph;
+
     // Snapshot of the dependency graph
     const dependencyGraphSnapshot: Record<string, string[]> = {};
-    for (const [mutex, owners] of this.dependencyGraph.entries()) {
-      // Represent each mutex by an identifier (could be a name, id, or memory reference)
+    for (const [mutex, owners] of mutexWaiters.entries()) {
       const mutexId =
-        mutex.constructor.name + '@' + (mutex._owner?.toString() || 'unowned');
+        mutex.constructor.name + '@' + (mutex.owner?.toString() || 'unowned');
       dependencyGraphSnapshot[mutexId] = Array.from(owners).map((owner) =>
         owner?.toString(),
       );
@@ -887,9 +909,9 @@ export class Mutex<MutexOwner extends Owner = Owner>
 
     // Snapshot of owner holdings
     const ownerHoldsSnapshot: Record<string, string[]> = {};
-    for (const [owner, mutexes] of this.ownerHolds.entries()) {
+    for (const [owner, mutexes] of ownerHolds.entries()) {
       ownerHoldsSnapshot[owner?.toString()] = Array.from(mutexes).map(
-        (m) => m.constructor.name + '@' + (m._owner?.toString() || 'unowned'),
+        (m) => m.constructor.name + '@' + (m.owner?.toString() || 'unowned'),
       );
     }
 

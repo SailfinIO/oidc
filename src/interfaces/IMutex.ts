@@ -593,6 +593,22 @@ export interface QueueEntry<MutexOwner> {
    * };
    * */
   enqueuedAt?: number;
+
+  /**
+   * The callback function to resolve the mutex request.
+   *
+   * @type {(value?: any) => void}
+   * @example
+   *
+   * ```typescript
+   * const entry: QueueEntry = {
+   *  resolver: () => {},
+   * priority: 0,
+   * owner: 'user123',
+   * reject: (reason) => console.error(reason)
+   * };
+   * */
+  reject?: (reason?: any) => void;
 }
 
 export type Owner = string | { id: string; name?: string };
@@ -638,4 +654,46 @@ export interface MutexState<MutexOwner = unknown> {
   }>;
   dependencyGraph: Record<string, string[]>;
   ownerHolds: Record<string, string[]>;
+}
+
+export interface DependencyGraph {
+  // Map from mutex to set of waiting owners
+  mutexWaiters: Map<IMutex<any>, Set<Owner>>;
+  // Map from owner to set of held mutexes
+  ownerHolds: Map<Owner, Set<IMutex<any>>>;
+}
+
+export interface IMutexRegistry {
+  /**
+   * Provides a read-only snapshot of the dependency graph.
+   */
+  readonly graph: DependencyGraph;
+
+  /**
+   * Registers that an owner is waiting for a mutex.
+   * @param mutex - The mutex instance the owner is waiting for.
+   * @param owner - The owner waiting for the mutex.
+   */
+  addWaiter(mutex: IMutex<any>, owner: Owner): void;
+
+  /**
+   * Removes an owner from the waiting list of a mutex.
+   * @param mutex - The mutex instance the owner was waiting for.
+   * @param owner - The owner to remove from the waitlist.
+   */
+  removeWaiter(mutex: IMutex<any>, owner: Owner): void;
+
+  /**
+   * Records that an owner now holds a mutex.
+   * @param owner - The owner that has acquired the mutex.
+   * @param mutex - The mutex instance held by the owner.
+   */
+  addHold(owner: Owner, mutex: IMutex<any>): void;
+
+  /**
+   * Removes the record of an owner holding a mutex.
+   * @param owner - The owner releasing the mutex.
+   * @param mutex - The mutex instance being released.
+   */
+  removeHold(owner: Owner, mutex: IMutex<any>): void;
 }

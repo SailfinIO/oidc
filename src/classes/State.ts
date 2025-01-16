@@ -28,7 +28,10 @@ import { IState, IStateEntry } from '../interfaces';
  */
 export class State implements IState {
   private readonly stateMap: Map<string, IStateEntry> = new Map();
-  private readonly stateMapLock = new Mutex();
+  private readonly stateMapLock = new Mutex({
+    defaultTimeout: 5000,
+    backoff: { maxAttempts: 5, initialDelay: 10, factor: 2, maxDelay: 1000 },
+  });
 
   /**
    * Adds a state-nonce pair to the manager.
