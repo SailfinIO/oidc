@@ -1,3 +1,17 @@
+## [0.0.13](https://github.com/SailfinIO/oidc/compare/v0.0.12...v0.0.13) (2025-01-16)
+
+### Bug Fixes
+
+* add additional mutex tests ([1c2ed88](https://github.com/SailfinIO/oidc/commit/1c2ed885d936cc9200fb316b9fadea21b5191c96))
+* add properties for method metadata ([c173423](https://github.com/SailfinIO/oidc/commit/c17342337cd6b3a0f1fcebdac68bf9fae7d2d79d))
+* deadlocking ([92d2212](https://github.com/SailfinIO/oidc/commit/92d2212e429914e618c2e116b7b470bf8db71e41))
+* decorator exports ([41a8e73](https://github.com/SailfinIO/oidc/commit/41a8e73761a1715b3adfdfebc52195eaefd99ff5))
+* interface for deadlocks ([b0c2097](https://github.com/SailfinIO/oidc/commit/b0c20970aa9d86f6484af8e621dd1048ec642756))
+* Mutex enhancements via decorators ([4536de2](https://github.com/SailfinIO/oidc/commit/4536de25a37c4a2816537c84bfd45b926dcc5559))
+* mutex options ([1d42337](https://github.com/SailfinIO/oidc/commit/1d423370bab3ce113356e5ebf5c0319a6be3b17c))
+* protected routes ([4d19956](https://github.com/SailfinIO/oidc/commit/4d199560a9685ea7cb51235304814d233b785f3d))
+* testing handle queue entry ([f237ba9](https://github.com/SailfinIO/oidc/commit/f237ba92c55ae1edfac133b6062d8fa4858e1bef))
+
 ## [0.0.13-beta.6](https://github.com/SailfinIO/oidc/compare/v0.0.13-beta.5...v0.0.13-beta.6) (2025-01-16)
 
 ### Bug Fixes
