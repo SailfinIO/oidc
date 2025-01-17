@@ -170,9 +170,11 @@ export class Client {
     this.logger.setLogLevel(level);
   }
 
-  public async getAuthorizationUrl(): Promise<IAuthorizationUrlResponse> {
+  public async getAuthorizationUrl(
+    additionalParams?: Record<string, string>,
+  ): Promise<IAuthorizationUrlResponse> {
     await this.ensureInitialized();
-    return this.auth.getAuthorizationUrl();
+    return this.auth.getAuthorizationUrl(additionalParams);
   }
 
   public async handleRedirect(

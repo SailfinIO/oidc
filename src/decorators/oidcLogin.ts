@@ -13,6 +13,11 @@ export interface OidcLoginOptions {
    * Optional custom error handler.
    */
   onError?: (error: any, context: IStoreContext) => void;
+
+  /**
+   * Indicates if silent login is desired.
+   */
+  silent?: boolean;
 }
 
 /**
@@ -46,8 +51,15 @@ const processLoginFlow = async (
   const { response } = context;
 
   try {
-    const { url } = await client.getAuthorizationUrl();
+    // Build additional parameters for silent login if requested
+    const additionalParams: Record<string, string> = options?.silent
+      ? { prompt: 'none' }
+      : {};
 
+    // Get the authorization URL with additional parameters
+    const { url } = await client.getAuthorizationUrl(additionalParams);
+
+    // Redirect to the authorization URL
     return response.redirect(url);
   } catch (error) {
     handleLoginError(error, context, options);

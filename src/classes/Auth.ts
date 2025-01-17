@@ -66,12 +66,16 @@ export class Auth implements IAuth {
    * Generates and stores state and nonce internally.
    * @returns The authorization URL and the generated state and codeVerifier.
    */
-  public async getAuthorizationUrl(): Promise<IAuthorizationUrlResponse> {
+  public async getAuthorizationUrl(
+    additionalParams?: Record<string, string>,
+  ): Promise<IAuthorizationUrlResponse> {
     const state = generateRandomString();
     const nonce = generateRandomString();
 
-    // 1) Build up any extra query params to pass
-    const additionalParams: Record<string, string> = {};
+    // if additional params are not provided, initialize as empty object
+    if (!additionalParams) {
+      additionalParams = {};
+    }
 
     // If user has set uiLocales in config, convert array -> space-delimited string
     if (this.config.uiLocales && this.config.uiLocales.length > 0) {
