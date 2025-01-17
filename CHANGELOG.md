@@ -1,3 +1,9 @@
+## [0.0.15-beta.1](https://github.com/SailfinIO/oidc/compare/v0.0.14...v0.0.15-beta.1) (2025-01-17)
+
+### Bug Fixes
+
+* test sailfin client module and provider ([a6d7377](https://github.com/SailfinIO/oidc/commit/a6d7377059752e970afce3cb2ea0535bebc3aad4))
+
 ## [0.0.14-beta.8](https://github.com/SailfinIO/oidc/compare/v0.0.14-beta.7...v0.0.14-beta.8) (2025-01-17)
 
 ### Bug Fixes
