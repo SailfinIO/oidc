@@ -1,3 +1,9 @@
+## [0.0.15-beta.5](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.4...v0.0.15-beta.5) (2025-01-17)
+
+### Bug Fixes
+
+* inclue missing nestjs compatible properties ([688eef1](https://github.com/SailfinIO/oidc/commit/688eef1315cd5c2063c543de7f604cb5ee7b20fd))
+
 ## [0.0.15-beta.4](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.3...v0.0.15-beta.4) (2025-01-17)
 
 ### Bug Fixes
