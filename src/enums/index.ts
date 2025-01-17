@@ -24,3 +24,4 @@ export * from './SessionMode';
 export * from './StatusCode';
 export * from './ContentType';
 export * from './RequestHeader';
+export * from './ProviderScope';

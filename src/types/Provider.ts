@@ -1,3 +1,5 @@
+import { ProviderScope as Scope } from '../enums';
+
 export type Provider = {
   provide: any;
   useFactory: (...args: any[]) => any | Promise<any>;
@@ -5,5 +7,5 @@ export type Provider = {
   useValue?: any;
   useClass?: any;
   inject?: any[];
-  scope?: 'DEFAULT' | 'REQUEST';
+  scope?: Scope;
 };
