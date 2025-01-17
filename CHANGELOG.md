@@ -1,3 +1,9 @@
+## [0.0.15-beta.12](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.11...v0.0.15-beta.12) (2025-01-17)
+
+### Bug Fixes
+
+* refactor protect decorator ([5f5f92b](https://github.com/SailfinIO/oidc/commit/5f5f92b1e5794d58495bf8d86a0bd5d05e1a04f6))
+
 ## [0.0.15-beta.11](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.10...v0.0.15-beta.11) (2025-01-17)
 
 ### Bug Fixes
