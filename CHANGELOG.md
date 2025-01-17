@@ -1,3 +1,9 @@
+## [0.0.15-beta.14](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.13...v0.0.15-beta.14) (2025-01-17)
+
+### Bug Fixes
+
+* add fallback for session setting ([9ab570e](https://github.com/SailfinIO/oidc/commit/9ab570ebdb66d9db3083d2e5682be2e8d90129c2))
+
 ## [0.0.15-beta.13](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.12...v0.0.15-beta.13) (2025-01-17)
 
 ### Bug Fixes
