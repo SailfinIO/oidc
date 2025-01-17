@@ -19,6 +19,7 @@ export class SailfinClientModule {
         return instance;
       },
       inject: [],
+      scope: 0,
     };
 
     return {
@@ -43,6 +44,7 @@ export class SailfinClientModule {
         return instance;
       },
       inject: [],
+      scope: 0,
     };
 
     return {

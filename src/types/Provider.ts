@@ -1,4 +1,4 @@
-import { ProviderScope as Scope } from '../enums';
+type Scope = 0 | 1 | 2; // Corresponds to DEFAULT, TRANSIENT, REQUEST
 
 export type Provider = {
   provide: any;
