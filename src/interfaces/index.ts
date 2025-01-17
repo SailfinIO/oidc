@@ -35,3 +35,4 @@ export * from './JwtOptions';
 export * from './HashAlgorithm';
 export * from './IRequest';
 export * from './IResponse';
+export * from './DynamicModule';

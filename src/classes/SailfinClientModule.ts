@@ -1,8 +1,7 @@
-import { IClientConfig } from '../interfaces';
+import { IClientConfig, DynamicModule } from '../interfaces';
 import { Client } from './Client';
 import { SAILFIN_CLIENT } from '../constants/sailfinClientToken';
 import { createSailfinClient } from '../utils';
-import { DynamicModule, Provider } from '../types';
 
 export class SailfinClientModule {
   private static instances = new Map<symbol, Promise<Client>>();
@@ -11,19 +10,20 @@ export class SailfinClientModule {
    * Creates and registers an OIDC client instance.
    */
   static forRoot(config: Partial<IClientConfig>): DynamicModule {
-    const clientProvider: Provider = {
+    const clientProvider = {
       provide: SAILFIN_CLIENT,
       useFactory: async () => {
         const instance = createSailfinClient(config).useFactory();
         this.instances.set(SAILFIN_CLIENT, instance);
         return instance;
       },
+      inject: [], // Ensures compatibility with NestJS
     };
 
     return {
       module: SailfinClientModule,
       providers: [clientProvider],
-      exports: [clientProvider],
+      exports: [clientProvider.provide],
     };
   }
 
@@ -33,7 +33,7 @@ export class SailfinClientModule {
   static forRootAsync(
     configFactory: () => Promise<Partial<IClientConfig>>,
   ): DynamicModule {
-    const clientProvider: Provider = {
+    const clientProvider = {
       provide: SAILFIN_CLIENT,
       useFactory: async () => {
         const config = await configFactory();
@@ -41,15 +41,15 @@ export class SailfinClientModule {
         this.instances.set(SAILFIN_CLIENT, instance);
         return instance;
       },
+      inject: [], // Ensures compatibility with NestJS
     };
 
     return {
       module: SailfinClientModule,
       providers: [clientProvider],
-      exports: [clientProvider],
+      exports: [clientProvider.provide],
     };
   }
-
   /**
    * Retrieves an OIDC client instance by its token.
    */
