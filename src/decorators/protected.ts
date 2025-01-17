@@ -10,7 +10,6 @@ export const Protected = (requiredClaims?: Claims[]): MethodDecorator => {
     propertyKey: string | symbol,
     descriptor: PropertyDescriptor,
   ) => {
-    // Attach metadata for potential future use
     MetadataManager.setMethodMetadata(
       target.constructor,
       propertyKey as string,
@@ -22,6 +21,7 @@ export const Protected = (requiredClaims?: Claims[]): MethodDecorator => {
     descriptor.value = async function (...args: any[]) {
       const req: IRequest = args[0];
       const res: IResponse | undefined = args.length > 1 ? args[1] : undefined;
+
       if (!req) {
         throw new HttpException(
           'Server error: Request object not provided',
@@ -29,15 +29,6 @@ export const Protected = (requiredClaims?: Claims[]): MethodDecorator => {
         );
       }
 
-      // Additional guard: check if req is defined
-      if (!req) {
-        throw new HttpException(
-          'Server error: Request object not provided',
-          HttpStatus.INTERNAL_SERVER_ERROR,
-        );
-      }
-
-      // Assume that the controller instance has a Client instance as `this.client`
       const client: Client = this.client;
       if (!client) {
         const message = 'Server configuration error: Client not available';
@@ -47,7 +38,6 @@ export const Protected = (requiredClaims?: Claims[]): MethodDecorator => {
         throw new HttpException(message, HttpStatus.INTERNAL_SERVER_ERROR);
       }
 
-      // Check if session exists and user is authenticated
       if (!req.session || !req.session.user) {
         const message = 'Unauthorized: No valid session';
         if (res) {
@@ -56,7 +46,6 @@ export const Protected = (requiredClaims?: Claims[]): MethodDecorator => {
         throw new HttpException(message, HttpStatus.UNAUTHORIZED);
       }
 
-      // Validate required claims if specified
       if (requiredClaims && requiredClaims.length > 0) {
         try {
           const claimsRecord = await client.getClaims();
@@ -79,9 +68,25 @@ export const Protected = (requiredClaims?: Claims[]): MethodDecorator => {
         }
       }
 
-      // All checks passed; call the original method
       return originalMethod.apply(this, args);
     };
+
+    // Preserve parameter and return type metadata for NestJS to correctly inject dependencies
+    Reflect.defineMetadata(
+      'design:paramtypes',
+      Reflect.getMetadata('design:paramtypes', originalMethod),
+      descriptor.value,
+    );
+    Reflect.defineMetadata(
+      'design:returntype',
+      Reflect.getMetadata('design:returntype', originalMethod),
+      descriptor.value,
+    );
+    Reflect.defineMetadata(
+      'design:type',
+      Reflect.getMetadata('design:type', originalMethod),
+      descriptor.value,
+    );
 
     return descriptor;
   };
