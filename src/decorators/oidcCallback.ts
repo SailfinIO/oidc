@@ -93,7 +93,13 @@ const processSessionFlow = async (
     if (client.getConfig().session) {
       // Initialize session if it doesn't exist
       if (!request.session) {
-        request.setSession({ state: {}, user: undefined });
+        if (typeof request.setSession === 'function') {
+          request.setSession({ state: {}, user: undefined });
+        } else {
+          // Fallback: assign session directly
+          // @ts-ignore - Allow direct assignment since it's a fallback
+          request.session = { state: {}, user: undefined };
+        }
       }
       // Ensure state object exists
       if (!request.session.state) {
@@ -101,7 +107,11 @@ const processSessionFlow = async (
       }
 
       // Attach user to session
-      request.setSession({ user });
+      if (typeof request.setSession === 'function') {
+        request.setSession({ user });
+      } else {
+        request.session.user = user;
+      }
     }
 
     // Redirect to the specified URI after successful login
@@ -196,14 +206,13 @@ export const OidcCallback = (
         return;
       }
 
-      // --- New Flow Start Here: Call original handler before redirect ---
+      // Call the original handler
       await originalMethod.apply(this, args);
 
-      // Only redirect if headers not already sent
+      // Avoid a second redirect if headers were already sent
       if (!res.headersSent) {
         res.redirect(options?.postLoginRedirectUri ?? '/');
       }
-      // --- End New Flow ---
     };
 
     return descriptor;
