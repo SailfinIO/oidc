@@ -1,3 +1,9 @@
+## [0.0.15-beta.15](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.14...v0.0.15-beta.15) (2025-01-17)
+
+### Bug Fixes
+
+* arg check ([8724d06](https://github.com/SailfinIO/oidc/commit/8724d069a78f9a17b42da5411517a15c1ae945b3))
+
 ## [0.0.15-beta.14](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.13...v0.0.15-beta.14) (2025-01-17)
 
 ### Bug Fixes
