@@ -1,3 +1,9 @@
+## [0.0.15-beta.6](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.5...v0.0.15-beta.6) (2025-01-17)
+
+### Bug Fixes
+
+* DynamicModule, Provider, and usage in SailfinModule ([3bf0ff4](https://github.com/SailfinIO/oidc/commit/3bf0ff44a3f6560a9edd3724569d29a18f6a3fa5))
+
 ## [0.0.15-beta.5](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.4...v0.0.15-beta.5) (2025-01-17)
 
 ### Bug Fixes
