@@ -14,7 +14,8 @@ import { Client } from '../classes';
 import { IClientConfig } from '../interfaces';
 import { SAILFIN_CLIENT } from '../constants/sailfinClientToken';
 
-const isProduction = process.env.NODE_ENV === 'production';
+const isProduction =
+  process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
 
 export const createSailfinClient = (
   config: Partial<IClientConfig>,
@@ -54,7 +55,7 @@ export const createSailfinClient = (
             secret: process.env.SESS_SECRET || 'sailfin',
             options: {
               secure: isProduction ? true : false, // Set to true in production
-              httpOnly: true, // Prevent JavaScript access to cookies
+              httpOnly: isProduction ? true : false, // Set to true in production
               sameSite: isProduction ? SameSite.NONE : SameSite.LAX, // Use Strict SameSite for CSRF protection
               path: '/', // Root path
               maxAge: 86400000, // 24 hours

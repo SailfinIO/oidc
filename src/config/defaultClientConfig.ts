@@ -23,6 +23,9 @@ import {
 import { IClientConfig } from '../interfaces';
 import { Logger } from '../utils/Logger';
 
+const isProd =
+  process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
+
 /**
  * Default configuration for the OAuth/OIDC client.
  *
@@ -62,9 +65,9 @@ export const defaultClientConfig: Partial<IClientConfig> = {
       name: 'sid', // Default session ID cookie name
       secret: 'default-secret', // Replace with a secure secret in production
       options: {
-        secure: true, // Restrict cookies to HTTPS
-        httpOnly: true, // Prevent JavaScript access to cookies
-        sameSite: SameSite.STRICT, // Use Strict SameSite for CSRF protection
+        secure: isProd ? true : false, // Use secure cookies in production
+        httpOnly: isProd ? true : false, // Use httpOnly cookies in production
+        sameSite: isProd ? SameSite.STRICT : SameSite.LAX, // Use strict SameSite policy in production
         path: '/', // Default cookie path
         maxAge: 3600, // Cookie expiration in seconds (1 hour)
         domain: undefined, // No specific domain by default

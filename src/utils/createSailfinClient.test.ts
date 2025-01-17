@@ -57,7 +57,7 @@ describe('createSailfinClient', () => {
             secret: 'sailfin',
             options: expect.objectContaining({
               secure: false,
-              httpOnly: true,
+              httpOnly: false,
               sameSite: 'lax',
               path: '/',
               maxAge: 86400000,
