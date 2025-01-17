@@ -68,7 +68,13 @@ export const middleware = (client: Client) => {
             response: res,
           });
           if (sessionData) {
-            req.setSession(sessionData);
+            if (typeof req.setSession === 'function') {
+              req.setSession(sessionData);
+            } else {
+              // Fallback assignment if setSession isn't available
+              // @ts-ignore - Allow direct assignment since it's a fallback
+              req.session = sessionData;
+            }
             client.getLogger().debug('Session loaded', { sid, sessionData });
           } else {
             client.getLogger().warn('Invalid sid, clearing session', { sid });
