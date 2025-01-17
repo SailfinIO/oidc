@@ -1,3 +1,9 @@
+## [0.0.15-beta.9](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.8...v0.0.15-beta.9) (2025-01-17)
+
+### Bug Fixes
+
+* add silent-login flag for login decorator ([dbb4a8d](https://github.com/SailfinIO/oidc/commit/dbb4a8d6f7d594d22f834af902aca7e76aeecbfb))
+
 ## [0.0.15-beta.8](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.7...v0.0.15-beta.8) (2025-01-17)
 
 ### Bug Fixes
