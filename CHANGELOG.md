@@ -1,3 +1,10 @@
+## [0.0.15-beta.16](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.15...v0.0.15-beta.16) (2025-01-17)
+
+### Bug Fixes
+
+* add Reflect define Metada ([3016e67](https://github.com/SailfinIO/oidc/commit/3016e67bef59de20b2cb1080534f1d565774d086))
+* add Reflect define Metada ([2a13137](https://github.com/SailfinIO/oidc/commit/2a13137529b6799f718eb0bbb80c884e8a61d7c6))
+
 ## [0.0.15-beta.15](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.14...v0.0.15-beta.15) (2025-01-17)
 
 ### Bug Fixes
