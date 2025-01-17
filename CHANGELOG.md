@@ -1,3 +1,9 @@
+## [0.0.15-beta.7](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.6...v0.0.15-beta.7) (2025-01-17)
+
+### Bug Fixes
+
+* create provider scope ([142efde](https://github.com/SailfinIO/oidc/commit/142efde66b3ef72be3816dd7a3684fb586ee785c))
+
 ## [0.0.15-beta.6](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.5...v0.0.15-beta.6) (2025-01-17)
 
 ### Bug Fixes
