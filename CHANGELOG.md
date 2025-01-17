@@ -1,3 +1,9 @@
+## [0.0.15-beta.2](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.1...v0.0.15-beta.2) (2025-01-17)
+
+### Bug Fixes
+
+* export constants ([3569774](https://github.com/SailfinIO/oidc/commit/35697740709de0aa9ab0f3016868b15150f65d2e))
+
 ## [0.0.15-beta.1](https://github.com/SailfinIO/oidc/compare/v0.0.14...v0.0.15-beta.1) (2025-01-17)
 
 ### Bug Fixes
