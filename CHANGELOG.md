@@ -1,3 +1,9 @@
+## [0.0.14-beta.7](https://github.com/SailfinIO/oidc/compare/v0.0.14-beta.6...v0.0.14-beta.7) (2025-01-17)
+
+### Bug Fixes
+
+* call original controller method if redirect uri isnt provided ([adaa05a](https://github.com/SailfinIO/oidc/commit/adaa05ac251ebc6920529f5ce7bb2d380fce1619))
+
 ## [0.0.14-beta.6](https://github.com/SailfinIO/oidc/compare/v0.0.14-beta.5...v0.0.14-beta.6) (2025-01-17)
 
 ### Bug Fixes
