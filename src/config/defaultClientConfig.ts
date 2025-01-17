@@ -21,7 +21,7 @@ import {
   SessionMode,
 } from '../enums';
 import { IClientConfig } from '../interfaces';
-import { Logger } from '../utils';
+import { Logger } from '../utils/Logger';
 
 /**
  * Default configuration for the OAuth/OIDC client.

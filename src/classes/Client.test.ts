@@ -8,13 +8,7 @@ import { Token } from './Token';
 import { ClientError } from '../errors';
 import { LogLevel, TokenTypeHint, StorageMechanism, GrantType } from '../enums';
 import { Issuer } from './Issuer';
-import {
-  IStore,
-  ISessionStore,
-  IResponse,
-  IRequest,
-  ISessionData,
-} from '../interfaces';
+import { IStore, ISessionStore, IResponse, ISessionData } from '../interfaces';
 import { Store } from './Store';
 import * as utils from '../utils';
 import { Session } from './Session';

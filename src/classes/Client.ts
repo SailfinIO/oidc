@@ -2,7 +2,7 @@
 
 import { Auth } from './Auth';
 import { UserInfo } from './UserInfo';
-import { Logger } from '../utils';
+import { Logger } from '../utils/';
 import {
   GrantType,
   LogLevel,
