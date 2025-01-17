@@ -205,17 +205,6 @@ export const OidcCallback = (
         handleAuthError(error, context, options);
         return;
       }
-
-      // Only proceed with further logic if headers haven’t been sent
-      if (!res.headersSent) {
-        // Call the original handler
-        await originalMethod.apply(this, args);
-
-        // Avoid a second redirect if headers were already sent
-        if (!res.headersSent) {
-          res.redirect(options?.postLoginRedirectUri ?? '/');
-        }
-      }
     };
 
     return descriptor;
