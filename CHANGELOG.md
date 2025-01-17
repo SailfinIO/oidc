@@ -1,3 +1,9 @@
+## [0.0.15-beta.4](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.3...v0.0.15-beta.4) (2025-01-17)
+
+### Bug Fixes
+
+* create provider and dynamic module ([ecb1ba3](https://github.com/SailfinIO/oidc/commit/ecb1ba325f0cc5738ef099919bc9cbbd2fab141b))
+
 ## [0.0.15-beta.3](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.2...v0.0.15-beta.3) (2025-01-17)
 
 ### Bug Fixes
