@@ -2,6 +2,7 @@ import { IClientConfig } from '../interfaces';
 import { Client } from './Client';
 import { SAILFIN_CLIENT } from '../constants/sailfinClientToken';
 import { createSailfinClient } from '../utils';
+import { DynamicModule, Provider } from '../types';
 
 export class SailfinClientModule {
   private static instances = new Map<symbol, Promise<Client>>();
@@ -9,27 +10,44 @@ export class SailfinClientModule {
   /**
    * Creates and registers an OIDC client instance.
    */
-  static forRoot(config: Partial<IClientConfig>): {
-    token: symbol;
-    instance: Promise<Client>;
-  } {
-    const token = SAILFIN_CLIENT;
-    const instance = createSailfinClient(config).useFactory();
-    this.instances.set(token, instance);
-    return { token, instance };
+  static forRoot(config: Partial<IClientConfig>): DynamicModule {
+    const clientProvider: Provider = {
+      provide: SAILFIN_CLIENT,
+      useFactory: async () => {
+        const instance = createSailfinClient(config).useFactory();
+        this.instances.set(SAILFIN_CLIENT, instance);
+        return instance;
+      },
+    };
+
+    return {
+      module: SailfinClientModule,
+      providers: [clientProvider],
+      exports: [clientProvider],
+    };
   }
 
   /**
    * Creates and registers an OIDC client instance asynchronously.
    */
-  static async forRootAsync(
+  static forRootAsync(
     configFactory: () => Promise<Partial<IClientConfig>>,
-  ): Promise<{ token: symbol; instance: Promise<Client> }> {
-    const token = SAILFIN_CLIENT;
-    const config = await configFactory();
-    const instance = createSailfinClient(config).useFactory();
-    this.instances.set(token, instance);
-    return { token, instance };
+  ): DynamicModule {
+    const clientProvider: Provider = {
+      provide: SAILFIN_CLIENT,
+      useFactory: async () => {
+        const config = await configFactory();
+        const instance = createSailfinClient(config).useFactory();
+        this.instances.set(SAILFIN_CLIENT, instance);
+        return instance;
+      },
+    };
+
+    return {
+      module: SailfinClientModule,
+      providers: [clientProvider],
+      exports: [clientProvider],
+    };
   }
 
   /**
