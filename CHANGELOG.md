@@ -1,3 +1,9 @@
+## [0.0.15-beta.3](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.2...v0.0.15-beta.3) (2025-01-17)
+
+### Bug Fixes
+
+* export the SailfinClientModule ([4580f4e](https://github.com/SailfinIO/oidc/commit/4580f4ecce7a505b6729b02ff229fcc266a646a2))
+
 ## [0.0.15-beta.2](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.1...v0.0.15-beta.2) (2025-01-17)
 
 ### Bug Fixes
