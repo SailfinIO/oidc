@@ -1,3 +1,9 @@
+## [0.0.14-beta.5](https://github.com/SailfinIO/oidc/compare/v0.0.14-beta.4...v0.0.14-beta.5) (2025-01-17)
+
+### Bug Fixes
+
+* decorator to check for session type ([2dc3298](https://github.com/SailfinIO/oidc/commit/2dc3298c4cbdb501a708aec10d2b18e51e135d34))
+
 ## [0.0.14-beta.4](https://github.com/SailfinIO/oidc/compare/v0.0.14-beta.3...v0.0.14-beta.4) (2025-01-16)
 
 ### Bug Fixes
