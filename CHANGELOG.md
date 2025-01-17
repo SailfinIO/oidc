@@ -1,3 +1,10 @@
+## [0.0.14-beta.6](https://github.com/SailfinIO/oidc/compare/v0.0.14-beta.5...v0.0.14-beta.6) (2025-01-17)
+
+### Bug Fixes
+
+* check headers being sent before redirect ([3729dd8](https://github.com/SailfinIO/oidc/commit/3729dd8ba348cc0d024421b09077fae3ec07210b))
+* remove duplicate redirect ([3cec552](https://github.com/SailfinIO/oidc/commit/3cec5529b2e095f309ec9d567c215a63b7929329))
+
 ## [0.0.14-beta.5](https://github.com/SailfinIO/oidc/compare/v0.0.14-beta.4...v0.0.14-beta.5) (2025-01-17)
 
 ### Bug Fixes
