@@ -1,8 +1,8 @@
 // src/decorators/oidcCallback.ts
 
-import { patchExpressResponseForSetCookie } from '../utils';
+import { StatusCode } from '../enums';
 import { Client } from '../classes/Client';
-import { IStoreContext } from '../interfaces';
+import { IRequest, IResponse, IStoreContext } from '../interfaces';
 import { MetadataManager } from './MetadataManager';
 
 /**
@@ -25,25 +25,24 @@ export interface OidcCallbackOptions {
  * Validate callback parameters.
  */
 const validateCallbackParams = (
-  request: any,
-  response: any,
+  request: IRequest,
+  response: IResponse,
 ): { code: string; state: string } | void => {
   if (!request || !request.query) {
     if (response) {
       response
-        .status(400)
+        .status(StatusCode.BAD_REQUEST)
         .send('Invalid callback parameters: Missing request or query.');
     }
     return;
   }
 
-  const code = request.query.code as string;
-  const state = request.query.state as string;
+  const { code, state } = request.query;
 
   if (!code || !state) {
     if (response) {
       response
-        .status(400)
+        .status(StatusCode.BAD_REQUEST)
         .send('Invalid callback parameters: Missing code or state.');
     }
     return;
@@ -66,7 +65,9 @@ const handleAuthError = (
   if (options?.onError) {
     options.onError(error, context);
   } else {
-    response.status(500).send('Authentication failed');
+    response
+      .status(StatusCode.INTERNAL_SERVER_ERROR)
+      .send('Authentication failed');
   }
 };
 
@@ -80,7 +81,7 @@ const processSessionFlow = async (
   state: string,
   options?: OidcCallbackOptions,
 ) => {
-  const { request, response } = context;
+  const { request } = context;
 
   try {
     // Exchange code for tokens and validate ID token
@@ -92,15 +93,26 @@ const processSessionFlow = async (
     if (client.getConfig().session) {
       // Initialize session if it doesn't exist
       if (!request.session) {
-        request.session = {};
+        if (typeof request.setSession === 'function') {
+          request.setSession({ state: {}, user: undefined });
+        } else {
+          // Fallback: assign session directly
+          // @ts-ignore - Allow direct assignment since it's a fallback
+          request.session = { state: {}, user: undefined };
+        }
+      }
+      // Ensure state object exists
+      if (!request.session.state) {
+        request.session.state = {};
       }
 
       // Attach user to session
-      request.session.user = user;
+      if (typeof request.setSession === 'function') {
+        request.setSession({ user });
+      } else {
+        request.session.user = user;
+      }
     }
-
-    // Redirect to the specified URI after successful login
-    response.redirect(options?.postLoginRedirectUri ?? '/');
   } catch (error) {
     handleAuthError(error, context, options);
   }
@@ -116,12 +128,9 @@ const processStatelessFlow = async (
   state: string,
   options?: OidcCallbackOptions,
 ) => {
-  const { response } = context;
-
   try {
     await client.handleRedirect(code, state, context);
     await client.getUserInfo();
-    response.redirect(options?.postLoginRedirectUri || '/');
   } catch (error) {
     handleAuthError(error, context, options);
   }
@@ -161,47 +170,44 @@ export const OidcCallback = (
       const req: any = args[0];
       const res: any = args[1];
 
-      patchExpressResponseForSetCookie(res);
-
       if (!req || !res) {
         if (res) {
           res
-            .status(400)
+            .status(StatusCode.BAD_REQUEST)
             .send('Invalid callback parameters: Missing request or response.');
         }
         return;
       }
 
-      // Retrieve the injected OIDC client from 'this' (the controller instance).
       const client: Client = this.client;
-
-      // Build the store context for your helpers:
       const context: IStoreContext = { request: req, response: res };
 
-      // 1) Validate the callback params (code & state).
       const params = validateCallbackParams(req, res);
       if (!params) {
-        // If validateCallbackParams returned void, it already sent a 400 response.
         return;
       }
 
-      // 2) Extract the code and state.
       const { code, state } = params;
 
       try {
-        // 3) Check if sessions are configured. If so, do a session-based flow.
         if (client.getConfig().session) {
           await processSessionFlow(client, context, code, state, options);
         } else {
           await processStatelessFlow(client, context, code, state, options);
         }
       } catch (error) {
-        // If an error escaped the flows, handle it here:
         handleAuthError(error, context, options);
+        return;
       }
 
-      // Optionally call the original method if you want to do something after:
-      return originalMethod.apply(this, args);
+      // Call the original controller method.
+      await originalMethod.apply(this, args);
+
+      // Fallback redirection:
+      // If the response hasn't been sent and a postLoginRedirectUri is provided, perform redirect.
+      if (!res.headersSent && options?.postLoginRedirectUri) {
+        res.redirect(options.postLoginRedirectUri);
+      }
     };
 
     return descriptor;

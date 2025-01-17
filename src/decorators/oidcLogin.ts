@@ -1,5 +1,6 @@
 // src/decorators/oidcLogin.ts
 
+import { StatusCode } from '../enums';
 import { Client } from '../classes/Client';
 import { IRequest, IResponse, IStoreContext } from '../interfaces';
 import { MetadataManager } from './MetadataManager';
@@ -28,7 +29,9 @@ const handleLoginError = (
   if (options?.onError) {
     options.onError(error, context);
   } else {
-    response.status(500).send('Authentication initiation failed');
+    response
+      .status(StatusCode.INTERNAL_SERVER_ERROR)
+      .send('Authentication initiation failed');
   }
 };
 

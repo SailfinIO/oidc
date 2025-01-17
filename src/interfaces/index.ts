@@ -33,3 +33,5 @@ export * from './ISessionStore';
 export * from './IMetadata';
 export * from './JwtOptions';
 export * from './HashAlgorithm';
+export * from './IRequest';
+export * from './IResponse';

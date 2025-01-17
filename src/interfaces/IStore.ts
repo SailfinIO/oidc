@@ -7,22 +7,10 @@
  * @module src/interfaces/IStore
  */
 
-import { ParsedCookies } from '../utils';
+import { IRequest } from './IRequest';
+import { IResponse } from './IResponse';
 import { ISessionData } from './ISessionData';
 import { IUser } from './IUser';
-
-export interface IRequest extends globalThis.Request {
-  query: Record<string, any>;
-  session?: ISessionData;
-  cookies?: ParsedCookies;
-}
-
-export interface IResponse extends Omit<globalThis.Response, 'status'> {
-  redirect(url: string): void;
-  status(code: number): this;
-  send(body: string): this;
-  json(...body: Array<Record<string, any>>): Promise<any>;
-}
 
 /**
  * Represents the context for session storage operations.
