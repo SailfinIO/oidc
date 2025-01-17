@@ -60,7 +60,7 @@ const processLoginFlow = async (
     const { url } = await client.getAuthorizationUrl(additionalParams);
 
     // Redirect to the authorization URL
-    return response.redirect(url);
+    return response.redirect(StatusCode.FOUND, url);
   } catch (error) {
     handleLoginError(error, context, options);
   }

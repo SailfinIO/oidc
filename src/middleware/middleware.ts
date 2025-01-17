@@ -205,19 +205,52 @@ const handleLogin = async (client: Client, req: IRequest, res: IResponse) => {
 
   // Initialize session if it doesn't exist
   if (!req.session) {
-    req.setSession({ state: {}, user: undefined });
+    if (typeof req.setSession === 'function') {
+      req.setSession({ state: {}, user: undefined });
+    } else {
+      // @ts-ignore - Allow direct assignment since it's a fallback
+      req.session = { state: {}, user: undefined };
+    }
   }
+
+  // Ensure the session has a `state` object
   if (!req.session.state) {
-    req.session.state = {};
+    if (typeof req.setSession === 'function') {
+      req.setSession({ ...req.session, state: {} });
+    } else {
+      req.session.state = {};
+    }
   }
 
-  // Store state and codeVerifier in session
-  req.setSession({ state: req.session.state, user: req.session.user });
-  req.session.state[state] = { codeVerifier, createdAt: Date.now() };
+  // Update session with state and codeVerifier
+  if (typeof req.setSession === 'function') {
+    req.setSession({
+      ...req.session,
+      state: {
+        ...req.session.state,
+        [state]: { codeVerifier, createdAt: Date.now() },
+      },
+    });
+  } else {
+    req.session.state[state] = { codeVerifier, createdAt: Date.now() };
+  }
 
-  res.redirect(authUrl);
+  // Redirect to the authorization URL
+  if (typeof res.redirect === 'function') {
+    res.redirect(authUrl);
+  } else if (res && typeof res === 'object') {
+    // @ts-ignore - Allow direct assignment since it's a fallback
+    res.statusCode = 302;
 
-  return;
+    // @ts-ignore - Allow direct assignment since it's a fallback
+    res.headers = {
+      ...res.headers,
+      Location: authUrl,
+    };
+    res.end();
+  } else {
+    throw new Error('Unable to redirect due to unsupported response object');
+  }
 };
 
 /**
@@ -254,10 +287,23 @@ const handleCallback = async (
   const user = await client.getUserInfo();
   if (client.getConfig().session) {
     context.user = user;
-    req.setSession({
-      ...req.session,
-      user,
-    });
+    if (typeof req.setSession === 'function') {
+      req.setSession({
+        ...req.session,
+        user,
+      });
+    } else if (typeof req.session === 'object' && req.session !== null) {
+      // @ts-ignore - Allow direct assignment since it's a fallback
+      req.session = {
+        ...req.session,
+        user,
+      };
+    } else {
+      console.warn('Session management not supported in current environment');
+      throw new Error(
+        'Unable to set session data due to unsupported request object',
+      );
+    }
   }
 
   res.redirect(metadata.postLoginRedirectUri || '/');
@@ -282,9 +328,28 @@ const handleProtected = async (
   context: IStoreContext,
 ) => {
   const accessToken = await client.getAccessToken();
+
   if (!accessToken) {
     const authUrl = (await client.getAuthorizationUrl()).url;
-    res.redirect(authUrl);
+
+    // Check if res.redirect exists (e.g., in an Express environment)
+    if (typeof res.redirect === 'function') {
+      res.redirect(authUrl);
+    } else if (typeof res === 'object' && res !== null) {
+      // For non-Express environments, handle redirection
+      // @ts-ignore - Allow direct assignment since it's a fallback
+      res.statusCode = 302;
+      // @ts-ignore - Allow direct assignment since it's a fallback
+      res.headers = {
+        ...res.headers,
+        Location: authUrl,
+      };
+      res.end();
+    } else {
+      throw new Error(
+        'Unable to handle redirect due to unsupported response object',
+      );
+    }
     return;
   }
 
@@ -294,14 +359,38 @@ const handleProtected = async (
   // Optionally validate specific claims
   validateSpecificClaims(claims, metadata.requiredClaims);
 
+  // Retrieve user info and update the session
   const user = await client.getUserInfo();
   context.user = user;
-  req.setSession({
-    ...req.session,
-    user,
-  });
 
-  await next();
+  // Update the session
+  if (typeof req.setSession === 'function') {
+    req.setSession({
+      ...req.session,
+      user,
+    });
+  } else if (typeof req.session === 'object' && req.session !== null) {
+    // @ts-ignore - Allow direct assignment since it's a fallback
+    req.session = {
+      ...req.session,
+      user,
+    };
+  } else {
+    console.warn('Session management not supported in current environment');
+    throw new Error(
+      'Unable to set session data due to unsupported request object',
+    );
+  }
+
+  // Call next middleware if available
+  if (typeof next === 'function') {
+    await next();
+  } else {
+    console.warn('Next function not available in current environment');
+    throw new Error(
+      'Unable to proceed to next middleware due to unsupported context',
+    );
+  }
 };
 
 /**
