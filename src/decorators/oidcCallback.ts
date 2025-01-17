@@ -81,7 +81,7 @@ const processSessionFlow = async (
   state: string,
   options?: OidcCallbackOptions,
 ) => {
-  const { request, response } = context;
+  const { request } = context;
 
   try {
     // Exchange code for tokens and validate ID token
@@ -113,9 +113,6 @@ const processSessionFlow = async (
         request.session.user = user;
       }
     }
-
-    // Redirect to the specified URI after successful login
-    response.redirect(options?.postLoginRedirectUri ?? '/');
   } catch (error) {
     handleAuthError(error, context, options);
   }
@@ -131,12 +128,9 @@ const processStatelessFlow = async (
   state: string,
   options?: OidcCallbackOptions,
 ) => {
-  const { response } = context;
-
   try {
     await client.handleRedirect(code, state, context);
     await client.getUserInfo();
-    response.redirect(options?.postLoginRedirectUri || '/');
   } catch (error) {
     handleAuthError(error, context, options);
   }
@@ -204,6 +198,15 @@ export const OidcCallback = (
       } catch (error) {
         handleAuthError(error, context, options);
         return;
+      }
+
+      // Call the original controller method.
+      await originalMethod.apply(this, args);
+
+      // Fallback redirection:
+      // If the response hasn't been sent and a postLoginRedirectUri is provided, perform redirect.
+      if (!res.headersSent && options?.postLoginRedirectUri) {
+        res.redirect(options.postLoginRedirectUri);
       }
     };
 

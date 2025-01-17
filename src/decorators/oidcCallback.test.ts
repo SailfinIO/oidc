@@ -14,7 +14,7 @@ class DummyController {
     this.client = client;
   }
 
-  @OidcCallback()
+  @OidcCallback({ postLoginRedirectUri: 'http://example.com/redirect' })
   async handleCallback(req: IRequest, res: IResponse) {
     // Original method logic can be empty or perform additional actions if needed
   }
@@ -123,7 +123,7 @@ describe('OidcCallback Decorator', () => {
     expect(setSessionSpy).toHaveBeenCalled(); // Confirm that setSession was invoked
 
     // Verify redirection
-    expect(redirectSpy).toHaveBeenCalledWith('/');
+    expect(redirectSpy).toHaveBeenCalledWith('http://example.com/redirect');
 
     // Cleanup spies
     setSessionSpy.mockRestore();
