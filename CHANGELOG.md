@@ -1,3 +1,9 @@
+## [0.0.15-beta.13](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.12...v0.0.15-beta.13) (2025-01-17)
+
+### Bug Fixes
+
+* check for missing res ([e05f8ea](https://github.com/SailfinIO/oidc/commit/e05f8eaa56c3305d0e3559c18b489cfe0c10ea47))
+
 ## [0.0.15-beta.12](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.11...v0.0.15-beta.12) (2025-01-17)
 
 ### Bug Fixes
