@@ -1,3 +1,16 @@
+## [0.0.14](https://github.com/SailfinIO/oidc/compare/v0.0.13...v0.0.14) (2025-01-17)
+
+### Bug Fixes
+
+* call original controller method if redirect uri isnt provided ([adaa05a](https://github.com/SailfinIO/oidc/commit/adaa05ac251ebc6920529f5ce7bb2d380fce1619))
+* check for session sessting ([85f67ef](https://github.com/SailfinIO/oidc/commit/85f67ef2d06034db97bec8c3b4d1e57d5f87b0f6))
+* check headers being sent before redirect ([3729dd8](https://github.com/SailfinIO/oidc/commit/3729dd8ba348cc0d024421b09077fae3ec07210b))
+* checks for plain objects ([ebaaf09](https://github.com/SailfinIO/oidc/commit/ebaaf09857e43a2253456373a30d670d727ba4a1))
+* decorator to check for session type ([2dc3298](https://github.com/SailfinIO/oidc/commit/2dc3298c4cbdb501a708aec10d2b18e51e135d34))
+* handle plain objects ([fe117f4](https://github.com/SailfinIO/oidc/commit/fe117f4e92feb1069142d56521893eb14d0f6ef4))
+* remove duplicate redirect ([3cec552](https://github.com/SailfinIO/oidc/commit/3cec5529b2e095f309ec9d567c215a63b7929329))
+* use custom response and request ([b7b2369](https://github.com/SailfinIO/oidc/commit/b7b2369e4e76359ee856b5b5113a81d4a352c8ad))
+
 ## [0.0.14-beta.7](https://github.com/SailfinIO/oidc/compare/v0.0.14-beta.6...v0.0.14-beta.7) (2025-01-17)
 
 ### Bug Fixes
