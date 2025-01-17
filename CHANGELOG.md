@@ -1,3 +1,9 @@
+## [0.0.15-beta.8](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.7...v0.0.15-beta.8) (2025-01-17)
+
+### Bug Fixes
+
+* try local scope type ([b4fb068](https://github.com/SailfinIO/oidc/commit/b4fb06851d5b0abaa1acec4d22e9e5342eb61e4c))
+
 ## [0.0.15-beta.7](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.6...v0.0.15-beta.7) (2025-01-17)
 
 ### Bug Fixes
