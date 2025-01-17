@@ -18,15 +18,20 @@ export const Protected = (requiredClaims?: Claims[]): MethodDecorator => {
 
     const originalMethod = descriptor.value;
 
-    descriptor.value = async function (...args: any[]) {
-      const req: IRequest = args[0];
-      const res: IResponse | undefined = args.length > 1 ? args[1] : undefined;
+    descriptor.value = async function (
+      this: { client: Client },
+      ...args: any[]
+    ) {
+      const req: any = args[0];
+      const res: any = args[1];
 
-      if (!req) {
-        throw new HttpException(
-          'Server error: Request object not provided',
-          HttpStatus.INTERNAL_SERVER_ERROR,
-        );
+      if (!req || !res) {
+        if (res) {
+          res
+            .status(StatusCode.BAD_REQUEST)
+            .send('Invalid callback parameters: Missing request or response.');
+        }
+        return;
       }
 
       const client: Client = this.client;
