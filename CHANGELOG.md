@@ -1,3 +1,9 @@
+## [0.0.15-beta.10](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.9...v0.0.15-beta.10) (2025-01-17)
+
+### Bug Fixes
+
+* defaults ([ff94071](https://github.com/SailfinIO/oidc/commit/ff9407172537356e8496b163690d8b5441b8a862))
+
 ## [0.0.15-beta.9](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.8...v0.0.15-beta.9) (2025-01-17)
 
 ### Bug Fixes
