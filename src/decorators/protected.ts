@@ -20,16 +20,14 @@ export const Protected = (requiredClaims?: Claims[]): MethodDecorator => {
     const originalMethod = descriptor.value;
 
     descriptor.value = async function (...args: any[]) {
-      // Ensure at least one argument (request) is provided
-      if (!args || args.length < 1) {
+      const req: IRequest = args[0];
+      const res: IResponse | undefined = args.length > 1 ? args[1] : undefined;
+      if (!req) {
         throw new HttpException(
-          'Insufficient arguments: Expected at least a request object.',
+          'Server error: Request object not provided',
           HttpStatus.INTERNAL_SERVER_ERROR,
         );
       }
-
-      const req: IRequest = args[0];
-      const res: IResponse | undefined = args.length > 1 ? args[1] : undefined;
 
       // Additional guard: check if req is defined
       if (!req) {
