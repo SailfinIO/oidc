@@ -1,3 +1,9 @@
+## [0.0.15-beta.18](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.17...v0.0.15-beta.18) (2025-01-18)
+
+### Bug Fixes
+
+* try without reflection ([e7d97ba](https://github.com/SailfinIO/oidc/commit/e7d97ba9fbddc287510fa59bc39ad7ab250bc999))
+
 ## [0.0.15-beta.17](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.16...v0.0.15-beta.17) (2025-01-18)
 
 ### Bug Fixes
