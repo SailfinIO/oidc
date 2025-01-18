@@ -6,3 +6,4 @@ export * from './oidcLogin';
 export * from './oidcCallback';
 export * from './oidcLogout';
 export * from './protected';
+export * from './refreshToken';

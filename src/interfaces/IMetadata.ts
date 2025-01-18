@@ -24,6 +24,7 @@ export interface IMethodMetadata {
   isWithMutexLock?: boolean;
   mutex?: IMutex;
   timeout?: number;
+  requiresRefresh?: boolean;
 }
 
 /**
