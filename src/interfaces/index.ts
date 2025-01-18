@@ -36,3 +36,6 @@ export * from './HashAlgorithm';
 export * from './IRequest';
 export * from './IResponse';
 export * from './DynamicModule';
+export * from './HttpExeptionBody';
+export * from './HttpExceptionOptions';
+export * from './DescriptionAndOptions';

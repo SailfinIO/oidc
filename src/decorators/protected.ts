@@ -1,8 +1,8 @@
 import { MetadataManager } from './MetadataManager';
-import { IMethodMetadata, IRequest, IResponse } from '../interfaces';
+import { IMethodMetadata } from '../interfaces';
 import { Claims, StatusCode } from '../enums';
 import { Client } from '../classes/Client';
-import { HttpException, HttpStatus } from '@nestjs/common';
+import { HttpException } from '../errors/HttpExeption';
 
 export const Protected = (requiredClaims?: Claims[]): MethodDecorator => {
   return (
@@ -48,37 +48,38 @@ export const Protected = (requiredClaims?: Claims[]): MethodDecorator => {
         if (res) {
           return res.status(StatusCode.INTERNAL_SERVER_ERROR).send(message);
         }
-        throw new HttpException(message, HttpStatus.INTERNAL_SERVER_ERROR);
-      }
-
-      // Refined check: Verify that session, user, and user.sub exist
-      if (!req.session || !req.session.user || !req.session.user.sub) {
-        const message = 'Unauthorized: No valid session';
-        logger.warn(message, { session: req.session });
-        if (res) {
-          return res.status(StatusCode.UNAUTHORIZED).send(message);
-        }
-        throw new HttpException(message, HttpStatus.UNAUTHORIZED);
+        throw new HttpException(message, StatusCode.INTERNAL_SERVER_ERROR);
       }
 
       try {
-        const accessToken = req.session.token?.access_token; // Assume access token is stored in session
-        if (accessToken) {
-          const introspection = await client.introspectToken(accessToken);
-          if (!introspection.active) {
-            logger.warn('Token introspection failed: token inactive', {
-              introspection,
-            });
-            return res
-              .status(StatusCode.UNAUTHORIZED)
-              .send('Unauthorized: Invalid token');
+        const token = req.session?.cookie?.access_token;
+        if (!token) {
+          const message = 'Unauthorized: No access token found';
+          logger.warn(message);
+          if (res) {
+            return res.status(StatusCode.UNAUTHORIZED).send(message);
           }
+          throw new HttpException(message, StatusCode.UNAUTHORIZED);
         }
+
+        const isValid = await client.introspectToken(token);
+        if (!isValid) {
+          const message = 'Unauthorized: Invalid or expired access token';
+          logger.warn(message);
+          if (res) {
+            return res.status(StatusCode.UNAUTHORIZED).send(message);
+          }
+          throw new HttpException(message, StatusCode.UNAUTHORIZED);
+        }
+
+        logger.debug('Access token is valid');
       } catch (error) {
-        logger.error('Error during token introspection', { error });
-        return res
-          .status(StatusCode.INTERNAL_SERVER_ERROR)
-          .send('Error validating token');
+        const message = 'Error validating access token';
+        logger.error(message, { error });
+        if (res) {
+          return res.status(StatusCode.INTERNAL_SERVER_ERROR).send(message);
+        }
+        throw new HttpException(message, StatusCode.INTERNAL_SERVER_ERROR);
       }
 
       if (requiredClaims && requiredClaims.length > 0) {
@@ -94,7 +95,7 @@ export const Protected = (requiredClaims?: Claims[]): MethodDecorator => {
             if (res) {
               return res.status(StatusCode.FORBIDDEN).send(message);
             }
-            throw new HttpException(message, HttpStatus.FORBIDDEN);
+            throw new HttpException(message, StatusCode.FORBIDDEN);
           }
           logger.debug('All required claims are present', { claimsRecord });
         } catch (error) {
@@ -103,30 +104,13 @@ export const Protected = (requiredClaims?: Claims[]): MethodDecorator => {
           if (res) {
             return res.status(StatusCode.INTERNAL_SERVER_ERROR).send(message);
           }
-          throw new HttpException(message, HttpStatus.INTERNAL_SERVER_ERROR);
+          throw new HttpException(message, StatusCode.INTERNAL_SERVER_ERROR);
         }
       }
 
       logger.debug('Authorization checks passed. Invoking original method.');
       return originalMethod.apply(this, args);
     };
-
-    // Preserve parameter and return type metadata for NestJS injection
-    Reflect.defineMetadata(
-      'design:paramtypes',
-      Reflect.getMetadata('design:paramtypes', originalMethod),
-      descriptor.value,
-    );
-    Reflect.defineMetadata(
-      'design:returntype',
-      Reflect.getMetadata('design:returntype', originalMethod),
-      descriptor.value,
-    );
-    Reflect.defineMetadata(
-      'design:type',
-      Reflect.getMetadata('design:type', originalMethod),
-      descriptor.value,
-    );
 
     return descriptor;
   };

@@ -63,9 +63,10 @@ describe('Protected Decorator', () => {
     // Mock getClaims to simulate user having required claims
     const mockGetClaims = jest.fn().mockResolvedValue({ email: true });
 
-    // Create a fake Client instance with the mocked getClaims
+    // Create a fake Client instance with the mocked methods
     const fakeClient = {
       getClaims: mockGetClaims,
+      introspectToken: jest.fn().mockResolvedValue(true), // Mock token introspection
       getLogger: jest.fn().mockReturnValue(console),
       getSessionStore: jest.fn().mockReturnValue({
         destroy: jest.fn().mockResolvedValue(undefined),
@@ -80,9 +81,12 @@ describe('Protected Decorator', () => {
       logout: jest.fn().mockResolvedValue('http://logout.url'),
     } as unknown as Client;
 
-    // Create dummy request and response objects
+    // Create dummy request and response objects with a valid session and access token
     const req = {
-      session: { user: { sub: '123' } },
+      session: {
+        user: { sub: '123' },
+        cookie: { access_token: 'valid-access-token' }, // Correctly nested token
+      },
     } as IRequest;
     const res = {
       status: jest.fn().mockReturnThis(),
@@ -106,6 +110,9 @@ describe('Protected Decorator', () => {
     await controller.protectedMethod(req, res);
 
     // Check that getClaims was called and the original method executed
+    expect(fakeClient.introspectToken).toHaveBeenCalledWith(
+      'valid-access-token',
+    );
     expect(mockGetClaims).toHaveBeenCalled();
     expect(originalCalled).toBe(true);
   });
