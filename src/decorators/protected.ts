@@ -24,9 +24,16 @@ export const Protected = (requiredClaims?: Claims[]): MethodDecorator => {
     ) {
       const req: any = args[0];
       const res: any = args[1];
+      const client: Client = this.client;
+      const logger = client ? client.getLogger() : console;
 
-      // Preliminary check for req and res objects
+      logger.debug('Protected decorator invoked', {
+        method: propertyKey.toString(),
+        requiredClaims,
+      });
+
       if (!req || !res) {
+        logger.error('Missing request or response object', { req, res });
         if (res) {
           res
             .status(StatusCode.BAD_REQUEST)
@@ -34,15 +41,6 @@ export const Protected = (requiredClaims?: Claims[]): MethodDecorator => {
         }
         return;
       }
-
-      const client: Client = this.client;
-      // Use client's logger if available, otherwise fallback to console
-      const logger = client ? client.getLogger() : console;
-
-      logger.debug('Accessing protected route', {
-        method: propertyKey.toString(),
-        requiredClaims,
-      });
 
       if (!client) {
         const message = 'Server configuration error: Client not available';
@@ -53,13 +51,34 @@ export const Protected = (requiredClaims?: Claims[]): MethodDecorator => {
         throw new HttpException(message, HttpStatus.INTERNAL_SERVER_ERROR);
       }
 
-      if (!req.session || !req.session.user) {
+      // Refined check: Verify that session, user, and user.sub exist
+      if (!req.session || !req.session.user || !req.session.user.sub) {
         const message = 'Unauthorized: No valid session';
-        logger.warn(message);
+        logger.warn(message, { session: req.session });
         if (res) {
           return res.status(StatusCode.UNAUTHORIZED).send(message);
         }
         throw new HttpException(message, HttpStatus.UNAUTHORIZED);
+      }
+
+      try {
+        const accessToken = req.session.token?.access_token; // Assume access token is stored in session
+        if (accessToken) {
+          const introspection = await client.introspectToken(accessToken);
+          if (!introspection.active) {
+            logger.warn('Token introspection failed: token inactive', {
+              introspection,
+            });
+            return res
+              .status(StatusCode.UNAUTHORIZED)
+              .send('Unauthorized: Invalid token');
+          }
+        }
+      } catch (error) {
+        logger.error('Error during token introspection', { error });
+        return res
+          .status(StatusCode.INTERNAL_SERVER_ERROR)
+          .send('Error validating token');
       }
 
       if (requiredClaims && requiredClaims.length > 0) {
@@ -91,6 +110,24 @@ export const Protected = (requiredClaims?: Claims[]): MethodDecorator => {
       logger.debug('Authorization checks passed. Invoking original method.');
       return originalMethod.apply(this, args);
     };
+
+    // Preserve parameter and return type metadata for NestJS injection
+    Reflect.defineMetadata(
+      'design:paramtypes',
+      Reflect.getMetadata('design:paramtypes', originalMethod),
+      descriptor.value,
+    );
+    Reflect.defineMetadata(
+      'design:returntype',
+      Reflect.getMetadata('design:returntype', originalMethod),
+      descriptor.value,
+    );
+    Reflect.defineMetadata(
+      'design:type',
+      Reflect.getMetadata('design:type', originalMethod),
+      descriptor.value,
+    );
+
     return descriptor;
   };
 };
