@@ -1,3 +1,9 @@
+## [0.0.15-beta.17](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.16...v0.0.15-beta.17) (2025-01-18)
+
+### Bug Fixes
+
+* add logout decorator and debug logs ([1e861b2](https://github.com/SailfinIO/oidc/commit/1e861b21b3c585321efb1c2707af4a2a67464ecd))
+
 ## [0.0.15-beta.16](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.15...v0.0.15-beta.16) (2025-01-17)
 
 ### Bug Fixes
