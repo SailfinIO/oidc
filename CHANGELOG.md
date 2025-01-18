@@ -1,3 +1,9 @@
+## [0.0.15-beta.19](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.18...v0.0.15-beta.19) (2025-01-18)
+
+### Bug Fixes
+
+* try testing for token ([e3453bb](https://github.com/SailfinIO/oidc/commit/e3453bb8ef32ed0ff9c690cbc70a718b53705140))
+
 ## [0.0.15-beta.18](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.17...v0.0.15-beta.18) (2025-01-18)
 
 ### Bug Fixes
