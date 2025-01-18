@@ -1,3 +1,9 @@
+## [0.0.15-beta.21](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.20...v0.0.15-beta.21) (2025-01-18)
+
+### Bug Fixes
+
+* refresh token ([0aa603d](https://github.com/SailfinIO/oidc/commit/0aa603dfa44920c3040ca4433b86fc8a7dec07ae))
+
 ## [0.0.15-beta.20](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.19...v0.0.15-beta.20) (2025-01-18)
 
 ### Bug Fixes
