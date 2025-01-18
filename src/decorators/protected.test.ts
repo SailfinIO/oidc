@@ -66,6 +66,18 @@ describe('Protected Decorator', () => {
     // Create a fake Client instance with the mocked getClaims
     const fakeClient = {
       getClaims: mockGetClaims,
+      getLogger: jest.fn().mockReturnValue(console),
+      getSessionStore: jest.fn().mockReturnValue({
+        destroy: jest.fn().mockResolvedValue(undefined),
+      }),
+      getConfig: jest.fn().mockReturnValue({
+        session: {
+          cookie: {
+            name: 'sid',
+          },
+        },
+      }),
+      logout: jest.fn().mockResolvedValue('http://logout.url'),
     } as unknown as Client;
 
     // Create dummy request and response objects
