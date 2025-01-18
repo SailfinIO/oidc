@@ -118,24 +118,6 @@ export const OidcLogout = (options?: OidcLogoutOptions): MethodDecorator => {
         return;
       }
     };
-
-    // Preserve metadata for parameter injection
-    Reflect.defineMetadata(
-      'design:paramtypes',
-      Reflect.getMetadata('design:paramtypes', originalMethod),
-      descriptor.value,
-    );
-    Reflect.defineMetadata(
-      'design:returntype',
-      Reflect.getMetadata('design:returntype', originalMethod),
-      descriptor.value,
-    );
-    Reflect.defineMetadata(
-      'design:type',
-      Reflect.getMetadata('design:type', originalMethod),
-      descriptor.value,
-    );
-
     return descriptor;
   };
 };

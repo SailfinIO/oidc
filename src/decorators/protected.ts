@@ -91,24 +91,6 @@ export const Protected = (requiredClaims?: Claims[]): MethodDecorator => {
       logger.debug('Authorization checks passed. Invoking original method.');
       return originalMethod.apply(this, args);
     };
-
-    // Preserve parameter and return type metadata for NestJS injection
-    Reflect.defineMetadata(
-      'design:paramtypes',
-      Reflect.getMetadata('design:paramtypes', originalMethod),
-      descriptor.value,
-    );
-    Reflect.defineMetadata(
-      'design:returntype',
-      Reflect.getMetadata('design:returntype', originalMethod),
-      descriptor.value,
-    );
-    Reflect.defineMetadata(
-      'design:type',
-      Reflect.getMetadata('design:type', originalMethod),
-      descriptor.value,
-    );
-
     return descriptor;
   };
 };
