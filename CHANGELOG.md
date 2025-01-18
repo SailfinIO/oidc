@@ -1,3 +1,9 @@
+## [0.0.15-beta.20](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.19...v0.0.15-beta.20) (2025-01-18)
+
+### Bug Fixes
+
+* check for cookie in session ([384af83](https://github.com/SailfinIO/oidc/commit/384af83d933f3a241227f2715ce98ec306ee2950))
+
 ## [0.0.15-beta.19](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.18...v0.0.15-beta.19) (2025-01-18)
 
 ### Bug Fixes
