@@ -1,3 +1,9 @@
+## [0.1.0-beta.3](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.2...v0.1.0-beta.3) (2025-01-20)
+
+### Bug Fixes
+
+* provide default algorithm ([1b530fe](https://github.com/SailfinIO/oidc/commit/1b530fe9bd64aae3033374126b22b7d57aa4d838))
+
 ## [0.1.0-beta.2](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.1...v0.1.0-beta.2) (2025-01-20)
 
 ### Bug Fixes
