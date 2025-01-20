@@ -25,3 +25,6 @@ export * from './StatusCode';
 export * from './ContentType';
 export * from './RequestHeader';
 export * from './ProviderScope';
+export * from './DERTag';
+export * from './KeyExportOptions';
+export * from './KeyFormat';

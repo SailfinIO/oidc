@@ -14,7 +14,7 @@ import { Jwks } from './Jwks';
 import { ClaimsValidator } from './ClaimsValidator';
 import { SignatureVerifier } from './SignatureVerifier';
 import { base64UrlDecode, base64UrlEncode } from '../utils/urlUtils';
-import { ALGORITHM_HASH_MAP } from '../constants/algorithmMap';
+import { ALGORITHM_HASH_MAP } from '../constants/key-constants';
 
 /**
  * Represents a JSON Web Token (JWT) and provides static methods for encoding, decoding, and verifying JWTs.

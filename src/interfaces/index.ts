@@ -39,3 +39,4 @@ export * from './DynamicModule';
 export * from './HttpExeptionBody';
 export * from './HttpExceptionOptions';
 export * from './DescriptionAndOptions';
+export * from './IX509Certificate';

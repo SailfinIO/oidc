@@ -23,7 +23,7 @@ import {
   rsaJwkToPem,
   ecJwkToPem,
 } from '../utils';
-import { ALGORITHM_HASH_MAP } from '../constants/algorithmMap';
+import { ALGORITHM_HASH_MAP } from '../constants/key-constants';
 
 /**
  * Verifies the signature of a JWT using a public key fetched from a JWKS endpoint.

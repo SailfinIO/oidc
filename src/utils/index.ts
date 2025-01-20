@@ -2,9 +2,9 @@
 
 export * from './Logger';
 export * from './urlUtils';
-export * from './derEncoding';
-export * from './ecKeyConverter';
-export * from './rsaKeyConverter';
+export * from './derUtils';
+export * from './ecKeyUtils';
+export * from './rsaKeyUtils';
 export * from './pem';
 export * from './urlUtils';
 export * from './sleep';

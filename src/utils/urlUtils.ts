@@ -12,7 +12,7 @@ import { URL, URLSearchParams } from 'url';
 import { ClientError } from '../errors/ClientError';
 import { IAuthorizationUrlParams } from '../interfaces/IAuthorizationUrlParams';
 import { Algorithm, BinaryToTextEncoding } from '../enums';
-import { randomBytes } from 'crypto';
+import { generateKeyPairSync, randomBytes } from 'crypto';
 import { ILogoutUrlParams } from '../interfaces';
 
 /**

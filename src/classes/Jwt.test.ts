@@ -19,7 +19,7 @@ import {
 import { base64UrlDecode, base64UrlEncode } from '../utils/urlUtils';
 import { Buffer } from 'buffer';
 import { Algorithm } from '../enums';
-import { ALGORITHM_HASH_MAP } from '../constants/algorithmMap';
+import { ALGORITHM_HASH_MAP } from '../constants/key-constants';
 import { constants } from 'crypto';
 
 describe('Jwt', () => {
