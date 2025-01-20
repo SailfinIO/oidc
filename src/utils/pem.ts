@@ -8,7 +8,7 @@
  * @module src/utils/pem
  */
 
-import { BinaryToTextEncoding } from '../enums';
+import { BinaryToTextEncoding, CertificateLabel } from '../enums';
 
 /**
  * Formats a Base64-encoded string into PEM format by adding
@@ -35,7 +35,7 @@ import { BinaryToTextEncoding } from '../enums';
  * // -----END PUBLIC KEY-----
  * ```
  */
-export const wrapPem = (b64: string, label: string): string => {
+export const wrapPem = (b64: string, label: CertificateLabel): string => {
   // Split the Base64 string into lines of up to 64 characters
   const lines = b64.match(/.{1,64}/g) || [];
 
@@ -93,7 +93,10 @@ export const unwrapPem = (pem: string): string => {
  * // -----END CERTIFICATE-----
  * ```
  */
-export const derToPem = (derBuffer: Buffer, label: string): string => {
+export const derToPem = (
+  derBuffer: Buffer,
+  label: CertificateLabel,
+): string => {
   const base64Content = derBuffer.toString(BinaryToTextEncoding.BASE_64);
   return wrapPem(base64Content, label);
 };

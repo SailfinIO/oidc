@@ -93,7 +93,7 @@ export interface BasicConstraints {
 }
 
 export interface KeyUsage {
-  usages: string[]; // List of key usage flags, for example
+  usages: string[]; // Raw key usage strings (e.g., ["digitalSignature", "keyEncipherment"])
 }
 
 export interface SubjectAltName {
@@ -133,7 +133,7 @@ export interface AuthorityInfoAccess {
 
 export type ParsedExtensionData =
   | BasicConstraints
-  | KeyUsage
+  | ParsedKeyUsage
   | SubjectAltName
   | ExtendedKeyUsage
   | SubjectKeyIdentifier
@@ -152,4 +152,16 @@ export interface CertificateOptions {
   tbsCertificate: ITbsCertificate;
   signAlgorithm: { hashName: string; cryptoAlg: string };
   privateKeyPem: string;
+}
+
+export interface ParsedKeyUsage {
+  digitalSignature: boolean;
+  nonRepudiation: boolean;
+  keyEncipherment: boolean;
+  dataEncipherment: boolean;
+  keyAgreement: boolean;
+  keyCertSign: boolean;
+  cRLSign: boolean;
+  encipherOnly: boolean;
+  decipherOnly: boolean;
 }

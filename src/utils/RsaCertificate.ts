@@ -6,7 +6,6 @@ import {
   ISubjectPublicKeyInfo,
   ITbsCertificate,
   IValidity,
-  CertificateOptions,
 } from '../interfaces';
 import { Certificate } from './Certificate';
 import { base64UrlDecode } from './urlUtils';
@@ -56,7 +55,7 @@ export class RsaCertificate extends Certificate {
     if (index < 0) {
       throw new Error('BIT STRING not found in SPKI buffer');
     }
-    const subjectPublicKey = spkiBuffer.slice(index);
+    const subjectPublicKey = spkiBuffer.subarray(index);
 
     return {
       algorithm: {

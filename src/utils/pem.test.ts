@@ -11,6 +11,7 @@ describe('wrapPem', () => {
 YWJjMTIz
 -----END TEST LABEL-----`;
 
+    //@ts-ignore expects CertificateLabel
     const result = wrapPem(input, label);
     expect(result).toBe(expected);
   });
@@ -25,6 +26,7 @@ YWJjMTIz
     expect(extendedInput.length).toBe(130);
 
     const label = 'LONG TEST';
+    //@ts-ignore expects CertificateLabel
     const result = wrapPem(extendedInput, label);
 
     // Split the result to verify line structure
@@ -53,6 +55,7 @@ YWJjMTIz
 
 -----END EMPTY-----`;
 
+    //@ts-ignore expects CertificateLabel
     const result = wrapPem(input, label);
     expect(result).toBe(expected);
   });
@@ -64,6 +67,7 @@ YWJjMTIz
 YQ==
 -----END MY LABEL 123!@#-----`;
 
+    //@ts-ignore expects CertificateLabel
     const result = wrapPem(input, label);
     expect(result).toBe(expected);
   });
@@ -131,6 +135,7 @@ describe('derToPem', () => {
 YWJjMTIz
 -----END TEST LABEL-----`;
 
+    //@ts-ignore expects CertificateLabel
     const result = derToPem(derBuffer, label);
     expect(result).toBe(expected);
   });
@@ -142,6 +147,7 @@ YWJjMTIz
 
 -----END EMPTY-----`;
 
+    //@ts-ignore expects CertificateLabel
     const result = derToPem(derBuffer, label);
     expect(result).toBe(expected);
   });
@@ -153,6 +159,7 @@ YWJjMTIz
 YQ==
 -----END MY LABEL 123!@#-----`;
 
+    //@ts-ignore expects CertificateLabel
     const result = derToPem(derBuffer, label);
     expect(result).toBe(expected);
   });

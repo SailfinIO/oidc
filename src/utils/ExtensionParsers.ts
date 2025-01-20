@@ -13,6 +13,7 @@ import {
   ISubjectPublicKeyInfo,
   IValidity,
   ParsedExtensionData,
+  ParsedKeyUsage,
   SubjectAltName,
 } from '../interfaces';
 import {
@@ -203,12 +204,14 @@ export class ExtensionParsers {
     return { cA, pathLenConstraint };
   };
 
-  public static parseKeyUsage = (
+  public static parseKeyUsage(
     extnValue: Buffer,
     critical: boolean,
-  ): ParsedExtensionData => {
-    // Decode the BIT STRING from the extension value.
+  ): ParsedExtensionData {
+    // Decode the BIT STRING from the extension value
     const { bits } = decodeBitString(extnValue, 0);
+
+    // Define bit-to-usage mapping as per RFC 5280
     const bitUsageMapping = [
       'digitalSignature',
       'nonRepudiation',
@@ -221,23 +224,40 @@ export class ExtensionParsers {
       'decipherOnly',
     ];
 
-    const usages: string[] = [];
-    // Iterate over each bit and map it to its usage.
+    // Initialize the ParsedKeyUsage object with false values
+    const keyUsage: ParsedKeyUsage = {
+      digitalSignature: false,
+      nonRepudiation: false,
+      keyEncipherment: false,
+      dataEncipherment: false,
+      keyAgreement: false,
+      keyCertSign: false,
+      cRLSign: false,
+      encipherOnly: false,
+      decipherOnly: false,
+    };
+
+    // Iterate over the bits and set corresponding flags
     for (let byteIndex = 0; byteIndex < bits.length; byteIndex++) {
       const byte = bits[byteIndex];
       for (let bitIndex = 0; bitIndex < 8; bitIndex++) {
         const bitPosition = byteIndex * 8 + bitIndex;
+
+        // Check if the bit is set and within the defined mapping
         if (
           byte & (1 << (7 - bitIndex)) &&
           bitPosition < bitUsageMapping.length
         ) {
-          usages.push(bitUsageMapping[bitPosition]);
+          const usage = bitUsageMapping[bitPosition];
+          if (usage) {
+            keyUsage[usage as keyof ParsedKeyUsage] = true;
+          }
         }
       }
     }
 
-    return { usages };
-  };
+    return keyUsage;
+  }
 
   public static parseSubjectAltName(
     extnValue: Buffer,
@@ -318,11 +338,14 @@ export class ExtensionParsers {
       return Array.from(data).join('.');
     } else if (data.length === 16) {
       // IPv6
-      const hex = data.toString('hex');
-      return hex.match(/.{1,4}/g)?.join(':') || data.toString('hex');
+      const hex = data.toString(BinaryToTextEncoding.HEX);
+      return (
+        hex.match(/.{1,4}/g)?.join(':') ||
+        data.toString(BinaryToTextEncoding.HEX)
+      );
     } else {
       // Unknown IP length
-      return data.toString('hex');
+      return data.toString(BinaryToTextEncoding.HEX);
     }
   };
 
@@ -401,13 +424,22 @@ export class ExtensionParsers {
             for (const gn of fullNameElements) {
               const tagClass = gn.tag & 0xc0;
               const tagNumber = gn.tag & 0x1f;
-              if (tagClass === 0x80 && tagNumber === 2) {
+              if (tagClass === TAG_CLASS_CONTEXT_SPECIFIC && tagNumber === 2) {
                 // [2] DNSName
                 distributionPoints.push(
                   gn.content.toString(BinaryToTextEncoding.UTF_8),
                 );
               }
-              // Extend to handle other GeneralName types if necessary.
+              if (tagClass === TAG_CLASS_CONTEXT_SPECIFIC && tagNumber === 6) {
+                // [6] URI
+                distributionPoints.push(
+                  gn.content.toString(BinaryToTextEncoding.UTF_8),
+                );
+              }
+              if (tagClass === TAG_CLASS_CONTEXT_SPECIFIC && tagNumber === 7) {
+                // [7] IPAddress
+                distributionPoints.push(this.parseIPAddress(gn.content));
+              }
             }
           }
         }

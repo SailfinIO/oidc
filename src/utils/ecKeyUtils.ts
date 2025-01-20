@@ -11,16 +11,15 @@
 import { ClientError } from '../errors';
 import {
   BinaryToTextEncoding,
+  CertificateLabel,
   DERTag,
   EcCurve,
-  KeyExportOptions,
-  KeyFormat,
 } from '../enums';
 import { base64UrlDecode } from './urlUtils';
 import { pemToDer, wrapPem } from './pem';
 import { bitString, objectIdentifier, sequence } from './derUtils';
 import { CURVE_OIDS, EC_PUBLIC_KEY_OID } from '../constants/key-constants';
-import { createPrivateKey, createPublicKey, generateKeyPairSync } from 'crypto';
+
 /**
  * Converts an Elliptic Curve (EC) public key from JWK format to PEM format.
  *
@@ -67,13 +66,13 @@ export const ecJwkToPem = (crv: string, x: string, y: string): string => {
   // Determine the expected length of the coordinates based on the curve
   let expectedLength: number;
   switch (crv) {
-    case 'P-256':
+    case EcCurve.P256:
       expectedLength = 32; // 256 bits
       break;
-    case 'P-384':
+    case EcCurve.P384:
       expectedLength = 48; // 384 bits
       break;
-    case 'P-521':
+    case EcCurve.P521:
       expectedLength = 66; // 521 bits
       break;
     default:
@@ -117,7 +116,7 @@ export const ecJwkToPem = (crv: string, x: string, y: string): string => {
   const b64 = spki.toString(BinaryToTextEncoding.BASE_64);
 
   // Wrap the Base64 string with PEM headers and footers
-  return wrapPem(b64, 'PUBLIC KEY');
+  return wrapPem(b64, CertificateLabel.PUBLIC_KEY);
 };
 
 /**
@@ -208,13 +207,13 @@ export const ecJwkToSpki = (crv: string, x: string, y: string): Buffer => {
   // Determine the expected length of the coordinates based on the curve
   let expectedLength: number;
   switch (crv) {
-    case 'P-256':
+    case EcCurve.P256:
       expectedLength = 32; // 256 bits
       break;
-    case 'P-384':
+    case EcCurve.P384:
       expectedLength = 48; // 384 bits
       break;
-    case 'P-521':
+    case EcCurve.P521:
       expectedLength = 66; // 521 bits
       break;
     default:
@@ -329,49 +328,4 @@ export const ecCertificateToJwk = (
   const y = yBuffer.toString(BinaryToTextEncoding.BASE_64);
 
   return { crv: curveName, x, y };
-};
-
-/**
- * Generates an EC key pair in PEM format.
- *
- * @param {string} namedCurve - The name of the elliptic curve (e.g., 'P-256', 'P-384', 'P-521').
- * @returns {{ publicKey: string; privateKey: string }} An object containing PEM-encoded public and private keys.
- */
-export const generateEcKeyPair = (
-  namedCurve: EcCurve,
-): { publicKey: string; privateKey: string } => {
-  const { publicKey, privateKey } = generateKeyPairSync('ec', {
-    namedCurve,
-    publicKeyEncoding: {
-      type: KeyExportOptions.SPKI,
-      format: KeyFormat.PEM,
-    },
-    privateKeyEncoding: {
-      type: KeyExportOptions.PKCS8,
-      format: KeyFormat.PEM,
-    },
-  });
-
-  return { publicKey, privateKey };
-};
-
-/**
- * Generates an EC key pair and returns JWK representations.
- *
- * @param {string} namedCurve - The name of the elliptic curve (e.g., 'P-256', 'P-384', 'P-521').
- * @returns {object} An object containing both publicJwk and privateJwk.
- */
-export const generateEcJwkKeyPair = (namedCurve: EcCurve) => {
-  // Generate EC key pair in PEM format
-  const { publicKey, privateKey } = generateEcKeyPair(namedCurve);
-
-  // Create KeyObjects from PEM strings
-  const publicKeyObj = createPublicKey(publicKey);
-  const privateKeyObj = createPrivateKey(privateKey);
-
-  // Export keys directly to JWK format using Node.js crypto's export functionality
-  const publicJwk = publicKeyObj.export({ format: KeyFormat.JWK });
-  const privateJwk = privateKeyObj.export({ format: KeyFormat.JWK });
-
-  return { publicJwk, privateJwk };
 };
