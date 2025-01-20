@@ -29,7 +29,7 @@ import {
   KeyOps,
   KeyType,
 } from '../enums';
-import { RsaCertificate } from './RSACertificate';
+import { RSACertificate } from './RSACertificate';
 import { EllipticCurveCertificate } from './EllipticCurveCertificate';
 import { ALGORITHM_HASH_MAP } from '../constants/key-constants';
 import { generateX5c, generateX5t } from './certUtils';
@@ -275,7 +275,7 @@ export class KeyUtils {
         modulusLength,
       });
 
-      const rsaCertBuilder = new RsaCertificate(
+      const rsaCertBuilder = new RSACertificate(
         subjectName,
         validity,
         privateKey,

@@ -17,7 +17,7 @@ import {
   derNull,
 } from './derUtils';
 
-export class RsaCertificate extends Certificate {
+export class RSACertificate extends Certificate {
   private n: string;
   private e: string;
 
