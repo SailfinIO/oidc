@@ -31,9 +31,9 @@ import { ExtensionParsers } from './ExtensionParsers';
 
 export class X509Certificate {
   // Instance properties to hold parsed certificate data
-  private readonly _tbsCertificate: ITbsCertificate;
-  private readonly _signatureAlgorithm: IAlgorithmIdentifier;
-  private readonly _signatureValue: Buffer;
+  private _tbsCertificate: ITbsCertificate;
+  private _signatureAlgorithm: IAlgorithmIdentifier;
+  private _signatureValue: Buffer;
   private static strictSortingEnabled: boolean = true;
 
   // Private constructor to enforce use of static parse method for instantiation
@@ -48,12 +48,24 @@ export class X509Certificate {
     return this._tbsCertificate;
   }
 
+  public set tbsCertificate(value: ITbsCertificate) {
+    this._tbsCertificate = value;
+  }
+
   public get signatureAlgorithm(): IAlgorithmIdentifier {
     return this._signatureAlgorithm;
   }
 
+  public set signatureAlgorithm(value: IAlgorithmIdentifier) {
+    this._signatureAlgorithm = value;
+  }
+
   public get signatureValue(): Buffer {
     return this._signatureValue;
+  }
+
+  public set signatureValue(value: Buffer) {
+    this._signatureValue = value;
   }
 
   public get strictSortingEnabled(): boolean {
@@ -67,6 +79,25 @@ export class X509Certificate {
   // Static factory method to parse PEM and return an X509Certificate instance
   public static parse(pem: string): X509Certificate {
     const certData = X509Certificate.parseX509Certificate(pem);
+    return new X509Certificate(certData);
+  }
+  /**
+   * Creates a new X509Certificate instance from the provided certificate data.
+   * @param tbsCertificate - The TBSCertificate part of the certificate.
+   * @param signatureAlgorithm - The signature algorithm identifier.
+   * @param signatureValue - The signature value as a Buffer.
+   * @returns A new X509Certificate instance.
+   */
+  public static create(
+    tbsCertificate: ITbsCertificate,
+    signatureAlgorithm: IAlgorithmIdentifier,
+    signatureValue: Buffer,
+  ): X509Certificate {
+    const certData: IX509Certificate = {
+      tbsCertificate,
+      signatureAlgorithm,
+      signatureValue,
+    };
     return new X509Certificate(certData);
   }
 

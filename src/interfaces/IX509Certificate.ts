@@ -145,3 +145,11 @@ export type ExtensionParser = (
   extnValue: Buffer,
   critical: boolean,
 ) => ParsedExtensionData;
+
+export interface CertificateOptions {
+  subjectName: string;
+  validity: IValidity;
+  tbsCertificate: ITbsCertificate;
+  signAlgorithm: { hashName: string; cryptoAlg: string };
+  privateKeyPem: string;
+}

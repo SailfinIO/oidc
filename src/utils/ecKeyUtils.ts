@@ -12,33 +12,15 @@ import { ClientError } from '../errors';
 import {
   BinaryToTextEncoding,
   DERTag,
+  EcCurve,
   KeyExportOptions,
   KeyFormat,
 } from '../enums';
 import { base64UrlDecode } from './urlUtils';
 import { pemToDer, wrapPem } from './pem';
-import { bitString, derNull, objectIdentifier, sequence } from './derUtils';
-import {
-  ALGORITHM_HASH_MAP,
-  ATTRIBUTE_OID_MAP,
-  CURVE_OIDS,
-  EC_PUBLIC_KEY_OID,
-} from '../constants/key-constants';
-import {
-  createPrivateKey,
-  createPublicKey,
-  createSign,
-  generateKeyPairSync,
-} from 'crypto';
-import {
-  IName,
-  ISubjectPublicKeyInfo,
-  ITbsCertificate,
-  IValidity,
-  IX509Certificate,
-} from '../interfaces';
-import { X509Certificate } from './x509';
-
+import { bitString, objectIdentifier, sequence } from './derUtils';
+import { CURVE_OIDS, EC_PUBLIC_KEY_OID } from '../constants/key-constants';
+import { createPrivateKey, createPublicKey, generateKeyPairSync } from 'crypto';
 /**
  * Converts an Elliptic Curve (EC) public key from JWK format to PEM format.
  *
@@ -350,147 +332,13 @@ export const ecCertificateToJwk = (
 };
 
 /**
- * Signs data using the provided private key and hash algorithm.
- * @param data - The data to sign.
- * @param privateKeyPem - The PEM-encoded private key.
- * @param hashAlgorithm - The hash algorithm name (e.g., 'sha256').
- * @returns The signature as a Buffer.
- */
-export function signData(
-  data: Buffer,
-  privateKeyPem: string,
-  hashAlgorithm: string,
-): Buffer {
-  const sign = createSign(hashAlgorithm);
-  sign.update(data);
-  sign.end();
-  return sign.sign(privateKeyPem);
-}
-
-/**
- * Generates a self-signed X.509 certificate PEM from an EC JWK using the provided private key.
- *
- * @param crv - The elliptic curve name (e.g., 'P-256').
- * @param x - The Base64URL-encoded x-coordinate of the EC public key.
- * @param y - The Base64URL-encoded y-coordinate of the EC public key.
- * @param privateKeyPem - The PEM-encoded EC private key for signing the certificate.
- * @param subjectName - The subject distinguished name (e.g., 'CN=example.com').
- * @returns PEM-encoded self-signed X.509 certificate.
- */
-export function ecJwkToX509Certificate(
-  crv: string,
-  x: string,
-  y: string,
-  privateKeyPem: string,
-  subjectName: string = 'CN=Example',
-): string {
-  // 1. Convert JWK to SubjectPublicKeyInfo
-  const spkiBuffer = ecJwkToSpki(crv, x, y);
-
-  // 2. Determine curve OID using constants
-  const curveOid = CURVE_OIDS[crv];
-  if (!curveOid) {
-    throw new Error(`Unsupported curve: ${crv}`);
-  }
-
-  const now = new Date();
-  const oneYearLater = new Date(now);
-  oneYearLater.setFullYear(now.getFullYear() + 1);
-
-  // Parse subject name from input using ATTRIBUTE_OID_MAP for guidance
-  const nameComponents = subjectName.split('=');
-  const attributeType = nameComponents[0];
-  const attributeValue = nameComponents[1];
-
-  const typeOid =
-    Object.keys(ATTRIBUTE_OID_MAP).find(
-      (key) => ATTRIBUTE_OID_MAP[key] === attributeType,
-    ) || '2.5.4.3'; // default to CN if not found
-
-  const name: IName = {
-    rdnSequence: [
-      {
-        attributes: [
-          {
-            type: typeOid,
-            value: attributeValue,
-          },
-        ],
-      },
-    ],
-  };
-
-  const validity: IValidity = {
-    notBefore: now,
-    notAfter: oneYearLater,
-  };
-
-  // Build subjectPublicKeyInfo using constants for algorithm and curve parameters
-  const subjectPublicKeyInfo: ISubjectPublicKeyInfo = {
-    algorithm: {
-      algorithm: EC_PUBLIC_KEY_OID,
-      parameters: objectIdentifier(curveOid),
-    },
-    subjectPublicKey: (() => {
-      const bitStringTag = 0x03;
-      const index = spkiBuffer.indexOf(bitStringTag);
-      if (index < 0) {
-        throw new Error('BIT STRING not found in SPKI buffer');
-      }
-      return spkiBuffer.slice(index);
-    })(),
-  };
-
-  // Use ES256 as an example algorithm for signing
-  const signatureAlg = ALGORITHM_HASH_MAP.ES256;
-  if (!signatureAlg) {
-    throw new Error('Unsupported signature algorithm');
-  }
-
-  const tbsCertificate: ITbsCertificate = {
-    version: 2, // X.509v3
-    serialNumber: Buffer.from([0x01]), // Example serial number; should be unique
-    signature: {
-      // Use the algorithm identifier for ECDSA with SHA-256
-      algorithm: signatureAlg.cryptoAlg,
-      parameters: derNull(),
-    },
-    issuer: name,
-    validity,
-    subject: name,
-    subjectPublicKeyInfo,
-  };
-
-  // Build TBS certificate DER before signing
-  const tbsDer = X509Certificate.buildTbsCertificate(tbsCertificate);
-
-  // Sign the TBS certificate using the provided private key and hash algorithm
-  const signatureValue = signData(tbsDer, privateKeyPem, signatureAlg.hashName);
-
-  const certificate: IX509Certificate = {
-    tbsCertificate,
-    signatureAlgorithm: tbsCertificate.signature,
-    signatureValue,
-  };
-
-  // Build DER-encoded certificate
-  const derCert = X509Certificate.buildX509Certificate(certificate);
-
-  // Convert DER to PEM format
-  const b64Cert = derCert.toString(BinaryToTextEncoding.BASE_64);
-  const pemCert = wrapPem(b64Cert, 'CERTIFICATE');
-
-  return pemCert;
-}
-
-/**
  * Generates an EC key pair in PEM format.
  *
  * @param {string} namedCurve - The name of the elliptic curve (e.g., 'P-256', 'P-384', 'P-521').
  * @returns {{ publicKey: string; privateKey: string }} An object containing PEM-encoded public and private keys.
  */
 export const generateEcKeyPair = (
-  namedCurve: string,
+  namedCurve: EcCurve,
 ): { publicKey: string; privateKey: string } => {
   const { publicKey, privateKey } = generateKeyPairSync('ec', {
     namedCurve,
@@ -513,7 +361,7 @@ export const generateEcKeyPair = (
  * @param {string} namedCurve - The name of the elliptic curve (e.g., 'P-256', 'P-384', 'P-521').
  * @returns {object} An object containing both publicJwk and privateJwk.
  */
-export const generateEcJwkKeyPair = (namedCurve: string) => {
+export const generateEcJwkKeyPair = (namedCurve: EcCurve) => {
   // Generate EC key pair in PEM format
   const { publicKey, privateKey } = generateEcKeyPair(namedCurve);
 

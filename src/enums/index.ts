@@ -28,3 +28,4 @@ export * from './ProviderScope';
 export * from './DERTag';
 export * from './KeyExportOptions';
 export * from './KeyFormat';
+export * from './EcCurve';
