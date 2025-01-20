@@ -8,10 +8,12 @@ import {
   IValidity,
   IX509Certificate,
   Jwk,
+  KeyData,
 } from '../interfaces';
 import { X509Certificate } from './x509';
 import { wrapPem } from './pem';
 import {
+  createHash,
   createPrivateKey,
   createPublicKey,
   createVerify,
@@ -24,6 +26,7 @@ import {
   EcCurve,
   KeyExportOptions,
   KeyFormat,
+  KeyOps,
   KeyType,
 } from '../enums';
 import { RsaCertificate } from './RSACertificate';
@@ -370,6 +373,58 @@ export class KeyUtils {
     return {
       x5t,
       x5c,
+    };
+  }
+
+  /**
+   * Generates key data, including x5c, x5t, and a key pair object, for storage or usage.
+   *
+   * @param privateKey - PEM-encoded private key.
+   * @param publicKey - PEM-encoded public key.
+   * @param certificate - PEM-encoded X.509 certificate.
+   * @param alg - Algorithm used for the key (e.g., RS256).
+   * @param kty - Key type (e.g., 'RSA', 'EC').
+   * @param kid - Optional key identifier. If not provided, a hash of the public key will be used.
+   * @param keyOps - Optional array of key operations. Defaults to ['sign', 'verify'].
+   * @returns {KeyData} The generated key data including x5c, x5t, and metadata.
+   */
+  static generateKeyData(
+    privateKey: string,
+    publicKey: string,
+    certificate: string,
+    alg: string,
+    kty: KeyType,
+    kid?: string,
+    keyOps: KeyOps[] = [KeyOps.SIGN, KeyOps.VERIFY], // Default key operations
+  ): KeyData {
+    // Compute x5c and x5t using existing helper methods
+    const jwksKey = KeyUtils.createJwksKey(certificate);
+    const x5c = jwksKey.x5c;
+    const x5t = jwksKey.x5t;
+
+    // Generate a unique key ID if not provided
+    if (!kid) {
+      const hash = createHash('sha256');
+      hash.update(publicKey);
+      kid = hash.digest(BinaryToTextEncoding.HEX);
+    }
+
+    // Get the current timestamp for metadata
+    const createdAt = new Date();
+
+    // Build and return the KeyData object
+    return {
+      privateKey,
+      publicKey,
+      kid,
+      kty,
+      alg,
+      createdAt,
+      activatedAt: createdAt,
+      deactivatedAt: null,
+      x5c,
+      x5t,
+      keyOps,
     };
   }
 }

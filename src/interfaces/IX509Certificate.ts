@@ -1,3 +1,4 @@
+import { KeyOps, KeyType } from '../enums';
 /**
  * Represents a X.509 certificate structure.
  */
@@ -164,4 +165,18 @@ export interface ParsedKeyUsage {
   cRLSign: boolean;
   encipherOnly: boolean;
   decipherOnly: boolean;
+}
+
+export interface KeyData {
+  privateKey: string; // PEM-encoded private key
+  publicKey: string; // PEM-encoded public key
+  kid: string; // Key identifier
+  kty: KeyType; // Key type (e.g., 'RSA', 'EC')
+  alg: string; // Algorithm (e.g., 'RS256')
+  createdAt: Date; // Timestamp when the key was created
+  activatedAt: Date; // Timestamp when the key became active
+  deactivatedAt: Date | null; // Timestamp when the key was deactivated
+  x5c: string[]; // Certificate chain in base64-encoded DER format
+  x5t: string; // SHA-1 thumbprint of the certificate
+  keyOps: KeyOps[]; // Key operations (e.g., ['sign', 'verify'])
 }

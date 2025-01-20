@@ -31,3 +31,4 @@ export * from './KeyFormat';
 export * from './EcCurve';
 export * from './KeyType';
 export * from './CertificateLabel';
+export * from './KeyOps';
