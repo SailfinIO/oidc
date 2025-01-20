@@ -392,8 +392,8 @@ export class KeyUtils {
     privateKey: string,
     publicKey: string,
     certificate: string,
-    alg: string,
     kty: KeyType,
+    alg?: Algorithm,
     kid?: string,
     keyOps: KeyOps[] = [KeyOps.SIGN, KeyOps.VERIFY], // Default key operations
   ): KeyData {
@@ -407,6 +407,11 @@ export class KeyUtils {
       const hash = createHash('sha256');
       hash.update(publicKey);
       kid = hash.digest(BinaryToTextEncoding.HEX);
+    }
+
+    // Generate a default algorithm if not provided
+    if (!alg) {
+      alg = Algorithm.RS256;
     }
 
     // Get the current timestamp for metadata
