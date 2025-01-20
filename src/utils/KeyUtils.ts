@@ -362,17 +362,12 @@ export class KeyUtils {
   /**
    * Creates a JWKS-compliant key representation, including x5t and x5c values.
    * @param pemCertificate - The PEM-encoded certificate.
-   * @param keyId - The key identifier (kid).
    * @returns A JSON Web Key with x5t and x5c attributes.
    */
-  static createJwksKey(
-    pemCertificate: string,
-    keyId: string,
-  ): Record<string, any> {
+  static createJwksKey(pemCertificate: string): Record<string, any> {
     const x5t = generateX5t(pemCertificate);
     const x5c = generateX5c([pemCertificate]);
     return {
-      kid: keyId,
       x5t,
       x5c,
     };

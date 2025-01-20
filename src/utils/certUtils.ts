@@ -41,7 +41,7 @@ export const buildAndSignCertificate = (
  */
 export const generateX5t = (pemCertificate: string): string => {
   const derCertificate = pemToDer(pemCertificate); // Convert PEM to DER
-  const hash = createHash('sha1').update(derCertificate).digest(); // SHA-1 hash
+  const hash = createHash('sha256').update(derCertificate).digest(); // SHA-256 hash
   return hash.toString(BinaryToTextEncoding.BASE_64_URL); // Base64URL-encode
 };
 
