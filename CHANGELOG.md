@@ -1,3 +1,9 @@
+## [0.1.0-beta.1](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.21...v0.1.0-beta.1) (2025-01-20)
+
+### Features
+
+* add key utilities ([e5e9cbc](https://github.com/SailfinIO/oidc/commit/e5e9cbc551d5344756a151194b3234ff72636524))
+
 ## [0.0.15-beta.21](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.20...v0.0.15-beta.21) (2025-01-18)
 
 ### Bug Fixes
