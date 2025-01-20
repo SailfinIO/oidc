@@ -1,3 +1,15 @@
+## [0.1.0-beta.2](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.1...v0.1.0-beta.2) (2025-01-20)
+
+### Bug Fixes
+
+* jwk support ([a991131](https://github.com/SailfinIO/oidc/commit/a9911317ea936887ed1a000ad28c66b7b7495c94))
+* recreate rsa cert ([1aafeff](https://github.com/SailfinIO/oidc/commit/1aafeffee103ac877f079ca5359cd2f0ac8ebfaf))
+* remove rsa becuase of git capitalization ([2097432](https://github.com/SailfinIO/oidc/commit/20974323a94114abd5fc2ac49b9e53878857ebef))
+* remove unused imports ([e283618](https://github.com/SailfinIO/oidc/commit/e283618b5d37c23f4b021bd9d6712397738da724))
+* use RSACertificate ([63ea877](https://github.com/SailfinIO/oidc/commit/63ea8776b0f0d320c41a952fa0702500a2731292))
+* use sha256 ([a884a1b](https://github.com/SailfinIO/oidc/commit/a884a1bc464d7fcad10b1f60efff85fabd44d330))
+* use sha256 ([d03f297](https://github.com/SailfinIO/oidc/commit/d03f2976943af09acd935d3e1944fa4b4d8260ce))
+
 ## [0.1.0-beta.1](https://github.com/SailfinIO/oidc/compare/v0.0.15-beta.21...v0.1.0-beta.1) (2025-01-20)
 
 ### Features
