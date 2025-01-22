@@ -1,3 +1,9 @@
+## [0.1.0-beta.5](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.4...v0.1.0-beta.5) (2025-01-22)
+
+### Bug Fixes
+
+* rename default sid ([1aec1fd](https://github.com/SailfinIO/oidc/commit/1aec1fd918bb4e8a5e75187f3e725e56eebf44d8))
+
 ## [0.1.0-beta.4](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.3...v0.1.0-beta.4) (2025-01-22)
 
 ### Bug Fixes
