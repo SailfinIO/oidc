@@ -32,7 +32,7 @@ export * from './StoreOptions';
 export * from './ISessionStore';
 export * from './IMetadata';
 export * from './JwtOptions';
-export * from './HashAlgorithm';
+export * from './AlgorithmDetails';
 export * from './IRequest';
 export * from './IResponse';
 export * from './DynamicModule';

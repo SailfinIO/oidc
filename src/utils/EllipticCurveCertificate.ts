@@ -1,8 +1,7 @@
 import {
-  ALGORITHM_HASH_MAP,
+  ALGORITHM_DETAILS_MAP,
   CURVE_OIDS,
-  EC_PUBLIC_KEY_OID,
-} from '../constants/key-constants';
+} from '../constants/algorithmConstants';
 import {
   ISubjectPublicKeyInfo,
   ITbsCertificate,
@@ -32,8 +31,10 @@ export class EllipticCurveCertificate extends Certificate {
   }
 
   buildSubjectPublicKeyInfo(): ISubjectPublicKeyInfo {
+    // 1) Convert from JWK (crv, x, y) to an SPKI buffer
     const spkiBuffer = ecJwkToSpki(this.crv, this.x, this.y);
-    // Extract BIT STRING part from spkiBuffer
+
+    // 2) In your code, you’re extracting the "BIT STRING" portion:
     const bitStringTag = 0x03;
     const index = spkiBuffer.indexOf(bitStringTag);
     if (index < 0) {
@@ -41,46 +42,40 @@ export class EllipticCurveCertificate extends Certificate {
     }
     const subjectPublicKey = spkiBuffer.subarray(index);
 
+    // 3) Retrieve the OID to use in the SubjectPublicKeyInfo’s algorithm identifier.
+    //    Typically "1.2.840.10045.2.1" for EC public keys.
+    //    If the user’s chosen "algorithm" is ES256, ES384, etc., your map entry
+    //    can store `publicKeyOid: '1.2.840.10045.2.1'`.
+    const algDetails = ALGORITHM_DETAILS_MAP[this.algorithm];
+    const publicKeyOid = algDetails.publicKeyOid || '1.2.840.10045.2.1'; // fallback if not defined
+
+    // 4) Build the final SPKI representation
     return {
       algorithm: {
-        algorithm: EC_PUBLIC_KEY_OID,
+        algorithm: publicKeyOid, // e.g. "1.2.840.10045.2.1"
+        // The "parameters" field is typically the specific curve OID,
+        // e.g. "1.2.840.10045.3.1.7" for P-256
         parameters: objectIdentifier(CURVE_OIDS[this.crv]),
       },
       subjectPublicKey,
     };
   }
 
-  getSignatureAlgorithm() {
-    return ALGORITHM_HASH_MAP.ES256; // Adjust based on curve if necessary
-  }
-
   buildTbsCertificate(spki: ISubjectPublicKeyInfo): ITbsCertificate {
-    // Simplified example: Create a basic TBS certificate for EC.
-    const now = new Date();
-    const oneYearLater = new Date(now);
-    oneYearLater.setFullYear(now.getFullYear() + 1);
+    // 1) Grab the signature OID from the algorithm details map.
+    //    For ES256, that’s typically "1.2.840.10045.4.3.2" (ecdsa-with-SHA256).
+    const algDetails = ALGORITHM_DETAILS_MAP[this.algorithm];
+    if (!algDetails.signatureOid) {
+      throw new Error(
+        `Algorithm ${this.algorithm} does not specify a valid ECDSA signature OID.`,
+      );
+    }
+    const signatureOID = algDetails.signatureOid;
 
-    const name = {
-      rdnSequence: [
-        {
-          attributes: [
-            { type: '2.5.4.3', value: this.subjectName.replace('CN=', '') },
-          ],
-        },
-      ],
-    };
+    // 2) ECDSA typically uses NULL or zero-length parameters
+    const signatureParams = derNull();
 
-    return {
-      version: 2,
-      serialNumber: Buffer.from([0x01]),
-      signature: {
-        algorithm: ALGORITHM_HASH_MAP.ES256.cryptoAlg,
-        parameters: derNull(),
-      },
-      issuer: name,
-      validity: { notBefore: now, notAfter: oneYearLater },
-      subject: name,
-      subjectPublicKeyInfo: spki,
-    };
+    // 3) Delegate the rest to the shared base method
+    return this.buildBaseTbsCertificate(spki, signatureOID, signatureParams);
   }
 }

@@ -3,7 +3,7 @@
 import { ecJwkToPem } from './ecKeyUtils';
 import { ClientError } from '../errors';
 import { BinaryToTextEncoding } from '../enums';
-import { CURVE_OIDS } from '../constants/key-constants';
+import { CURVE_OIDS } from '../constants/algorithmConstants';
 
 // A known valid P-256 JWK public key for testing:
 // This is just an example. Replace x and y with values from a known P-256 EC key if needed.

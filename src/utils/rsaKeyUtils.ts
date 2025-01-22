@@ -10,7 +10,7 @@ import {
   objectIdentifier,
   derNull,
 } from './derUtils';
-import { RSA_PUBLIC_KEY_OID } from '../constants/key-constants';
+import { ALGORITHM_DETAILS_MAP } from '../constants/algorithmConstants';
 
 /**
  * Converts RSA public key components from JWK format to PEM format.
@@ -56,10 +56,14 @@ export const rsaJwkToPem = (n: string, e: string): string => {
   // Create the RSA public key sequence (modulus and exponent)
   const rsaPubKey = sequence(Buffer.concat([modInt, expInt]));
 
+  const rsaOid = ALGORITHM_DETAILS_MAP.RSA_PUBLIC_KEY.publicKeyOid;
+
+  if (!rsaOid) {
+    throw new Error('OID for RS256 not found in the algorithm map.');
+  }
+
   // Create the algorithm identifier sequence with RSA OID and NULL parameters
-  const algId = sequence(
-    Buffer.concat([objectIdentifier(RSA_PUBLIC_KEY_OID), derNull()]),
-  );
+  const algId = sequence(Buffer.concat([objectIdentifier(rsaOid), derNull()]));
 
   // Create the SubjectPublicKeyInfo (SPKI) sequence
   const spki = sequence(Buffer.concat([algId, bitString(rsaPubKey)]));

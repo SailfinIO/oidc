@@ -18,7 +18,10 @@ import {
 import { base64UrlDecode } from './urlUtils';
 import { pemToDer, wrapPem } from './pem';
 import { bitString, objectIdentifier, sequence } from './derUtils';
-import { CURVE_OIDS, EC_PUBLIC_KEY_OID } from '../constants/key-constants';
+import {
+  ALGORITHM_DETAILS_MAP,
+  CURVE_OIDS,
+} from '../constants/algorithmConstants';
 
 /**
  * Converts an Elliptic Curve (EC) public key from JWK format to PEM format.
@@ -101,12 +104,15 @@ export const ecJwkToPem = (crv: string, x: string, y: string): string => {
   // Encode the EC point as a DER BIT STRING
   const derEcPoint = bitString(ecPoint);
 
+  const ecOid = ALGORITHM_DETAILS_MAP.EC_PUBLIC_KEY.publicKeyOid;
+
+  if (!ecOid) {
+    throw new Error('OID for EC_PUBLIC_KEY not found in the algorithm map.');
+  }
+
   // Create the algorithm identifier sequence (EC OID and curve OID)
   const algorithmIdentifier = sequence(
-    Buffer.concat([
-      objectIdentifier(EC_PUBLIC_KEY_OID),
-      objectIdentifier(curveOid),
-    ]),
+    Buffer.concat([objectIdentifier(ecOid), objectIdentifier(curveOid)]),
   );
 
   // Create the SubjectPublicKeyInfo (SPKI) sequence
@@ -242,12 +248,15 @@ export const ecJwkToSpki = (crv: string, x: string, y: string): Buffer => {
   // Encode the EC point as a DER BIT STRING
   const derEcPoint = bitString(ecPoint);
 
+  const ecOid = ALGORITHM_DETAILS_MAP.EC_PUBLIC_KEY.publicKeyOid;
+
+  if (!ecOid) {
+    throw new Error('OID for EC_PUBLIC_KEY not found in the algorithm map.');
+  }
+
   // Create the algorithm identifier sequence (EC OID and curve OID)
   const algorithmIdentifier = sequence(
-    Buffer.concat([
-      objectIdentifier(EC_PUBLIC_KEY_OID),
-      objectIdentifier(curveOid),
-    ]),
+    Buffer.concat([objectIdentifier(ecOid), objectIdentifier(curveOid)]),
   );
 
   // Create the SubjectPublicKeyInfo (SPKI) sequence

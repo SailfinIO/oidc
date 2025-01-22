@@ -18,8 +18,8 @@ import {
 } from '../interfaces';
 import { base64UrlDecode, base64UrlEncode } from '../utils/urlUtils';
 import { Buffer } from 'buffer';
-import { Algorithm } from '../enums';
-import { ALGORITHM_HASH_MAP } from '../constants/key-constants';
+import { Algorithm, AlgorithmType } from '../enums';
+import { ALGORITHM_DETAILS_MAP } from '../constants/algorithmConstants';
 import { constants } from 'crypto';
 
 describe('Jwt', () => {
@@ -214,9 +214,10 @@ describe('Jwt', () => {
       };
 
       // Correctly set ALGORITHM_HASH_MAP with 'RSA-PSS'
-      ALGORITHM_HASH_MAP[Algorithm.PS256] = {
+      ALGORITHM_DETAILS_MAP[Algorithm.PS256] = {
         cryptoAlg: 'RSA-PSS', // Correct cryptoAlg
         hashName: 'sha256',
+        type: AlgorithmType.SIGNATURE,
         options: { saltLength: 32 }, // Example saltLength
       };
 
@@ -286,9 +287,10 @@ describe('Jwt', () => {
       };
 
       // Add a valid configuration for PS256
-      ALGORITHM_HASH_MAP[Algorithm.PS256] = {
+      ALGORITHM_DETAILS_MAP[Algorithm.PS256] = {
         cryptoAlg: 'RSA-PSS',
         hashName: 'sha256',
+        type: AlgorithmType.SIGNATURE,
         options: { saltLength: 32 },
       };
 
@@ -325,11 +327,11 @@ describe('Jwt', () => {
 
     it('throws ClientError if saltLength is missing for PS algorithms', () => {
       // Backup the original configuration for PS256
-      const originalConfig = { ...ALGORITHM_HASH_MAP[Algorithm.PS256] };
+      const originalConfig = { ...ALGORITHM_DETAILS_MAP[Algorithm.PS256] };
 
       try {
         // Remove saltLength from the configuration
-        delete ALGORITHM_HASH_MAP[Algorithm.PS256].options?.saltLength;
+        delete ALGORITHM_DETAILS_MAP[Algorithm.PS256].options?.saltLength;
 
         expect(() => Jwt.encode(payload, optionsWithoutSalt)).toThrow(
           ClientError,
@@ -347,7 +349,7 @@ describe('Jwt', () => {
         }
       } finally {
         // Restore the original configuration
-        ALGORITHM_HASH_MAP[Algorithm.PS256] = originalConfig;
+        ALGORITHM_DETAILS_MAP[Algorithm.PS256] = originalConfig;
       }
     });
 

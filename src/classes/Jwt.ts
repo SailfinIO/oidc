@@ -8,13 +8,13 @@ import {
   JwtEncodeOptions,
   IJwt,
   JwtVerifyOptions,
-  HashAlgorithm,
+  AlgorithmDetails,
 } from '../interfaces';
 import { Jwks } from './Jwks';
 import { ClaimsValidator } from './ClaimsValidator';
 import { SignatureVerifier } from './SignatureVerifier';
 import { base64UrlDecode, base64UrlEncode } from '../utils/urlUtils';
-import { ALGORITHM_HASH_MAP } from '../constants/key-constants';
+import { ALGORITHM_DETAILS_MAP } from '../constants/algorithmConstants';
 
 /**
  * Represents a JSON Web Token (JWT) and provides static methods for encoding, decoding, and verifying JWTs.
@@ -90,7 +90,7 @@ export class Jwt implements IJwt {
   public static encode(payload: JwtPayload, options: JwtEncodeOptions): string {
     const { algorithm, privateKey, header = {} } = options;
 
-    const config: HashAlgorithm = ALGORITHM_HASH_MAP[algorithm];
+    const config: AlgorithmDetails = ALGORITHM_DETAILS_MAP[algorithm];
     if (!config) {
       throw new ClientError(
         `Unsupported algorithm: ${algorithm}`,

@@ -1,4 +1,5 @@
-import { KeyOps, KeyType } from '../enums';
+import { KeyOps, KeyType, Algorithm, ExtentionOid } from '../enums';
+import { AlgorithmDetails } from './AlgorithmDetails';
 /**
  * Represents a X.509 certificate structure.
  */
@@ -80,9 +81,9 @@ export interface ISubjectPublicKeyInfo {
 }
 
 export interface IExtension {
-  extnID: string;
+  extnID: ExtentionOid;
   critical: boolean;
-  extnValue: Buffer;
+  value: Buffer;
 
   // Optional property to store parsed extension data
   parsedData?: any;
@@ -148,10 +149,14 @@ export type ExtensionParser = (
 ) => ParsedExtensionData;
 
 export interface CertificateOptions {
-  subjectName: string;
+  /**
+   * Common Name (CN) for the certificate subject. If omitted, defaults to 'Example'.
+   */
+  subjectCN?: string;
+
   validity: IValidity;
   tbsCertificate: ITbsCertificate;
-  signAlgorithm: { hashName: string; cryptoAlg: string };
+  signAlgorithm: AlgorithmDetails;
   privateKeyPem: string;
 }
 
@@ -179,4 +184,54 @@ export interface KeyData {
   x5c: string[]; // Certificate chain in base64-encoded DER format
   x5t: string; // SHA-1 thumbprint of the certificate
   keyOps: KeyOps[]; // Key operations (e.g., ['sign', 'verify'])
+}
+
+export interface CreateSelfSignedCertificateOptions {
+  /**
+   * If provided, the method will use these keys rather than generate new ones.
+   * If omitted, the method will generate new keys internally.
+   */
+  keyPair?: {
+    publicKey: string; // PEM-encoded
+    privateKey: string; // PEM-encoded
+  };
+
+  /**
+   * If you want to generate new keys internally, specify a KeyType ('RSA' or 'EC').
+   * Ignored if `keyPair` is already provided.
+   */
+  type?: KeyType;
+
+  /**
+   * Common Name (CN) for the certificate subject. If omitted, defaults to 'Example'.
+   */
+  subjectCN?: string;
+
+  /**
+   * Validity period for the certificate. If omitted, defaults to "now until +1 year".
+   */
+  validity?: IValidity;
+
+  /**
+   * Whether this cert acts as a CA certificate (set BasicConstraints cA = true).
+   * You can add logic to incorporate this into the TBS Certificate’s `extensions`.
+   */
+  isCA?: boolean;
+
+  /**
+   * Optional array of custom X.509 extensions if you want more than a basic self-signed cert.
+   */
+  extensions?: IExtension[];
+
+  /**
+   * Optional: user can specify RS256, RS384, PS256, ES256, etc.
+   * If omitted, use a default based on the key type
+   */
+  algorithm?: Algorithm;
+
+  /**
+   * If provided, we merge or override these fields into our TBS.
+   * For example: { version, serialNumber, issuer, subject, etc. }
+   */
+  tbs?: Partial<ITbsCertificate>;
 }

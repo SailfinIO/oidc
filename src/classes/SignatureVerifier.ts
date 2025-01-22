@@ -10,7 +10,7 @@
 import { constants, verify } from 'crypto';
 import { ClientError } from '../errors/ClientError';
 import {
-  HashAlgorithm,
+  AlgorithmDetails,
   IJwks,
   ISignatureVerifier,
   Jwk,
@@ -23,7 +23,7 @@ import {
   rsaJwkToPem,
   ecJwkToPem,
 } from '../utils';
-import { ALGORITHM_HASH_MAP } from '../constants/key-constants';
+import { ALGORITHM_DETAILS_MAP } from '../constants/algorithmConstants';
 
 /**
  * Verifies the signature of a JWT using a public key fetched from a JWKS endpoint.
@@ -215,11 +215,11 @@ export class SignatureVerifier implements ISignatureVerifier {
    * Maps an algorithm to its corresponding hash function and options.
    *
    * @param {Algorithm} alg - The algorithm to map.
-   * @returns {HashAlgorithm} The hash algorithm and options.
+   * @returns {AlgorithmDetails} The hash algorithm and options.
    * @throws {ClientError} If the algorithm is unsupported.
    */
-  private getHashAlgorithm(alg: Algorithm): Partial<HashAlgorithm> {
-    const config: HashAlgorithm = ALGORITHM_HASH_MAP[alg];
+  private getHashAlgorithm(alg: Algorithm): Partial<AlgorithmDetails> {
+    const config: AlgorithmDetails = ALGORITHM_DETAILS_MAP[alg];
     if (!config) {
       throw new ClientError(
         `Unsupported or unimplemented algorithm: ${alg}`,

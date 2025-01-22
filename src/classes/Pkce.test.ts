@@ -1,7 +1,7 @@
 import { Pkce } from './Pkce';
 import { PkceMethod } from '../enums/PkceMethod';
 import { ClientError } from '../errors/ClientError';
-import { IClientConfig } from 'src/interfaces';
+import { IClientConfig } from '../interfaces';
 
 describe('Pkce', () => {
   const validConfigS256 = {

@@ -55,6 +55,16 @@ export const encodeLength = (length: number): Buffer => {
 };
 
 /**
+ * Encodes a boolean value as a DER BOOLEAN.
+ *
+ * @param {boolean} value - The boolean value to encode.
+ * @returns {Buffer} The DER-encoded BOOLEAN.
+ */
+export const asn1Boolean = (value: boolean): Buffer => {
+  return Buffer.from([DERTag.BOOLEAN, value ? FULL_BYTE : 0]);
+};
+
+/**
  * Encodes a DER element with the given tag and content.
  *
  * @param {number} tag - The DER tag to use for encoding.
@@ -409,6 +419,21 @@ export const decodeObjectIdentifier = (
     }
   }
   return { oid: values.join('.'), totalBytes };
+};
+
+/**
+ * Encodes a buffer as a DER OCTET STRING.
+ *
+ * @param {Buffer} data - The data to encode as an octet string.
+ * @returns {Buffer} The DER-encoded OCTET STRING.
+ *
+ * @throws {ClientError} If the data is not a Buffer.
+ */
+export const octetString = (data: Buffer): Buffer => {
+  if (!Buffer.isBuffer(data)) {
+    throw new ClientError('Expected Buffer data', 'INVALID_DATA');
+  }
+  return encodeDER(DERTag.OCTET_STRING, data);
 };
 
 /**

@@ -1,6 +1,13 @@
 import { ClientError } from '../errors';
-import { BinaryToTextEncoding, DERTag } from '../enums';
-import { pemToDer } from './pem';
+import {
+  BinaryToTextEncoding,
+  DERTag,
+  Algorithm,
+  KeyType,
+  EcCurve,
+  CertificateLabel,
+} from '../enums';
+import { pemToDer, wrapPem } from './pem';
 import {
   bitString,
   decodeBitString,
@@ -13,9 +20,9 @@ import {
   sequence,
 } from './derUtils';
 import {
-  ATTRIBUTE_ASN1_TYPES,
-  ATTRIBUTE_OID_MAP,
-} from '../constants/key-constants';
+  ALGORITHM_DETAILS_MAP,
+  ATTRIBUTE_DETAILS,
+} from '../constants/algorithmConstants';
 import {
   IAlgorithmIdentifier,
   AttributeTypeAndValue,
@@ -26,8 +33,14 @@ import {
   ITbsCertificate,
   IValidity,
   IX509Certificate,
+  CertificateOptions,
+  CreateSelfSignedCertificateOptions,
 } from '../interfaces';
-import { ExtensionParsers } from './ExtensionParsers';
+import { ExtensionHandler } from './ExtensionHandler';
+import { createHash, BinaryToTextEncoding as B2E } from 'crypto';
+import { KeyUtils } from './KeyUtils';
+import { RSACertificate } from './RSACertificate';
+import { EllipticCurveCertificate } from './EllipticCurveCertificate';
 
 export class X509Certificate {
   // Instance properties to hold parsed certificate data
@@ -174,7 +187,7 @@ export class X509Certificate {
 
       // Parse signature algorithm identifier, for instance using decodeObjectIdentifier if structure known
       const signatureAlgorithm =
-        ExtensionParsers.parseAlgorithmIdentifier(sigAlgBuffer);
+        ExtensionHandler.parseAlgorithmIdentifier(sigAlgBuffer);
 
       // Use DER utilities to extract BIT STRING content for signatureValue
       const { bits: signatureValue } = decodeBitString(sigValueBuffer, 0);
@@ -220,7 +233,7 @@ export class X509Certificate {
     // signature (AlgorithmIdentifier)
     {
       const signatureElement = tbsElements[cursor++];
-      tbsCert.signature = ExtensionParsers.parseAlgorithmIdentifier(
+      tbsCert.signature = ExtensionHandler.parseAlgorithmIdentifier(
         signatureElement.content,
       );
     }
@@ -228,13 +241,13 @@ export class X509Certificate {
     // issuer (Name)
     {
       const issuerElement = tbsElements[cursor++];
-      tbsCert.issuer = ExtensionParsers.parseName(issuerElement.content);
+      tbsCert.issuer = ExtensionHandler.parseName(issuerElement.content);
     }
 
     // validity (Validity)
     {
       const validityElement = tbsElements[cursor++];
-      tbsCert.validity = ExtensionParsers.parseValidity(
+      tbsCert.validity = ExtensionHandler.parseValidity(
         validityElement.content,
       );
     }
@@ -242,13 +255,13 @@ export class X509Certificate {
     // subject (Name)
     {
       const subjectElement = tbsElements[cursor++];
-      tbsCert.subject = ExtensionParsers.parseName(subjectElement.content);
+      tbsCert.subject = ExtensionHandler.parseName(subjectElement.content);
     }
 
     // subjectPublicKeyInfo (SubjectPublicKeyInfo)
     {
       const spkiElement = tbsElements[cursor++];
-      tbsCert.subjectPublicKeyInfo = ExtensionParsers.parseSubjectPublicKeyInfo(
+      tbsCert.subjectPublicKeyInfo = ExtensionHandler.parseSubjectPublicKeyInfo(
         spkiElement.content,
       );
     }
@@ -276,7 +289,7 @@ export class X509Certificate {
           // extensions [3] EXPLICIT
           // The content of an explicit tag is another encoded element (a sequence)
           const { elements: extElements } = decodeSequence(elem.content, 0);
-          tbsCert.extensions = ExtensionParsers.parseExtensions(extElements);
+          tbsCert.extensions = ExtensionHandler.parseExtensions(extElements);
           cursor++;
           break;
         }
@@ -302,7 +315,12 @@ export class X509Certificate {
         (rdn) =>
           rdn.attributes
             .map(({ type, value }) => {
-              const attrName = ATTRIBUTE_OID_MAP[type] || type;
+              // Find the attribute name by matching the OID in ATTRIBUTE_DETAILS
+              const attrName =
+                Object.keys(ATTRIBUTE_DETAILS).find(
+                  (key) => ATTRIBUTE_DETAILS[key].oid === type,
+                ) || type; // Default to type (OID) if not found
+
               return `${attrName}=${value}`;
             })
             .join('+'), // multiple attributes in an RDN joined by '+'
@@ -346,7 +364,10 @@ export class X509Certificate {
     if (tbsCertificate.extensions) {
       output += '        Extensions:\n';
       for (const ext of tbsCertificate.extensions) {
-        const extName = ATTRIBUTE_OID_MAP[ext.extnID] || ext.extnID;
+        const extName =
+          Object.keys(ATTRIBUTE_DETAILS).find(
+            (key) => ATTRIBUTE_DETAILS[key].oid === ext.extnID,
+          ) || ext.extnID; // Default to ext.extnID (OID) if no
         output += `            ${extName}: ${JSON.stringify(ext.parsedData, null, 2)}\n`;
       }
     }
@@ -406,6 +427,13 @@ export class X509Certificate {
     // Optional extensions [3]
     if (tbs.extensions && tbs.extensions.length > 0) {
       // Build sequence of extensions
+      tbs.extensions = tbs.extensions.map((ext) =>
+        ExtensionHandler.createExtension(
+          ext.extnID,
+          ext.critical,
+          ext.parsedData || ext.value,
+        ),
+      );
       const extBuffers = tbs.extensions.map(this.buildExtension);
       const extsSeq = sequence(Buffer.concat(extBuffers));
       const extensionsTagged = encodeDER(0xa3, extsSeq);
@@ -506,15 +534,20 @@ export class X509Certificate {
     const typeDER = objectIdentifier(attr.type);
 
     // Determine the ASN.1 type for the value based on the OID
-    const asn1Type = ATTRIBUTE_ASN1_TYPES[attr.type] || DERTag.UTF8_STRING; // Default to UTF8String
+    const attributeName = Object.keys(ATTRIBUTE_DETAILS).find(
+      (key) => ATTRIBUTE_DETAILS[key].oid === attr.type,
+    );
+    const attributeDetails = attributeName
+      ? ATTRIBUTE_DETAILS[attributeName]
+      : { oid: attr.type, asn1Type: DERTag.UTF8_STRING };
 
     let valueDER: Buffer;
 
     // Encode the value based on its type
     if ('value' in attr) {
       if (typeof attr.value === 'string') {
-        if (asn1Type) {
-          switch (asn1Type) {
+        if (typeof attributeDetails === 'object') {
+          switch (attributeDetails.asn1Type) {
             case DERTag.PRINTABLE_STRING:
               valueDER = this.encodePrintableString(attr.value);
               break;
@@ -611,11 +644,150 @@ export class X509Certificate {
         ? encodeDER(DERTag.BOOLEAN, Buffer.from([0xff]))
         : undefined;
     // extnValue is an OCTET STRING wrapping the encoded extension value.
-    const extnValueDER = encodeDER(DERTag.OCTET_STRING, ext.extnValue);
+    const extnValueDER = encodeDER(DERTag.OCTET_STRING, ext.value);
 
     const parts = [oidDER];
     if (criticalDER) parts.push(criticalDER);
     parts.push(extnValueDER);
     return sequence(Buffer.concat(parts));
+  }
+
+  /**
+   * Computes the fingerprint (hash) of the certificate using the specified algorithm.
+   * @param {Algorithm} [alg=Algorithm.SHA256]  - The hash algorithm (e.g., 'sha1', 'sha256').
+   * @returns {string} The hexadecimal fingerprint of the certificate.
+   */
+  public getFingerprint(alg: Algorithm = Algorithm.SHA256): string {
+    // Build the DER-encoded certificate from the current instance.
+    const der = this.build();
+    // Create a hash using the specified algorithm.
+    const hash = createHash(alg);
+    hash.update(der);
+    // Return the hex digest as the fingerprint.
+    return hash.digest(BinaryToTextEncoding.HEX);
+  }
+
+  /**
+   * Computes a thumbprint of the certificate and returns it in the specified encoding.
+   * @param {Algorithm} [alg=Algorithm.SHA256] - The hash algorithm to use for the thumbprint.
+   * @param {B2E} [encoding=BinaryToTextEncoding.HEX] - The encoding to use for the thumbprint.
+   * @returns {string} The thumbprint of the certificate in the desired format.
+   */
+  public getThumbprint(
+    alg: Algorithm = Algorithm.SHA256,
+    encoding: B2E = BinaryToTextEncoding.HEX,
+  ): string {
+    const der = this.build();
+    const hash = createHash(alg);
+    hash.update(der);
+    // Return the digest in the specified encoding.
+    return hash.digest(encoding);
+  }
+
+  /**
+   * Creates or generates keys, then builds a self-signed certificate.
+   * If `options.keyPair` is provided, we use that pair; otherwise a new pair is generated.
+   * Automatically detects RSA vs EC if keys are provided, or uses `options.type` to generate.
+   */
+  public static createSelfSignedCertificate(
+    options: CreateSelfSignedCertificateOptions = {},
+  ): { certificate: string; publicKey: string; privateKey: string } {
+    // 1) Setup defaults (subjectCN, validity, etc.)
+    const now = new Date();
+    const oneYearLater = new Date(now);
+    oneYearLater.setFullYear(now.getFullYear() + 1);
+
+    const validity: IValidity = options.validity || {
+      notBefore: now,
+      notAfter: oneYearLater,
+    };
+    const subjectCN = options.subjectCN || 'Example';
+
+    let publicKey: string;
+    let privateKey: string;
+    let keyType: KeyType;
+
+    // 2) Determine key type & generate or use provided keys
+    if (options.keyPair) {
+      publicKey = options.keyPair.publicKey;
+      privateKey = options.keyPair.privateKey;
+      keyType = KeyUtils.getKeyType(publicKey);
+    } else {
+      keyType = options.type || KeyType.RSA;
+      const generated = KeyUtils.generateKeyPair(keyType, {
+        modulusLength: 2048,
+        namedCurve: EcCurve.P256,
+      });
+      publicKey = generated.publicKey;
+      privateKey = generated.privateKey;
+    }
+
+    // 3) Decide which algorithm to use
+    const chosenAlg =
+      options.algorithm ||
+      (keyType === KeyType.RSA ? Algorithm.RS256 : Algorithm.ES256);
+    const algInfo = ALGORITHM_DETAILS_MAP[chosenAlg];
+    if (!algInfo) {
+      throw new Error(
+        `Unsupported algorithm for self-signed cert: ${chosenAlg}`,
+      );
+    }
+
+    // 4) Build the certificate using your builder classes
+    let certificate: string;
+    if (keyType === KeyType.RSA) {
+      const jwk = KeyUtils.pemToJwk(publicKey);
+      const rsaCertBuilder = new RSACertificate(
+        subjectCN,
+        validity,
+        privateKey,
+        jwk.n,
+        jwk.e,
+      );
+      rsaCertBuilder.setIsCA(options.isCA);
+      rsaCertBuilder.algorithm = chosenAlg;
+      rsaCertBuilder.extensions = options.extensions;
+
+      // **If** user wants to override TBS fields (like `serialNumber`, `issuer`, etc.),
+      // you can do so by hooking them into your `RSACertificate` or `buildTbsCertificate`.
+      // For example:
+      if (options.tbs?.serialNumber) {
+        rsaCertBuilder.serialNumber = options.tbs.serialNumber;
+      }
+      if (options.tbs?.issuer) {
+        rsaCertBuilder.issuer = options.tbs.issuer;
+      }
+      // etc.
+
+      certificate = rsaCertBuilder.buildCertificate();
+    } else {
+      // EC
+      const jwk = KeyUtils.pemToJwk(publicKey) as any;
+      const ecCertBuilder = new EllipticCurveCertificate(
+        subjectCN,
+        validity,
+        privateKey,
+        jwk.crv,
+        jwk.x,
+        jwk.y,
+      );
+      ecCertBuilder.setIsCA(options.isCA);
+      ecCertBuilder.extensions = options.extensions;
+      ecCertBuilder.algorithm = chosenAlg;
+
+      // same approach if we want to override TBS fields
+      if (options.tbs?.serialNumber) {
+        ecCertBuilder.serialNumber = options.tbs.serialNumber;
+      }
+      if (options.tbs?.issuer) {
+        ecCertBuilder.issuer = options.tbs.issuer;
+      }
+      // etc.
+
+      certificate = ecCertBuilder.buildCertificate();
+    }
+
+    // 5) Return final
+    return { certificate, publicKey, privateKey };
   }
 }

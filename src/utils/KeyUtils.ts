@@ -1,38 +1,28 @@
 // Assuming these imports based on your project structure
 import * as rsaKeyUtils from './rsaKeyUtils';
 import * as ecKeyUtils from './ecKeyUtils';
-import {
-  CertificateOptions,
-  IAlgorithmIdentifier,
-  ITbsCertificate,
-  IValidity,
-  IX509Certificate,
-  Jwk,
-  KeyData,
-} from '../interfaces';
-import { X509Certificate } from './x509';
-import { wrapPem } from './pem';
+import { IAlgorithmIdentifier, Jwk, KeyData } from '../interfaces';
+import { pemToDer } from './pem';
 import {
   createHash,
   createPrivateKey,
   createPublicKey,
+  createSign,
   createVerify,
   generateKeyPairSync,
 } from 'crypto';
 import {
   Algorithm,
   BinaryToTextEncoding,
-  CertificateLabel,
   EcCurve,
   KeyExportOptions,
   KeyFormat,
   KeyOps,
   KeyType,
 } from '../enums';
-import { RSACertificate } from './RSACertificate';
-import { EllipticCurveCertificate } from './EllipticCurveCertificate';
-import { ALGORITHM_HASH_MAP } from '../constants/key-constants';
+import { ALGORITHM_DETAILS_MAP } from '../constants/algorithmConstants';
 import { generateX5c, generateX5t } from './certUtils';
+import { decodeObjectIdentifier, decodeSequence } from './derUtils';
 
 interface GenerateKeyPairOptions {
   modulusLength?: number; // for RSA
@@ -65,34 +55,62 @@ export class KeyUtils {
   }
 
   /**
-   * Converts a PEM-encoded public key to JWK format.
-   * Automatically detects if the key is RSA or EC.
+   * Heuristic method to determine the type of Key
+   * @param pem - The PEM-encoded key
+   * @returns {KeyType} The type of key (e.g., 'RSA', 'EC')
+   * @throws {Error} If the key type cannot be determined
+   * @example
+   * ```typescript
+   * const keyType = KeyUtils.getKeyType(pem);
+   * ```
    */
-  static pemToJwk(pem: string): Jwk {
-    // Basic heuristic: Check for EC curve OIDs or RSA public key headers.
-    // For a more robust solution, parse the PEM structure to differentiate.
-    if (
-      pem.includes('BEGIN RSA PUBLIC KEY') ||
-      pem.includes('BEGIN PUBLIC KEY')
-    ) {
-      const { n, e } = rsaKeyUtils.rsaPemToJwk(pem);
-      return { kty: 'RSA', n, e };
+  public static getKeyType(pem: string): KeyType {
+    const derBuffer = pemToDer(pem);
+    const { elements: spkiElements } = decodeSequence(derBuffer, 0);
+    const algIdElement = spkiElements[0];
+    const { elements: algIdElements } = decodeSequence(algIdElement.content, 0);
+    const { oid: algorithmOid } = decodeObjectIdentifier(
+      algIdElements[0].content,
+      0,
+    );
+    if (algorithmOid === ALGORITHM_DETAILS_MAP.RSA_PUBLIC_KEY.publicKeyOid) {
+      return KeyType.RSA;
     } else if (
-      pem.includes('BEGIN EC PUBLIC KEY') ||
-      pem.includes('BEGIN PUBLIC KEY')
+      algorithmOid === ALGORITHM_DETAILS_MAP.EC_PUBLIC_KEY.publicKeyOid
     ) {
-      const { crv, x, y } = ecKeyUtils.ecPemToJwk(pem);
-      return { kty: 'EC', crv, x, y };
+      return KeyType.EC;
     } else {
-      throw new Error('Unsupported PEM format or key type');
+      throw new Error('Unsupported key type based on algorithm OID');
     }
   }
 
   /**
+   * Converts a PEM-encoded public key to JWK format.
+   * Automatically detects if the key is RSA or EC.
+   */
+  public static pemToJwk(pem: string): Jwk {
+    // Determine the key type using the getKeyType method.
+    const keyType = KeyUtils.getKeyType(pem);
+
+    // Choose the appropriate conversion based on the detected key type.
+    switch (keyType) {
+      case KeyType.RSA: {
+        const { n, e } = rsaKeyUtils.rsaPemToJwk(pem);
+        return { kty: keyType.toUpperCase(), n, e }; // 'RSA'
+      }
+      case KeyType.EC: {
+        const { crv, x, y } = ecKeyUtils.ecPemToJwk(pem);
+        return { kty: keyType.toUpperCase(), crv, x, y }; // 'EC'
+      }
+      default:
+        throw new Error('Unsupported key type');
+    }
+  }
+  /**
    * Generates a key pair (public and private keys) in PEM format.
    * Delegates to RSA or EC specific utility based on provided type.
    */
-  static generateKeyPair(
+  public static generateKeyPair(
     type: KeyType,
     options: GenerateKeyPairOptions,
   ): { publicKey: string; privateKey: string } {
@@ -133,7 +151,7 @@ export class KeyUtils {
    * Generates a key pair and returns JWK representations.
    * Delegates to RSA or EC specific utility based on provided type.
    */
-  static generateJwkKeyPair(
+  public static generateJwkKeyPair(
     type: KeyType,
     options: GenerateKeyPairOptions,
   ): { publicJwk: JsonWebKey; privateJwk: JsonWebKey } {
@@ -151,181 +169,6 @@ export class KeyUtils {
     });
 
     return { publicJwk, privateJwk };
-  }
-
-  /**
-   * Parses an X.509 certificate from PEM format and returns a human-readable text summary.
-   */
-  static parse(pem: string): string {
-    const cert = X509Certificate.parse(pem);
-    return cert.toText();
-  }
-
-  /**
-   * Creates an X.509 certificate PEM from an in-memory certificate representation.
-   */
-  static create(certData: IX509Certificate): string {
-    const { tbsCertificate, signatureAlgorithm, signatureValue } = certData;
-    // Create a new certificate instance using the provided certificate data.
-    const certInstance = X509Certificate.create(
-      tbsCertificate,
-      signatureAlgorithm,
-      signatureValue,
-    );
-
-    // Use the instance's build() method to get the DER-encoded certificate.
-    const derCert = certInstance.build();
-
-    // Convert DER to Base64 and wrap with PEM headers.
-    const b64Cert = derCert.toString(BinaryToTextEncoding.BASE_64);
-    return wrapPem(b64Cert, CertificateLabel.CERTIFICATE);
-  }
-
-  /**
-   * Generates a self-signed X.509 certificate.
-   * Supports both RSA and EC keys based on the provided type.
-   *
-   * @param type - Key type ('rsa' or 'ec').
-   * @param subjectName - The subject distinguished name (e.g., 'CN=example.com').
-   * @param options - Additional options for key generation and certificate creation.
-   * @returns An object containing the PEM-encoded certificate, public key, and private key.
-   */
-  static generateSelfSignedCertificate(
-    type: KeyType,
-    options: Partial<CertificateOptions> = {},
-  ): { certificate: string; publicKey: string; privateKey: string } {
-    // Define default values for subject name and validity
-    const now = new Date();
-    const oneYearLater = new Date();
-    oneYearLater.setFullYear(now.getFullYear() + 1);
-    const defaultValidity: IValidity = {
-      notBefore: now,
-      notAfter: oneYearLater,
-    };
-
-    const defaultSubjectName = 'CN=Example';
-
-    // Merge defaults with provided options
-    const subjectName = options.subjectName || defaultSubjectName;
-    const validity = options.validity || defaultValidity;
-
-    // Generate key pair
-    const { publicKey, privateKey } = this.generateKeyPair(type, {});
-
-    // Initialize certificate components
-    let tbsCertificate: ITbsCertificate;
-    let signatureAlgorithm: IAlgorithmIdentifier;
-
-    if (type === KeyType.EC) {
-      const namedCurve =
-        (options.tbsCertificate?.subjectPublicKeyInfo?.algorithm.parameters?.toString() as EcCurve) ||
-        EcCurve.P256;
-      const { publicJwk } = this.generateJwkKeyPair(KeyType.EC, { namedCurve });
-
-      const ecCertBuilder = new EllipticCurveCertificate(
-        subjectName,
-        validity,
-        privateKey,
-        publicJwk.crv,
-        publicJwk.x,
-        publicJwk.y,
-      );
-
-      const spki = ecCertBuilder.buildSubjectPublicKeyInfo();
-      tbsCertificate = {
-        version: options.tbsCertificate?.version || 2,
-        serialNumber:
-          options.tbsCertificate?.serialNumber || Buffer.from([0x01]),
-        signature: options.tbsCertificate?.signature || {
-          algorithm: '1.2.840.10045.4.3.2',
-        }, // Default to ES256
-        issuer: options.tbsCertificate?.issuer || {
-          rdnSequence: [
-            {
-              attributes: [
-                { type: '2.5.4.3', value: subjectName.replace('CN=', '') },
-              ],
-            },
-          ],
-        },
-        validity: options.tbsCertificate?.validity || validity,
-        subject: options.tbsCertificate?.subject || {
-          rdnSequence: [
-            {
-              attributes: [
-                { type: '2.5.4.3', value: subjectName.replace('CN=', '') },
-              ],
-            },
-          ],
-        },
-        subjectPublicKeyInfo: spki,
-        extensions: options.tbsCertificate?.extensions || [],
-      };
-      signatureAlgorithm = { algorithm: '1.2.840.10045.4.3.2' }; // Default to ES256
-    } else if (type === KeyType.RSA) {
-      const modulusLength = options.tbsCertificate?.subjectPublicKeyInfo
-        ?.algorithm.parameters
-        ? parseInt(
-            options.tbsCertificate.subjectPublicKeyInfo.algorithm.parameters.toString(),
-            10,
-          )
-        : 2048;
-
-      const { publicJwk } = this.generateJwkKeyPair(KeyType.RSA, {
-        modulusLength,
-      });
-
-      const rsaCertBuilder = new RSACertificate(
-        subjectName,
-        validity,
-        privateKey,
-        publicJwk.n,
-        publicJwk.e,
-      );
-
-      const spki = rsaCertBuilder.buildSubjectPublicKeyInfo();
-      tbsCertificate = {
-        version: options.tbsCertificate?.version || 2,
-        serialNumber:
-          options.tbsCertificate?.serialNumber || Buffer.from([0x01]),
-        signature: options.tbsCertificate?.signature || {
-          algorithm: '1.2.840.113549.1.1.11',
-        }, // Default to RS256
-        issuer: options.tbsCertificate?.issuer || {
-          rdnSequence: [
-            {
-              attributes: [
-                { type: '2.5.4.3', value: subjectName.replace('CN=', '') },
-              ],
-            },
-          ],
-        },
-        validity: options.tbsCertificate?.validity || validity,
-        subject: options.tbsCertificate?.subject || {
-          rdnSequence: [
-            {
-              attributes: [
-                { type: '2.5.4.3', value: subjectName.replace('CN=', '') },
-              ],
-            },
-          ],
-        },
-        subjectPublicKeyInfo: spki,
-        extensions: options.tbsCertificate?.extensions || [],
-      };
-      signatureAlgorithm = { algorithm: '1.2.840.113549.1.1.11' }; // Default to RS256
-    } else {
-      throw new Error(`Unsupported key type: ${type}`);
-    }
-
-    // Use the `create` method to build and sign the certificate
-    const certificate = this.create({
-      tbsCertificate,
-      signatureAlgorithm,
-      signatureValue: Buffer.alloc(0), // Signature will be handled in `create`
-    });
-
-    return { certificate, publicKey, privateKey };
   }
 
   /**
@@ -355,7 +198,7 @@ export class KeyUtils {
     pemCertificate: string,
     algorithm: Algorithm = Algorithm.SHA256,
   ): boolean {
-    const { hashName } = ALGORITHM_HASH_MAP[algorithm];
+    const { hashName } = ALGORITHM_DETAILS_MAP[algorithm];
     const verify = createVerify(hashName);
     verify.update(data);
     verify.end();
@@ -404,7 +247,7 @@ export class KeyUtils {
 
     // Generate a unique key ID if not provided
     if (!kid) {
-      const hash = createHash('sha256');
+      const hash = createHash(Algorithm.SHA256);
       hash.update(publicKey);
       kid = hash.digest(BinaryToTextEncoding.HEX);
     }
@@ -431,5 +274,33 @@ export class KeyUtils {
       x5t,
       keyOps,
     };
+  }
+
+  /**
+   * Sign a certificate using the provided private key.
+   * @param {certificateDer} [Buffer<ArrayBufferLike>]- The certificate to sign.
+   * @param {privateKeyPem} [string]- The private key to sign the certificate with.
+   * @param {signAlgorithm} [IAlgorithmIdentifier]- The algorithm to use for signing.
+   * @returns {Buffer} The signed certificate.
+   * @throws {Error} If the signing operation fails.
+   *
+   * @memberof KeyUtils
+   * @static
+   * @example
+   * ```typescript
+   * const signedCert = KeyUtils.sign(certificateDer, privateKeyPem, signAlgorithm);
+   * ```
+   */
+  static sign(
+    certificateDer: Buffer,
+    privateKeyPem: string,
+    signAlgorithm: IAlgorithmIdentifier,
+  ): Buffer {
+    // use OID_ALGORITHM_MAP to get the algorithm name
+    const algorithm = ALGORITHM_DETAILS_MAP[signAlgorithm.algorithm];
+    const sign = createSign(algorithm);
+    sign.update(certificateDer);
+    sign.end();
+    return sign.sign(privateKeyPem);
   }
 }
