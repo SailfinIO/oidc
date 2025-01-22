@@ -1,3 +1,9 @@
+## [0.1.0-beta.6](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.5...v0.1.0-beta.6) (2025-01-22)
+
+### Bug Fixes
+
+* handle passport session ([d7ee9db](https://github.com/SailfinIO/oidc/commit/d7ee9db16496219c1bce9e806f1b5c4ff0e6f645))
+
 ## [0.1.0-beta.5](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.4...v0.1.0-beta.5) (2025-01-22)
 
 ### Bug Fixes
