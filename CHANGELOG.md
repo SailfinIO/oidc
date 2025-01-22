@@ -1,3 +1,9 @@
+## [0.1.0-beta.4](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.3...v0.1.0-beta.4) (2025-01-22)
+
+### Bug Fixes
+
+* cert creation logic ([8b5e42d](https://github.com/SailfinIO/oidc/commit/8b5e42d87c347d78d5f7853d41e17109df0e0aa5))
+
 ## [0.1.0-beta.3](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.2...v0.1.0-beta.3) (2025-01-20)
 
 ### Bug Fixes
