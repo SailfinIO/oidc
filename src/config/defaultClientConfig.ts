@@ -62,7 +62,7 @@ export const defaultClientConfig: Partial<IClientConfig> = {
     store: undefined, // No custom session store by default
     ttl: 3600000, // Session TTL of 1 hour (in milliseconds)
     cookie: {
-      name: 'sid', // Default session ID cookie name
+      name: 'auth.sid', // Default session ID cookie name
       secret: 'default-secret', // Replace with a secure secret in production
       options: {
         secure: isProd ? true : false, // Use secure cookies in production

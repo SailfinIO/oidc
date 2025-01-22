@@ -27,6 +27,7 @@ export abstract class Certificate {
   private _algorithm: Algorithm;
   private _serialNumber: Buffer;
   private _issuer: IName;
+  private _strictSortingEnabled: boolean = false;
 
   constructor(subjectCN: string, validity: IValidity, privateKeyPem: string) {
     this._subjectCN = subjectCN;
@@ -193,6 +194,14 @@ export abstract class Certificate {
   }
   public get subjectCN(): string {
     return this._subjectCN;
+  }
+
+  public get strictSortingEnabled(): boolean {
+    return this._strictSortingEnabled;
+  }
+
+  public set strictSortingEnabled(value: boolean) {
+    this._strictSortingEnabled = value;
   }
 
   // Protected helper methods.

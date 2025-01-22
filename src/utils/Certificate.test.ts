@@ -1,6 +1,5 @@
 import { Certificate } from './Certificate';
 import { Algorithm, ExtentionOid } from '../enums';
-import { buildAndSignCertificate } from './certUtils';
 import { ExtensionHandler } from './ExtensionHandler';
 import { derNull } from './derUtils';
 import {
@@ -10,6 +9,7 @@ import {
   IExtension,
 } from '../interfaces';
 import { ALGORITHM_DETAILS_MAP } from '../constants';
+import { buildAndSignCertificate } from './certUtils';
 
 // Create a dummy subclass to instantiate Certificate
 class DummyCertificate extends Certificate {

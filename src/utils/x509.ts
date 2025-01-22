@@ -5,9 +5,8 @@ import {
   Algorithm,
   KeyType,
   EcCurve,
-  CertificateLabel,
 } from '../enums';
-import { pemToDer, wrapPem } from './pem';
+import { pemToDer } from './pem';
 import {
   bitString,
   decodeBitString,
@@ -33,7 +32,6 @@ import {
   ITbsCertificate,
   IValidity,
   IX509Certificate,
-  CertificateOptions,
   CreateSelfSignedCertificateOptions,
 } from '../interfaces';
 import { ExtensionHandler } from './ExtensionHandler';
