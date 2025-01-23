@@ -1,3 +1,9 @@
+## [0.1.0-beta.9](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.8...v0.1.0-beta.9) (2025-01-23)
+
+### Bug Fixes
+
+* default logger assignment in mutex ([9110a53](https://github.com/SailfinIO/oidc/commit/9110a538fc33ee02ef947fd3cdd73b1f5795d227))
+
 ## [0.1.0-beta.8](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.7...v0.1.0-beta.8) (2025-01-23)
 
 ### Bug Fixes
