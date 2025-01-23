@@ -13,10 +13,20 @@ export const parseCookies = (headers: RequestHeaders): RequestCookies => {
   let cookieHeader: string | string[] | undefined;
 
   // Iterate through the headers to find 'cookie' key case-insensitively
-  for (const [key, value] of headers.entries()) {
-    if (key.toLowerCase() === 'cookie') {
-      cookieHeader = value;
-      break;
+  if (headers instanceof Map) {
+    for (const [key, value] of headers.entries()) {
+      if (key.toLowerCase() === 'cookie') {
+        cookieHeader = value;
+        break;
+      }
+    }
+  } else {
+    for (const [key, value] of Object.entries(headers)) {
+      if (key.toLowerCase() === 'cookie') {
+        // @ts-ignore fallback to string if array is not present
+        cookieHeader = value;
+        break;
+      }
     }
   }
 

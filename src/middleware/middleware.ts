@@ -87,8 +87,14 @@ export const middleware = (client: Client) => {
 
         try {
           const host =
-            (req.headers.get && req.headers.get('host')) || 'localhost';
+            typeof req.headers.get === 'function'
+              ? req.headers.get('host') || 'localhost'
+              : Array.isArray(req.headers['host'])
+                ? req.headers['host'][0] || 'localhost'
+                : req.headers['host'] || 'localhost';
+
           const baseUrl = `http://${host}`;
+          pathname = new URL(url || '', baseUrl).pathname;
           pathname = new URL(url || '', baseUrl).pathname;
         } catch (error) {
           client.getLogger().error('Invalid URL', { url, error });
@@ -512,8 +518,12 @@ export const csrfMiddleware = (client: Client) => {
     // --------------------------------------------
     // 1. Extract CSRF token from request headers
     // --------------------------------------------
-    // Given IRequest.headers is a Map<string, string>, we can directly retrieve the token.
-    const csrfToken = req.headers.get('x-csrf-token') || undefined;
+    const csrfToken =
+      typeof req.headers.get === 'function'
+        ? req.headers.get('x-csrf-token') || undefined
+        : Array.isArray(req.headers['x-csrf-token'])
+          ? req.headers['x-csrf-token'][0]
+          : req.headers['x-csrf-token'] || undefined;
 
     // --------------------------------------------
     // 2. Compare extracted token to stored token
