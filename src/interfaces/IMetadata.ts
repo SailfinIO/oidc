@@ -1,15 +1,20 @@
-import { ProviderScopeOptions } from '../enums/ProviderScopeOptions';
+import { DependencyScopeOptions } from '../enums/DependencyScopeOptions';
 import { Claims, RequestMethod, RouteAction } from '../enums';
 import { IMutex } from './IMutex';
 import { IRequest } from './IRequest';
 import { IResponse } from './IResponse';
+import { ComponentConfig } from '../decorators/component';
+import { Path } from '../decorators/routeHandler';
 
 /**
  * Metadata that might be stored at the class level.
  * Extend this interface as needed.
  */
 export interface IClassMetadata {
-  injectable?: ProviderScopeOptions;
+  injectable?: DependencyScopeOptions;
+  component?: ComponentConfig;
+  universal?: boolean;
+  path?: Path;
 }
 /**
  * Metadata that might be stored at the method level.

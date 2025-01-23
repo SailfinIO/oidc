@@ -1,4 +1,4 @@
-import { Inject, Injectable } from './injection';
+import { Service, ResolveDependency } from './service';
 import { MetadataManager } from './MetadataManager';
 
 describe('Injection Decorators', () => {
@@ -6,14 +6,14 @@ describe('Injection Decorators', () => {
     MetadataManager.reset();
   });
   it('should define metadata on the target class', () => {
-    @Injectable()
+    @Service()
     class TestClass {}
 
     const metadata = MetadataManager.getClassMetadata(TestClass)?.injectable;
   });
 
   it('should define metadata with default options if none are provided', () => {
-    @Injectable()
+    @Service()
     class TestClass {}
 
     const metadata = MetadataManager.getClassMetadata(TestClass)?.injectable;
@@ -22,7 +22,7 @@ describe('Injection Decorators', () => {
 
   it('should define metadata on the target property', () => {
     class TestClass {
-      @Inject(String)
+      @ResolveDependency(String)
       public testProperty!: string;
     }
 
@@ -35,7 +35,7 @@ describe('Injection Decorators', () => {
 
   it('should define metadata on the target parameter', () => {
     class TestClass {
-      constructor(@Inject('testToken') testParam: any) {}
+      constructor(@ResolveDependency('testToken') testParam: any) {}
     }
 
     const metadata = MetadataManager.getMethodMetadata(
@@ -47,7 +47,7 @@ describe('Injection Decorators', () => {
 
   it('should define metadata with a custom token', () => {
     class TestClass {
-      @Inject('customToken')
+      @ResolveDependency('customToken')
       public testProperty!: string;
     }
 
@@ -61,8 +61,8 @@ describe('Injection Decorators', () => {
   it('should define metadata on multiple parameters', () => {
     class TestClass {
       constructor(
-        @Inject('token1') param1: any,
-        @Inject('token2') param2: any,
+        @ResolveDependency('token1') param1: any,
+        @ResolveDependency('token2') param2: any,
       ) {}
     }
 

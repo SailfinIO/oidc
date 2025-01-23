@@ -24,7 +24,7 @@ export * from './SessionMode';
 export * from './StatusCode';
 export * from './ContentType';
 export * from './RequestHeader';
-export * from './ProviderScope';
+export * from './DependencyScope';
 export * from './DERTag';
 export * from './KeyExportOptions';
 export * from './KeyFormat';

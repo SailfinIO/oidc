@@ -1,15 +1,15 @@
-import { ProviderScopeOptions } from '../enums/ProviderScopeOptions';
+import { DependencyScopeOptions } from '../enums/DependencyScopeOptions';
 import { MetadataManager } from './MetadataManager';
 
-export type InjectableOptions = ProviderScopeOptions;
+export type ServiceOptions = DependencyScopeOptions;
 
-export const Injectable = (options?: InjectableOptions): ClassDecorator => {
+export const Service = (options?: ServiceOptions): ClassDecorator => {
   return (target: Function) => {
     MetadataManager.setClassMetadata(target, { injectable: options });
   };
 };
 
-export const Inject = <T = any>(
+export const ResolveDependency = <T = any>(
   token?: T,
 ): PropertyDecorator & ParameterDecorator => {
   return (

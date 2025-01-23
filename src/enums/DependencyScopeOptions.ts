@@ -1,10 +1,10 @@
-import { ProviderScope } from './ProviderScope';
+import { DependencyScope } from './DependencyScope';
 
-export interface ProviderScopeOptions {
+export interface DependencyScopeOptions {
   /**
    * Specifies the lifetime of an injected Provider or Controller.
    */
-  providerScope?: ProviderScope;
+  dependency?: DependencyScope;
   /**
    * Flags provider as durable. This flag can be used in combination with custom context id
    * factory strategy to construct lazy DI subtrees.
