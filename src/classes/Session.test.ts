@@ -120,7 +120,7 @@ describe('Session', () => {
       userInfoClient,
       sessionStore,
     );
-
+    //@ts-ignore
     mockRequest = new Request()
       .setUrl('http://localhost')
       .setHeaders({
@@ -201,6 +201,7 @@ describe('Session', () => {
       (sessionStore.set as jest.Mock).mockResolvedValue('new-mock-sid');
 
       // Mock request and response objects with empty cookie
+      //@ts-ignore
       const mockRequest = new Request()
         .setUrl('http://localhost')
         .setHeaders({
@@ -253,6 +254,7 @@ describe('Session', () => {
       (tokenClient.getTokens as jest.Mock).mockReturnValue(null);
 
       // Mock request and response objects
+      //@ts-ignore
       const mockRequest = new Request()
         .setUrl('http://localhost')
         .setHeaders({
@@ -299,6 +301,7 @@ describe('Session', () => {
       (sessionStore.set as jest.Mock).mockResolvedValue('new-mock-sid');
 
       // Mock request and response objects
+      //@ts-ignore
       const mockRequest = new Request()
         .setUrl('http://localhost')
         .setHeaders({
@@ -811,6 +814,7 @@ describe('Session', () => {
       (tokenClient.getTokens as jest.Mock).mockResolvedValue(null);
 
       // Mock request and response objects
+      //@ts-ignore
       const mockRequest = new Request()
         .setUrl('http://localhost')
         .setHeaders({
@@ -867,6 +871,7 @@ describe('Session', () => {
       // Mock sessionStore.touch to simulate updating session
       (sessionStore.touch as jest.Mock).mockResolvedValue(undefined);
       // Mock request and response objects
+      //@ts-ignore
       const mockRequest = new Request()
         .setUrl('http://localhost')
         .setHeaders({
@@ -1061,6 +1066,7 @@ describe('Session', () => {
     let mockResponse: IResponse;
 
     beforeEach(() => {
+      //@ts-ignore
       const mockRequest = new Request()
         .setUrl('http://localhost')
         .setHeaders({
@@ -1080,6 +1086,7 @@ describe('Session', () => {
 
     it('should create a new session if no sid cookie is present', async () => {
       // Arrange
+      //@ts-ignore
       mockRequest = new Request()
         .setUrl('http://localhost')
         .setHeaders({

@@ -1,4 +1,3 @@
-// Import necessary modules and types
 import { parseCookies } from '../utils';
 import { ContentType, RequestHeader, RequestMethod } from '../enums';
 import {
@@ -20,11 +19,12 @@ import { isIP } from 'net';
 import { TLSSocket } from 'tls';
 import { IncomingMessage } from 'http';
 import { URL } from 'url';
+import { Middleware, MiddlewareManager } from '../middleware/MiddlewareManager';
 
 export class Request implements IRequest {
   // Properties
   private _method: Method = RequestMethod.GET;
-  private _url: RequestUrl = '';
+  private _url: RequestUrl = 'http://localhost';
   private _originalUrl: RequestUrl = '';
   private _path: RequestPath = '';
   private _query: RequestQuery = {};
@@ -37,6 +37,7 @@ export class Request implements IRequest {
   private _ips: RequestIps = [];
   private _protocol: RequestProtocol = 'http';
   private _secure: boolean = false;
+  private middlewareManager: MiddlewareManager = new MiddlewareManager();
 
   // Public Getters
   public get method(): Method {
@@ -68,15 +69,15 @@ export class Request implements IRequest {
   }
 
   public get headers(): RequestHeaders {
-    return this._headers;
+    return Object.freeze(new Map(this._headers));
   }
 
   public get cookies(): RequestCookies {
-    return this._cookies;
+    return { ...this._cookies };
   }
 
   public get session(): ISessionData | null {
-    return this._session;
+    return this._session ? { ...this._session } : null;
   }
 
   public get ip(): RequestIp {
@@ -84,7 +85,7 @@ export class Request implements IRequest {
   }
 
   public get ips(): RequestIps {
-    return this._ips;
+    return [...this._ips];
   }
 
   public get protocol(): RequestProtocol {
@@ -95,51 +96,78 @@ export class Request implements IRequest {
     return this._secure;
   }
 
-  // Constructor with Overloading
-  constructor(req: IncomingMessage);
-  constructor();
-  constructor(req?: IncomingMessage) {
-    if (req) {
-      const protocol = req.socket instanceof TLSSocket ? 'https' : 'http';
+  // Private constructor to enforce use of factory method
+  private constructor() {}
 
-      // Determine host
-      const host = req.headers.host || 'localhost';
+  // Factory method for asynchronous initialization
+  public static async fromIncomingMessage(
+    req: IncomingMessage,
+  ): Promise<Request> {
+    const request = new Request();
+    const protocol = req.socket instanceof TLSSocket ? 'https' : 'http';
+    const host = req.headers.host || 'localhost';
+    const url = new URL(req.url || '', `${protocol}://${host}`);
 
-      // Parse URL using WHATWG URL API
-      const url = new URL(req.url || '', `${protocol}://${host}`);
+    request
+      .setMethod(req.method as Method)
+      .setUrl(url.href)
+      .setOriginalUrl(url.href)
+      .setPath(url.pathname)
+      .setQuery(Object.fromEntries(url.searchParams.entries()))
+      .setHeaders(req.headers as Record<string, string | string[]>)
+      .setIp(req.socket.remoteAddress)
+      .setProtocol(protocol);
 
-      // Initialize properties
-      this.setMethod(req.method as Method)
-        .setUrl(url.href)
-        .setOriginalUrl(url.href)
-        .setPath(url.pathname)
-        .setQuery(Object.fromEntries(url.searchParams.entries()))
-        .setHeaders(req.headers as Record<string, string | string[]>)
-        .setIp(req.socket.remoteAddress)
-        .setProtocol(protocol)
-        .parseBody(req);
-
-      // Parse IP addresses from X-Forwarded-For header
-      const forwardedFor = this.get(RequestHeader.X_FORWARDED_FOR);
-      if (forwardedFor) {
-        if (typeof forwardedFor === 'string') {
-          this._ips = forwardedFor.split(',').map((ip) => ip.trim());
-        } else if (Array.isArray(forwardedFor)) {
-          this._ips = forwardedFor.map((ip) => ip.trim());
-        }
-        this._ip = this._ips[0];
-      }
+    // Parse IP addresses
+    const forwardedFor = request.get(RequestHeader.X_FORWARDED_FOR);
+    if (forwardedFor) {
+      request._ips =
+        typeof forwardedFor === 'string'
+          ? forwardedFor.split(',').map((ip) => ip.trim())
+          : forwardedFor.map((ip) => ip.trim());
+      request._ip = request._ips[0];
     }
+
+    // Await body parsing
+    await request.parseBody(req);
+
+    // Execute middleware
+    await request.processMiddleware();
+
+    return request;
   }
 
-  // Setters
+  /**
+   * Registers a middleware function.
+   * @param middleware - The middleware function to register.
+   */
+  public use(middleware: Middleware): void {
+    this.middlewareManager.use(middleware);
+  }
+
+  /**
+   * Processes the request through all registered middleware.
+   */
+  public async processMiddleware(): Promise<void> {
+    await this.middlewareManager.execute(this);
+  }
+
+  // Setters with validation
   public setMethod(method: Method): this {
+    if (!Object.values(RequestMethod).includes(method as RequestMethod)) {
+      throw new Error(`Unsupported HTTP method: ${method}`);
+    }
     this._method = method;
     return this;
   }
 
   public setUrl(url: RequestUrl): this {
-    this._url = url;
+    try {
+      new URL(url); // Validate URL format
+      this._url = url;
+    } catch (error) {
+      throw new Error('Invalid URL format');
+    }
     return this;
   }
 
@@ -154,12 +182,12 @@ export class Request implements IRequest {
   }
 
   public setQuery(query: RequestQuery): this {
-    this._query = query;
+    this._query = { ...query };
     return this;
   }
 
   public setParams(params: RequestParams): this {
-    this._params = params;
+    this._params = { ...params };
     return this;
   }
 
@@ -179,9 +207,9 @@ export class Request implements IRequest {
   }
 
   public setHeaders(headers: Record<string, string | string[]>): this {
-    for (const [key, value] of Object.entries(headers)) {
-      this._headers.set(key.toLowerCase(), value);
-    }
+    this._headers = new Map<string, string | string[]>(
+      Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]),
+    );
 
     // Re-parse cookies whenever headers are updated
     this._cookies = parseCookies(this._headers);
@@ -189,12 +217,12 @@ export class Request implements IRequest {
   }
 
   public setCookies(cookies: RequestCookies): this {
-    this._cookies = cookies;
+    this._cookies = { ...cookies };
     return this;
   }
 
   public setSession(session: ISessionData): this {
-    this._session = session;
+    this._session = { ...session };
     return this;
   }
 
@@ -210,7 +238,7 @@ export class Request implements IRequest {
     if (ips && ips.some((ip) => !isIP(ip))) {
       throw new Error('One or more IP addresses have an invalid format');
     }
-    this._ips = ips;
+    this._ips = [...ips];
     return this;
   }
 
@@ -238,12 +266,12 @@ export class Request implements IRequest {
     let mimeType = '';
 
     if (typeof contentType === 'string') {
-      mimeType = contentType.split(';')[0].trim();
+      mimeType = contentType.split(';')[0].trim().toLowerCase();
     } else if (Array.isArray(contentType)) {
-      mimeType = contentType[0].split(';')[0].trim(); // Take the first Content-Type if multiple
+      mimeType = contentType[0].split(';')[0].trim().toLowerCase(); // Take the first Content-Type if multiple
     }
 
-    return mimeType === type;
+    return mimeType === type.toLowerCase();
   }
 
   public hasHeader(header: string): boolean {
@@ -255,7 +283,10 @@ export class Request implements IRequest {
     const typesArray = Array.isArray(types) ? types : [types];
 
     for (const type of typesArray) {
-      if (acceptHeader.includes(type)) {
+      if (
+        typeof acceptHeader === 'string' &&
+        acceptHeader.toLowerCase().includes(type.toLowerCase())
+      ) {
         return type;
       }
     }
@@ -288,30 +319,30 @@ export class Request implements IRequest {
 
   // Cloning Method
   public clone(): this {
-    const clonedRequest = new Request(); // Allowed due to overloaded constructor
+    const clonedRequest = new Request();
 
     clonedRequest
       .setMethod(this._method)
       .setUrl(this._url)
       .setOriginalUrl(this._originalUrl)
       .setPath(this._path)
-      .setQuery(JSON.parse(JSON.stringify(this._query)))
-      .setParams(JSON.parse(JSON.stringify(this._params)))
+      .setQuery({ ...this._query })
+      .setParams({ ...this._params })
       .setBody(
-        this._body instanceof Buffer
+        Buffer.isBuffer(this._body)
           ? Buffer.from(this._body)
-          : typeof this._body === 'object'
-            ? JSON.parse(JSON.stringify(this._body))
+          : typeof this._body === 'object' && this._body !== null
+            ? { ...this._body }
             : this._body,
       )
       .setHeaders(Object.fromEntries(this._headers))
-      .setCookies(JSON.parse(JSON.stringify(this._cookies)))
+      .setCookies({ ...this._cookies })
       .setIp(this._ip)
       .setIps([...this._ips])
       .setProtocol(this._protocol);
 
     if (this._session) {
-      clonedRequest.setSession(JSON.parse(JSON.stringify(this._session)));
+      clonedRequest.setSession({ ...this._session });
     }
 
     return clonedRequest as this;

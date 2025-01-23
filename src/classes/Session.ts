@@ -258,9 +258,14 @@ export class Session implements ISession {
       });
     }
 
+    // Generate CSRF token first
+    const csrfToken = randomBytes(32).toString('hex');
+
+    // Include csrfToken in sessionData
     const sessionData: ISessionData = {
       cookie: tokens,
       user: userInfo || undefined,
+      csrfToken, // Added csrfToken here
     };
 
     // Try/catch around store.set
@@ -318,11 +323,7 @@ export class Session implements ISession {
       );
     }
 
-    // Generate CSRF token
-    const csrfToken = randomBytes(32).toString('hex');
-    context.request.session.csrfToken = csrfToken;
-
-    // Set CSRF token in a separate cookie
+    // Set CSRF token in a separate cookie if needed
     try {
       context.response?.cookie('csrf_token', csrfToken, {
         httpOnly: this.config.session?.cookie?.options?.httpOnly ?? true,
@@ -521,7 +522,10 @@ export class Session implements ISession {
   public async save(context: IStoreContext, tokens: TokenSet): Promise<void> {
     // 1) Check if we have an existing session ID (sid) from cookies
     const sessionCookieName = this.config.session?.cookie?.name || 'sid';
-    const sid = context.request.cookies[sessionCookieName];
+
+    // should now use .setCookie instead of directly accessing headers
+    // const sid = context.request.cookies[sessionCookieName];
+    const sid = this.getSidFromCookies(context);
 
     if (!sid) {
       this.logger.debug('No existing SID found; creating a new server session');

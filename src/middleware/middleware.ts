@@ -274,7 +274,6 @@ const handleCallback = async (
   req: IRequest,
   res: IResponse,
   metadata: IRouteMetadata,
-  // next: NextFunction,
   context: IStoreContext,
 ) => {
   const host = Array.isArray(req.headers['host'])
@@ -290,20 +289,45 @@ const handleCallback = async (
 
   await client.handleRedirect(code, state, context);
 
+  // Remove the state from the session after handling it
+  if (req.session && req.session.state) {
+    delete req.session.state[state]; // Delete the specific state entry
+
+    // If `state` is now empty, clear it completely or set it to an empty object
+    if (Object.keys(req.session.state).length === 0) {
+      req.session.state = {}; // You could also set this to `undefined` if preferred
+    }
+  }
+
   const user = await client.getUserInfo();
   if (client.getConfig().session) {
     context.user = user;
     if (typeof req.setSession === 'function') {
-      req.setSession({
+      // Clone session data
+      const updatedSession = {
         ...req.session,
         user,
-      });
+      };
+
+      // Ensure `state` is set to `{}` if it's empty
+      if (
+        updatedSession.state &&
+        Object.keys(updatedSession.state).length === 0
+      ) {
+        updatedSession.state = {};
+      }
+
+      req.setSession(updatedSession);
     } else if (typeof req.session === 'object' && req.session !== null) {
       // @ts-ignore - Allow direct assignment since it's a fallback
       req.session = {
         ...req.session,
         user,
       };
+
+      if (req.session.state && Object.keys(req.session.state).length === 0) {
+        req.session.state = {};
+      }
     } else {
       console.warn('Session management not supported in current environment');
       throw new Error(

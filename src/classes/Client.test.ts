@@ -91,6 +91,7 @@ const createMockRequest = (
   query: Record<string, any> = {},
   session?: ISessionData,
 ): Request => {
+  //@ts-ignore
   const request = new Request();
   request
     .setUrl(url)

@@ -73,6 +73,7 @@ describe('CookieStore', () => {
     expires_in: 3600,
     token_type: 'Bearer',
   };
+  //@ts-ignore
   mockRequest = new Request()
     .setUrl('http://localhost')
     .setHeaders({
@@ -158,6 +159,7 @@ describe('CookieStore', () => {
     const sid = await cookieStore.set(data, context);
 
     // Create a new request that includes the correct cookie name and value
+    //@ts-ignore
     const newRequest = new Request()
       .setUrl('http://localhost')
       .setHeaders({

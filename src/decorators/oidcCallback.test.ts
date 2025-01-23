@@ -120,6 +120,7 @@ describe('OidcCallback Decorator', () => {
     const userInfo = { sub: 'user123', name: 'John Doe' };
 
     // Initialize mockRequest with query parameters and other properties
+    //@ts-ignore
     mockRequest = new Request()
       .setUrl('http://localhost')
       .setHeaders({
@@ -190,6 +191,7 @@ describe('OidcCallback Decorator', () => {
     const userInfo = { sub: 'user456', name: 'Jane Smith' };
 
     // Initialize mockRequest with query parameters and other properties
+    //@ts-ignore
     mockRequest = new Request()
       .setUrl('http://localhost')
       .setHeaders({
@@ -260,6 +262,7 @@ describe('OidcCallback Decorator', () => {
 
   it('should respond with 400 if code and state is missing', async () => {
     // Arrange: Create a new Request without setting query
+    //@ts-ignore
     mockRequest = new Request();
 
     const statusSpy = jest.spyOn(mockResponse, 'status');
@@ -289,6 +292,7 @@ describe('OidcCallback Decorator', () => {
     const postLoginRedirectUri = '/home';
     const userInfo = { sub: 'user789', name: 'Alice Johnson' };
 
+    //@ts-ignore
     mockRequest = new Request()
       .setUrl('http://localhost')
       .setHeaders({
@@ -339,6 +343,7 @@ describe('OidcCallback Decorator', () => {
   it('should respond with 400 if code is missing', async () => {
     // Arrange
     const state = 'stateMissingCode';
+    //@ts-ignore
     mockRequest = new Request(); // create a new Request
 
     // Create spies on status and send
@@ -371,6 +376,7 @@ describe('OidcCallback Decorator', () => {
   it('should respond with 400 if state is missing', async () => {
     // Arrange
     const authorizationCode = 'authCodeMissingState';
+    //@ts-ignore
     mockRequest = new Request(); // create a new Request
 
     // Create spies on status and send
@@ -407,6 +413,7 @@ describe('OidcCallback Decorator', () => {
     const storedState = 'storedState';
     const error = new Error('State mismatch');
 
+    //@ts-ignore
     mockRequest = new Request()
       .setUrl('http://localhost')
       .setHeaders({
@@ -468,6 +475,7 @@ describe('OidcCallback Decorator', () => {
     const error = new Error('Code verifier missing');
 
     // Set up request query parameters
+    //@ts-ignore
     mockRequest = new Request()
       .setUrl('http://localhost')
       .setHeaders({
@@ -528,6 +536,7 @@ describe('OidcCallback Decorator', () => {
     const error = new Error('handleRedirect failed');
 
     // Set up request query parameters
+    //@ts-ignore
     mockRequest = new Request()
       .setUrl('http://localhost')
       .setHeaders({
@@ -589,6 +598,7 @@ describe('OidcCallback Decorator', () => {
     const error = new Error('handleRedirect failed');
 
     // Set up request query parameters
+    //@ts-ignore
     mockRequest = new Request()
       .setUrl('http://localhost')
       .setHeaders({
@@ -644,6 +654,7 @@ describe('OidcCallback Decorator', () => {
     const error = new Error('getUserInfo failed');
 
     // Set up request query parameters
+    //@ts-ignore
     mockRequest = new Request()
       .setUrl('http://localhost')
       .setHeaders({
@@ -732,6 +743,7 @@ describe('OidcCallback Decorator', () => {
     const error = new Error('getUserInfo failed');
 
     // Set up request query parameters
+    //@ts-ignore
     mockRequest = new Request()
       .setUrl('http://localhost')
       .setHeaders({
@@ -845,6 +857,7 @@ describe('OidcCallback Decorator', () => {
     const userInfo = { sub: 'userNoSession', name: 'No Session User' };
 
     // Set up request query parameters
+    //@ts-ignore
     mockRequest = new Request()
       .setUrl('http://localhost')
       .setHeaders({
