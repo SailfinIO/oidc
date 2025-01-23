@@ -2,7 +2,7 @@
 
 import { Auth } from './Auth';
 import { UserInfo } from './UserInfo';
-import { Logger } from '../utils/';
+import { Logger, deepMerge } from '../utils';
 import {
   GrantType,
   LogLevel,
@@ -45,8 +45,11 @@ export class Client {
   private session: ISession | null = null;
 
   constructor(userConfig: Partial<IClientConfig>) {
-    // Merge userConfig with defaultClientConfig
-    this.config = { ...defaultClientConfig, ...userConfig } as IClientConfig;
+    this.config = deepMerge(defaultClientConfig, userConfig) as IClientConfig;
+    // Ensure logging is always defined
+    if (!this.config.logging) {
+      this.config.logging = defaultClientConfig.logging;
+    }
 
     // Initialize logger **before** validation
     const envLogLevel = process.env.OIDC_CLIENT_LOG_LEVEL as LogLevel;

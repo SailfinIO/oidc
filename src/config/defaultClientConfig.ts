@@ -63,9 +63,9 @@ export const defaultClientConfig: Partial<IClientConfig> = {
       name: 'sailfin.sid', // Default session ID cookie name
       secret: process.env.SESSION_SECRET || 'default-secret', // Replace with a secure secret in production
       options: {
-        secure: isProduction ? true : false, // Use secure cookies in production
-        httpOnly: isProduction ? true : false, // Use httpOnly cookies in production
-        sameSite: isProduction ? SameSite.LAX : SameSite.LAX, // Use 'Lax' same-site policy
+        secure: isProduction(), // Use secure cookies in production
+        httpOnly: isProduction(), // Use HTTP-only cookies in production
+        sameSite: isProduction() ? SameSite.NONE : SameSite.LAX,
         path: '/', // Default cookie path
         maxAge: 3600, // Cookie expiration in seconds (1 hour)
         domain: undefined, // No specific domain by default

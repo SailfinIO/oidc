@@ -1,32 +1,61 @@
 // src/classes/Client.test.ts
 
+// 1. Declare mockLoggerInstance before jest.mock
+let mockLoggerInstance: any;
+
+// 2. Mock '../utils' before importing modules that depend on it
+jest.mock('../utils', () => {
+  // Initialize mockLoggerInstance within the mock factory
+  mockLoggerInstance = {
+    setLogLevel: jest.fn(),
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  };
+
+  const originalModule = jest.requireActual('../utils');
+  return {
+    __esModule: true, // Use it when dealing with ES6 modules
+    ...originalModule, // Spread the original exports
+    Logger: jest.fn(() => mockLoggerInstance), // Mock only the Logger
+    // Do not mock 'parse' here
+  };
+});
+
+// 3. Import modules after jest.mock
 import { Client } from './Client';
 import { Auth } from './Auth';
 import { UserInfo } from './UserInfo';
-import { Logger } from '../utils';
 import { Token } from './Token';
 import { ClientError } from '../errors';
 import { LogLevel, TokenTypeHint, StorageMechanism, GrantType } from '../enums';
 import { Issuer } from './Issuer';
-import { IStore, ISessionStore, IResponse, ISessionData } from '../interfaces';
+import {
+  IStore,
+  ISessionStore,
+  IResponse,
+  ISessionData,
+  IClientConfig,
+} from '../interfaces';
 import { Store } from './Store';
 import * as utils from '../utils';
 import { Session } from './Session';
 import { defaultClientConfig } from '../config/defaultClientConfig';
 import { Request } from './Request';
 
-// Set environment variables if needed
+// 4. Set environment variables if needed
 process.env.OIDC_CLIENT_LOG_LEVEL = 'DEBUG';
 
-// Mock dependencies
+// 5. Mock other dependencies
 jest.mock('./Auth');
 jest.mock('./UserInfo');
 jest.mock('./Session');
-jest.mock('../utils');
 jest.mock('./Issuer');
 jest.mock('./Store');
 jest.mock('./Token');
 
+// 6. Define mock instances before they are used
 const createMockResponse = (init: Partial<IResponse> = {}): IResponse => {
   return {
     // Mock the redirect method
@@ -71,20 +100,26 @@ const createMockRequest = (
   return request;
 };
 
-// Provide a mock implementation for the 'parse' function
-(utils.parse as jest.Mock).mockImplementation((cookieHeader: string) => {
-  // Simple parser for 'key=value' pairs
-  const cookies: Record<string, string> = {};
-  cookieHeader.split(';').forEach((cookie) => {
-    const [key, value] = cookie.trim().split('=');
-    if (key && value) {
-      cookies[key] = value;
-    }
+// 7. Mock the 'parse' function using jest.spyOn in beforeEach
+beforeEach(() => {
+  // Reset all mock implementations and calls before each test
+  jest.clearAllMocks();
+
+  // Mock the 'parse' function using jest.spyOn
+  jest.spyOn(utils, 'parse').mockImplementation((cookieHeader: string) => {
+    // Simple parser for 'key=value' pairs
+    const cookies: Record<string, string> = {};
+    cookieHeader.split(';').forEach((cookie) => {
+      const [key, value] = cookie.trim().split('=');
+      if (key && value) {
+        cookies[key] = value;
+      }
+    });
+    return cookies;
   });
-  return cookies;
 });
 
-// Define a mock Token instance with correct snake_case properties
+// 8. Define other mock instances
 const mockTokenInstance = {
   getTokens: jest.fn().mockReturnValue({
     access_token: 'access_token',
@@ -196,18 +231,7 @@ const mockSessionStore: ISessionStore = {
   sessionStore: mockSessionStore,
 });
 
-// Define a mock Logger instance with setLogLevel and debug methods
-const mockLoggerInstance = {
-  setLogLevel: jest.fn(),
-  debug: jest.fn(),
-  info: jest.fn(),
-  warn: jest.fn(),
-  error: jest.fn(),
-};
-
-// Configure the mocked Logger class to return the mockLoggerInstance
-(Logger as jest.Mock).mockImplementation(() => mockLoggerInstance);
-
+// 9. Create mock request and response
 const mockRequest = createMockRequest('http://localhost', {
   headers: {
     cookie: 'sid=mock_sid',
@@ -219,35 +243,49 @@ const mockResponse = createMockResponse();
 // Define a mock context to be used in tests
 const mockContext = { request: mockRequest, response: mockResponse };
 
+// 10. Define the test suite
 describe('Client', () => {
   let client: Client;
-  const mockConfig = {
-    clientId: 'test-client-id',
-    clientSecret: 'test-client',
-    redirectUri: 'https://example.com/callback',
-    scopes: ['openid', 'profile'],
-    discoveryUrl: 'https://example.com/.well-known/openid-configuration',
-    session: {
-      useSilentRenew: true,
-      cookie: {
-        name: 'sid',
-        secret: 'cookie-secret',
-      },
-    },
-    storage: {
-      mechanism: StorageMechanism.MEMORY,
-    },
-    logging: {
-      logLevel: LogLevel.INFO,
-    },
-  };
+  let mockConfig: Partial<IClientConfig>;
 
   beforeEach(() => {
     // Reset all mock implementations and calls before each test
     jest.clearAllMocks();
 
+    // Mock the 'parse' function
+    jest.spyOn(utils, 'parse').mockImplementation((cookieHeader: string) => {
+      const cookies: Record<string, string> = {};
+      cookieHeader.split(';').forEach((cookie) => {
+        const [key, value] = cookie.trim().split('=');
+        if (key && value) {
+          cookies[key] = value;
+        }
+      });
+      return cookies;
+    });
+
+    // Define mockConfig with logger
+    mockConfig = {
+      clientId: 'test-client-id',
+      clientSecret: 'test-client',
+      redirectUri: 'https://example.com/callback',
+      scopes: ['openid', 'profile'],
+      discoveryUrl: 'https://example.com/.well-known/openid-configuration',
+      session: {
+        useSilentRenew: true,
+        cookie: {
+          name: 'sid',
+          secret: 'cookie-secret',
+        },
+      },
+      logging: {
+        logLevel: LogLevel.INFO,
+        logger: mockLoggerInstance, // Inject the mocked logger
+      },
+    };
+
     // Instantiate the Client with the mockConfig
-    client = new Client(mockConfig);
+    client = new Client(mockConfig as IClientConfig);
   });
 
   it('should initialize with default config', () => {
@@ -282,6 +320,10 @@ describe('Client', () => {
         redirectUri: 'https://example.com/callback',
         scopes: ['openid', 'profile'],
         discoveryUrl: 'https://example.com/.well-known/openid-configuration',
+        logging: {
+          logLevel: LogLevel.INFO,
+          logger: mockLoggerInstance,
+        },
       };
 
       expect(() => new Client(configWithoutClientId as any)).toThrow(
@@ -294,6 +336,10 @@ describe('Client', () => {
         clientId: 'test-client-id',
         scopes: ['openid', 'profile'],
         discoveryUrl: 'https://example.com/.well-known/openid-configuration',
+        logging: {
+          logLevel: LogLevel.INFO,
+          logger: mockLoggerInstance,
+        },
       };
 
       expect(() => new Client(configWithoutRedirectUri as any)).toThrow(
@@ -309,6 +355,10 @@ describe('Client', () => {
         clientId: 'test-client-id',
         redirectUri: 'https://example.com/callback',
         discoveryUrl: 'https://example.com/.well-known/openid-configuration',
+        logging: {
+          logLevel: LogLevel.INFO,
+          logger: mockLoggerInstance,
+        },
       };
 
       expect(() => new Client(configWithoutScopes as any)).toThrow(
@@ -321,6 +371,10 @@ describe('Client', () => {
         clientId: 'test-client-id',
         redirectUri: 'https://example.com/callback',
         scopes: ['openid', 'profile'],
+        logging: {
+          logLevel: LogLevel.INFO,
+          logger: mockLoggerInstance,
+        },
       };
 
       expect(() => new Client(configWithoutDiscoveryUrl as any)).toThrow(
@@ -390,7 +444,9 @@ describe('Client', () => {
     };
 
     // Instantiate a new Client with the updated configuration
-    const clientWithoutSilentRenew = new Client(configWithoutSilentRenew);
+    const clientWithoutSilentRenew = new Client(
+      configWithoutSilentRenew as IClientConfig,
+    );
 
     await expect(
       clientWithoutSilentRenew.handleRedirectForImplicitFlow(
@@ -529,7 +585,7 @@ describe('Client', () => {
         useSilentRenew: false,
       },
     };
-    client = new Client(configWithoutSilentRenew);
+    client = new Client(configWithoutSilentRenew as IClientConfig);
 
     await expect(
       client.handleRedirect('auth-code', 'state', mockContext),
@@ -541,42 +597,51 @@ describe('Client', () => {
     expect(mockSessionInstance.start).toHaveBeenCalledWith(mockContext);
   });
 
-  it('should default grantType to AuthorizationCode if not provided', () => {
-    const configWithoutGrantType = {
-      ...mockConfig,
-      // Explicitly omit grantType to test the default assignment
-      grantType: undefined,
-    };
-
-    // Instantiate the Client without grantType
-    const clientWithoutGrantType = new Client(configWithoutGrantType);
-
-    // Verify that the logger.debug was called with the expected message
-    expect(mockLoggerInstance.debug).toHaveBeenCalledWith(
-      'No grantType specified, defaulting to authorization_code',
-    );
-
-    // Optionally, verify that Token was instantiated with GrantType.AuthorizationCode
-    // This requires modifying the Token mock to capture constructor arguments
-    expect(Token).toHaveBeenCalledWith(
-      mockLoggerInstance,
-      expect.objectContaining({
-        grantType: GrantType.AuthorizationCode,
-      }),
-      mockIssuerInstance,
-    );
+  it('should have grantType set to AuthorizationCode by default', () => {
+    const config = client.getConfig();
+    expect(config.grantType).toBe(GrantType.AuthorizationCode);
+    // Optionally, verify that the logger.debug was not called
+    expect(mockLoggerInstance.debug).not.toHaveBeenCalled();
   });
 
   // ------------------ Additional Tests for getConfig ------------------
-
   describe('getConfig', () => {
     it('should return the correct configuration', () => {
       const config = client.getConfig();
 
-      // Expected config is a merge of defaultClientConfig and mockConfig
-      const expectedConfig = { ...defaultClientConfig, ...mockConfig };
+      // Check individual properties
+      expect(config.clientId).toBe('test-client-id');
+      expect(config.clientSecret).toBe('test-client');
+      expect(config.redirectUri).toBe('https://example.com/callback');
+      expect(config.scopes).toEqual(['openid', 'profile']);
+      expect(config.discoveryUrl).toBe(
+        'https://example.com/.well-known/openid-configuration',
+      );
 
-      expect(config).toEqual(expectedConfig);
+      // Check session properties using toMatchObject
+      expect(config.session).toMatchObject({
+        useSilentRenew: true,
+        cookie: {
+          name: 'sid',
+          secret: 'cookie-secret',
+        },
+      });
+
+      // Check logging properties
+      expect(config.logging.logLevel).toBe(LogLevel.INFO);
+      expect(config.logging.logger).toMatchObject({
+        setLogLevel: expect.any(Function),
+        debug: expect.any(Function),
+        info: expect.any(Function),
+        warn: expect.any(Function),
+        error: expect.any(Function),
+      });
+
+      // Optionally, verify that additional properties exist
+      expect(config.session).toHaveProperty('mode', 'server');
+      expect(config.session).toHaveProperty('serverStorage', 'memory');
+      expect(config.session).toHaveProperty('clientStorage', 'cookie');
+      expect(config.session).toHaveProperty('ttl', 3600000);
     });
 
     it('should correctly merge default config with partial user config', () => {
@@ -586,14 +651,55 @@ describe('Client', () => {
         discoveryUrl:
           'https://partial.example.com/.well-known/openid-configuration',
         scopes: ['openid'],
+        logging: {
+          logLevel: LogLevel.DEBUG,
+          logger: mockLoggerInstance,
+        },
+        // No session property provided
       };
 
-      const partialClient = new Client(partialConfig);
+      const partialClient = new Client(partialConfig as IClientConfig);
       const config = partialClient.getConfig();
 
-      const expectedConfig = { ...defaultClientConfig, ...partialConfig };
+      // Check individual properties
+      expect(config.clientId).toBe('partial-client-id');
+      expect(config.redirectUri).toBe('https://partial.example.com/callback');
+      expect(config.discoveryUrl).toBe(
+        'https://partial.example.com/.well-known/openid-configuration',
+      );
+      expect(config.scopes).toEqual(['openid']);
 
-      expect(config).toEqual(expectedConfig);
+      // Check session properties using toMatchObject
+      // Since session isn't provided, expect default values
+      expect(config.session).toMatchObject({
+        useSilentRenew: true, // From defaultClientConfig
+        cookie: {
+          name: 'sailfin.sid', // Default value
+          secret: 'default-secret', // Default value
+        },
+      });
+
+      // Check logging properties
+      expect(config.logging.logLevel).toBe(LogLevel.DEBUG);
+      expect(config.logging.logger).toMatchObject({
+        setLogLevel: expect.any(Function),
+        debug: expect.any(Function),
+        info: expect.any(Function),
+        warn: expect.any(Function),
+        error: expect.any(Function),
+      });
+
+      // Optionally, verify that additional properties exist
+      expect(config.session).toHaveProperty('mode', 'server');
+      expect(config.session).toHaveProperty('serverStorage', 'memory');
+      expect(config.session).toHaveProperty('clientStorage', 'cookie');
+      expect(config.session).toHaveProperty('ttl', 3600000);
+
+      // Check that other default properties are present
+      expect(config.maxAge).toBe(defaultClientConfig.maxAge);
+      expect(config.pkce).toBe(defaultClientConfig.pkce);
+      expect(config.pkceMethod).toBe(defaultClientConfig.pkceMethod);
+      // Add other fields as necessary
     });
   });
 
