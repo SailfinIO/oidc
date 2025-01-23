@@ -47,19 +47,27 @@ export class Client {
   constructor(userConfig: Partial<IClientConfig>) {
     this.config = deepMerge(defaultClientConfig, userConfig) as IClientConfig;
     // Ensure logging is always defined
-    if (!this.config.logging) {
-      this.config.logging = defaultClientConfig.logging;
-    }
-
-    // Initialize logger **before** validation
     const envLogLevel = process.env.OIDC_CLIENT_LOG_LEVEL as LogLevel;
-    this.logger =
-      this.config.logging?.logger ||
-      new Logger(
+    if (
+      !this.config.logging?.logger ||
+      typeof this.config.logging.logger.debug !== 'function'
+    ) {
+      this.logger = new Logger(
         Client.name,
         this.config.logging?.logLevel || envLogLevel || LogLevel.INFO,
         true,
       );
+      this.config.logging.logger = this.logger;
+    } else {
+      // Initialize logger **before** validation
+      this.logger =
+        this.config.logging?.logger ||
+        new Logger(
+          Client.name,
+          this.config.logging?.logLevel || envLogLevel || LogLevel.INFO,
+          true,
+        );
+    }
 
     this.validateConfig(this.config);
 
