@@ -10,24 +10,36 @@ import { parse } from './Cookie';
  * @returns {RequestCookies} The parsed cookies as a key-value object.
  */
 export const parseCookies = (headers: RequestHeaders): RequestCookies => {
-  let cookieHeader: string | undefined;
+  let cookieHeader: string | string[] | undefined;
 
-  // Check if headers has a get method (e.g., Headers instance)
-  if (typeof headers.get === 'function') {
-    cookieHeader = headers.get('cookie') || headers.get('COOKIE');
-  }
-  // Otherwise, treat headers as a plain object
-  else if (typeof headers === 'object' && headers !== null) {
-    cookieHeader = (headers as any)['cookie'] || (headers as any)['COOKIE'];
+  // Iterate through the headers to find 'cookie' key case-insensitively
+  for (const [key, value] of headers.entries()) {
+    if (key.toLowerCase() === 'cookie') {
+      cookieHeader = value;
+      break;
+    }
   }
 
   if (!cookieHeader) {
-    return {}; // Return an empty object if no cookies are present
+    return {}; // No cookies present
+  }
+
+  let cookieString = '';
+
+  if (typeof cookieHeader === 'string') {
+    cookieString = cookieHeader;
+  } else if (Array.isArray(cookieHeader)) {
+    // Combine multiple 'Cookie' headers into a single string as per RFC
+    cookieString = cookieHeader.join('; ');
+  } else {
+    // Unexpected type, log error and return empty object
+    console.error('Unexpected cookie header format:', cookieHeader);
+    return {};
   }
 
   try {
-    // Parse the cookie string into a key-value object
-    return parse(cookieHeader) as RequestCookies;
+    // Parse the combined cookie string into a key-value object
+    return parse(cookieString) as RequestCookies;
   } catch (error) {
     console.error('Failed to parse cookies:', error);
     return {}; // Return an empty object if parsing fails

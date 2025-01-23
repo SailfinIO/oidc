@@ -79,7 +79,7 @@ export const createSailfinClient = (
       const mergedConfig: IClientConfig = deepMerge(
         deepMerge(defaultClientConfig, envConfig),
         config,
-      );
+      ) as IClientConfig;
 
       validateConfig(mergedConfig);
 

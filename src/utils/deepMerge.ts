@@ -11,12 +11,12 @@ import { IClientConfig } from '../interfaces';
  * @returns The merged object.
  */
 export const deepMerge = <
-  T extends Partial<IClientConfig>,
-  U extends Partial<IClientConfig>,
+  T extends Partial<IClientConfig | Record<string, any>>,
+  U extends Partial<IClientConfig | Record<string, any>>,
 >(
   target: T,
   source: U,
-): IClientConfig => {
+): IClientConfig | Record<string, any> => {
   const output: any = { ...target };
 
   for (const key in source) {
@@ -40,7 +40,7 @@ export const deepMerge = <
     }
   }
 
-  return output as IClientConfig;
+  return output;
 };
 
 /**
