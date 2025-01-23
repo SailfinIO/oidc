@@ -76,6 +76,7 @@ describe('MetadataManager', () => {
 
   describe('Class Metadata', () => {
     it('sets and merges class metadata', () => {
+      // @ts-ignore - TestClass is a constructor function
       const metadata: Partial<IClassMetadata> = { foo: 'bar' };
       MetadataManager.setClassMetadata(TestClass, metadata);
 
@@ -90,11 +91,13 @@ describe('MetadataManager', () => {
     });
 
     it('overwrites existing class metadata with the same keys', () => {
+      // @ts-ignore
       const initialMetadata: Partial<IClassMetadata> = { foo: 'bar' };
       classCacheMock.get.mockReturnValueOnce(initialMetadata);
 
       MetadataManager.setClassMetadata(TestClass, initialMetadata);
 
+      // @ts-ignore
       const updatedMetadata: Partial<IClassMetadata> = { foo: 'newBar' };
       classCacheMock.get.mockReturnValueOnce(initialMetadata);
       MetadataManager.setClassMetadata(TestClass, updatedMetadata);
@@ -103,6 +106,7 @@ describe('MetadataManager', () => {
         foo: 'newBar',
       });
 
+      // @ts-ignore
       classCacheMock.get.mockReturnValueOnce({ foo: 'newBar' });
       const result = MetadataManager.getClassMetadata(TestClass);
       expect(classCacheMock.get).toHaveBeenCalledWith('class:ctor_1');
@@ -110,7 +114,9 @@ describe('MetadataManager', () => {
     });
 
     it('handles multiple classes independently', () => {
+      // @ts-ignore
       const metadata1: Partial<IClassMetadata> = { foo: 'bar' };
+      // @ts-ignore
       const metadata2: Partial<IClassMetadata> = { alpha: 'beta' };
 
       // Set class metadata
@@ -150,11 +156,13 @@ describe('MetadataManager', () => {
 
     it('handles invalid targets gracefully', () => {
       expect(() =>
+        // @ts-ignore
         MetadataManager.setClassMetadata(null as any, { foo: 'bar' }),
       ).toThrow(
         'setClassMetadata expects a constructor function as the target.',
       );
       expect(() =>
+        // @ts-ignore
         MetadataManager.setClassMetadata(undefined as any, { foo: 'bar' }),
       ).toThrow(
         'setClassMetadata expects a constructor function as the target.',
@@ -300,27 +308,36 @@ describe('MetadataManager', () => {
         MetadataManager.setMethodMetadata(TestClass, null as any, {
           isOidcCallback: true,
         }),
-      ).toThrow('setMethodMetadata expects a string as the propertyKey.');
+      ).toThrow(
+        'setMethodMetadata expects a string or symbol as the propertyKey.',
+      );
 
       expect(() =>
         MetadataManager.setMethodMetadata(TestClass, undefined as any, {
           isOidcCallback: true,
         }),
-      ).toThrow('setMethodMetadata expects a string as the propertyKey.');
+      ).toThrow(
+        'setMethodMetadata expects a string or symbol as the propertyKey.',
+      );
 
       expect(() =>
         MetadataManager.getMethodMetadata(TestClass, null as any),
-      ).toThrow('getMethodMetadata expects a string as the propertyKey.');
+      ).toThrow(
+        'getMethodMetadata expects a string or symbol as the propertyKey.',
+      );
 
       expect(() =>
         MetadataManager.getMethodMetadata(TestClass, undefined as any),
-      ).toThrow('getMethodMetadata expects a string as the propertyKey.');
+      ).toThrow(
+        'getMethodMetadata expects a string or symbol as the propertyKey.',
+      );
     });
   });
 
   describe('Reset Functionality', () => {
     it('clears all class, method, and route metadata', () => {
       // Set class metadata
+      // @ts-ignore
       MetadataManager.setClassMetadata(TestClass, { foo: 'bar' });
       // Set method metadata
       MetadataManager.setMethodMetadata(TestClass, 'someMethod', {
@@ -368,7 +385,9 @@ describe('MetadataManager', () => {
   describe('Cache Key Generation', () => {
     it('generates unique keys for different constructors', () => {
       // KeyFactory.getKeyForFunction is already mocked in beforeEach
+      // @ts-ignore
       MetadataManager.setClassMetadata(TestClass, { foo: 'bar' });
+      // @ts-ignore
       MetadataManager.setClassMetadata(AnotherTestClass, { alpha: 'beta' });
 
       expect(KeyFactory.getKeyForFunction).toHaveBeenCalledWith(TestClass);
@@ -387,7 +406,9 @@ describe('MetadataManager', () => {
 
     it('generates the same key for the same constructor', () => {
       // KeyFactory.getKeyForFunction is already mocked to return 'ctor_1' for TestClass
+      // @ts-ignore
       MetadataManager.setClassMetadata(TestClass, { foo: 'bar' });
+      // @ts-ignore
       MetadataManager.setClassMetadata(TestClass, { fizz: 'buzz' });
 
       expect(KeyFactory.getKeyForFunction).toHaveBeenCalledWith(TestClass);

@@ -1,4 +1,5 @@
-import { Claims, RouteAction } from '../enums';
+import { ProviderScopeOptions } from '../enums/ProviderScopeOptions';
+import { Claims, RequestMethod, RouteAction } from '../enums';
 import { IMutex } from './IMutex';
 import { IRequest } from './IRequest';
 import { IResponse } from './IResponse';
@@ -8,15 +9,15 @@ import { IResponse } from './IResponse';
  * Extend this interface as needed.
  */
 export interface IClassMetadata {
-  // Example: add properties if you want class-level metadata
-  // e.g. isThisClassSpecial?: boolean;
+  injectable?: ProviderScopeOptions;
 }
-
 /**
  * Metadata that might be stored at the method level.
  * The optional properties align with what the decorators might store.
  */
 export interface IMethodMetadata {
+  inject?: any | any[];
+  designType?: any;
   requiresAuth?: boolean;
   requiredClaims?: Claims[];
   isOidcCallback?: boolean;
@@ -25,6 +26,9 @@ export interface IMethodMetadata {
   mutex?: IMutex;
   timeout?: number;
   requiresRefresh?: boolean;
+  route?: {
+    method: RequestMethod;
+  };
 }
 
 /**
