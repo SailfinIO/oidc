@@ -1,3 +1,9 @@
+## [0.1.0-beta.10](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.9...v0.1.0-beta.10) (2025-01-23)
+
+### Bug Fixes
+
+* request object and related code ([6c49b76](https://github.com/SailfinIO/oidc/commit/6c49b76cf15a679f2aed1d5d098a76f52181c2a0))
+
 ## [0.1.0-beta.9](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.8...v0.1.0-beta.9) (2025-01-23)
 
 ### Bug Fixes
