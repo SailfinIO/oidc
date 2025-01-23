@@ -1,3 +1,10 @@
+## [0.1.0-beta.13](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.12...v0.1.0-beta.13) (2025-01-23)
+
+### Bug Fixes
+
+* ignore static files ([e23283d](https://github.com/SailfinIO/oidc/commit/e23283d3e43e0d147e6cf7b9b1dff130c9b9082f))
+* remove doc upload temporarily ([2a989d2](https://github.com/SailfinIO/oidc/commit/2a989d278c73d8665293b1ae0554a8ca8814a857))
+
 ## [0.1.0-beta.12](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.11...v0.1.0-beta.12) (2025-01-23)
 
 ### Bug Fixes
