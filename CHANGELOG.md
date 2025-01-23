@@ -1,3 +1,9 @@
+## [0.1.0-beta.7](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.6...v0.1.0-beta.7) (2025-01-23)
+
+### Bug Fixes
+
+* add some defaults and checks ([97e5571](https://github.com/SailfinIO/oidc/commit/97e55715037d36eeed832000a392373a6eb1b0b3))
+
 ## [0.1.0-beta.6](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.5...v0.1.0-beta.6) (2025-01-22)
 
 ### Bug Fixes
