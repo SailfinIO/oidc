@@ -203,6 +203,11 @@ export class MetadataManager {
     method: string,
     path: string,
   ): IRouteMetadata | undefined {
+    // Skip static files
+    if (/\.(js|css|map|ico|png|jpg|jpeg|gif|svg)$/.test(path)) {
+      return undefined;
+    }
+
     if (typeof method !== 'string') {
       throw new TypeError(
         `getRouteMetadata expects 'method' to be a string, received ${typeof method}.`,
