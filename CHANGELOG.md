@@ -1,3 +1,9 @@
+## [0.1.0-beta.16](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.15...v0.1.0-beta.16) (2025-01-23)
+
+### Bug Fixes
+
+* injection decorators ([5643e78](https://github.com/SailfinIO/oidc/commit/5643e78b6cdd844a84d6a969ba37d82a681fe1a4))
+
 ## [0.1.0-beta.15](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.14...v0.1.0-beta.15) (2025-01-23)
 
 ### Bug Fixes
