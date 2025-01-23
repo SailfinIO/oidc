@@ -1,3 +1,9 @@
+## [0.1.0-beta.15](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.14...v0.1.0-beta.15) (2025-01-23)
+
+### Bug Fixes
+
+* request and response ([5c30592](https://github.com/SailfinIO/oidc/commit/5c3059236c09a35e557ff1bd13436a26d24140cc))
+
 ## [0.1.0-beta.14](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.13...v0.1.0-beta.14) (2025-01-23)
 
 ### Bug Fixes
