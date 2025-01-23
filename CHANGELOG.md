@@ -1,3 +1,9 @@
+## [0.1.0-beta.17](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.16...v0.1.0-beta.17) (2025-01-23)
+
+### Bug Fixes
+
+* add client and decorators ([785e93c](https://github.com/SailfinIO/oidc/commit/785e93c74cb2400211e72e2006e0739f32404add))
+
 ## [0.1.0-beta.16](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.15...v0.1.0-beta.16) (2025-01-23)
 
 ### Bug Fixes
