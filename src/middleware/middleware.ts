@@ -58,7 +58,7 @@ export const middleware = (client: Client) => {
 
         const sessionStore = client.getSessionStore();
         const sessionCookieName =
-          client.getConfig().session?.cookie?.name || 'auth.sid';
+          client.getConfig().session?.cookie?.name || 'sailfin.sid';
         let sid = req.cookies[sessionCookieName] || null;
         let sessionData: ISessionData | null = null;
 

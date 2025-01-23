@@ -31,6 +31,9 @@ export class SailfinClientModule {
 
   /**
    * Creates and registers an OIDC client instance asynchronously.
+   *
+   * @param {() => Promise<Partial<IClientConfig>>} configFactory - Factory function to provide config.
+   * @returns {DynamicModule} - The dynamic module with the client provider.
    */
   static forRootAsync(
     configFactory: () => Promise<Partial<IClientConfig>>,
@@ -38,13 +41,12 @@ export class SailfinClientModule {
     const clientProvider: Provider = {
       provide: SAILFIN_CLIENT,
       useFactory: async () => {
-        const config = await configFactory();
-        const instance = createSailfinClient(config).useFactory();
-        this.instances.set(SAILFIN_CLIENT, instance);
-        return instance;
+        const userConfig = await configFactory();
+        const provider = createSailfinClient(userConfig);
+        const client = await provider.useFactory();
+        return client;
       },
       inject: [],
-      scope: 0,
     };
 
     return {

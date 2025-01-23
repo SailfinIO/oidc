@@ -40,3 +40,6 @@ export * from './HttpExeptionBody';
 export * from './HttpExceptionOptions';
 export * from './DescriptionAndOptions';
 export * from './IX509Certificate';
+export * from './ICookieConfig';
+export * from './ILoggingConfig';
+export * from './ISessionConfig';

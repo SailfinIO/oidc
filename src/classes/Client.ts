@@ -131,6 +131,8 @@ export class Client {
   /**
    * Centralized config validation.
    */
+  // src/classes/Client.ts
+
   private validateConfig(config: IClientConfig): void {
     const missingRequiredFields: (keyof IClientConfig)[] = [];
 
@@ -151,12 +153,25 @@ export class Client {
       throw new ClientError('At least one scope is required', 'CONFIG_ERROR');
     }
 
-    // Assign defaults for optional fields
+    // Assign defaults for optional fields if not already set
     if (!config.grantType) {
       this.logger.debug(
         'No grantType specified, defaulting to authorization_code',
       );
       config.grantType = GrantType.AuthorizationCode;
+    }
+
+    // Validate session.cookie.secret in production
+    const isProd =
+      process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
+    if (isProd) {
+      const secret = config.session?.cookie?.secret;
+      if (!secret || secret === 'default-secret') {
+        throw new ClientError(
+          'A secure session cookie secret must be provided in production environments.',
+          'CONFIG_ERROR',
+        );
+      }
     }
   }
 

@@ -105,7 +105,7 @@ const oidcClient = new Client({
     useSilentRenew: true, // Enable silent renewal of tokens
     ttl: 3600000, // Session TTL of 1 hour (in milliseconds)
     cookie: {
-      name: 'auth.sid', // Default session ID cookie name
+      name: 'sailfin.sid', // Default session ID cookie name
       secret: process.env.SESSION_SECRET, // Replace with a secure secret in production
       options: {
         secure: isProduction ? true : false, // Restrict cookies to HTTPS
@@ -315,7 +315,7 @@ export const OIDC_CLIENT_PROVIDER: Provider = {
         useSilentRenew: true,
         ttl: 3600000, // 1 hour in milliseconds
         cookie: {
-          name: 'auth.sid',
+          name: 'sailfin.sid',
           secret: process.env.SESSION_SECRET,
           options: {
             // IMPORTANT: set secure: false for local dev on HTTP,

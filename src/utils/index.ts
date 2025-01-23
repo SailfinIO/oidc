@@ -19,3 +19,4 @@ export * from './EllipticCurveCertificate';
 export * from './Certificate';
 export * from './rsaKeyUtils';
 export * from './ecKeyUtils';
+export * from './deepMerge';

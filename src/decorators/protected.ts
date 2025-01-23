@@ -6,7 +6,7 @@ import { HttpException } from '../errors/HttpExeption';
 
 /**
  * Example: Decorator that attempts to find an OIDC token from either:
- * 1) Sailfin's server session (via auth.sid cookie), or
+ * 1) Sailfin's server session (via sailfin.sid cookie), or
  * 2) express-session + passport style (req.session.passport.user?).
  */
 export const Protected = (requiredClaims?: Claims[]): MethodDecorator => {
@@ -65,8 +65,8 @@ export const Protected = (requiredClaims?: Claims[]): MethodDecorator => {
       let token: string | undefined;
 
       try {
-        // 1) Try reading from Sailfin's server session (auth.sid)
-        //    If "auth.sid" is in cookies, that means Sailfin's session store has an OIDC token.
+        // 1) Try reading from Sailfin's server session (sailfin.sid)
+        //    If "sailfin.sid" is in cookies, that means Sailfin's session store has an OIDC token.
         //    The library's middleware typically attaches "req.session.cookie.access_token".
         const sailfinToken = req.session?.cookie?.access_token;
 
