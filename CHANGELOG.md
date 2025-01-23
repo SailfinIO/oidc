@@ -1,3 +1,10 @@
+## [0.1.0-beta.8](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.7...v0.1.0-beta.8) (2025-01-23)
+
+### Bug Fixes
+
+* deep merge in client config ([7fe2ff9](https://github.com/SailfinIO/oidc/commit/7fe2ff9a238216365e12ee0a3abdd325421db06a))
+* response implementation ([5d25b07](https://github.com/SailfinIO/oidc/commit/5d25b07057b731d5ab998677ed1cd9bb339dc692))
+
 ## [0.1.0-beta.7](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.6...v0.1.0-beta.7) (2025-01-23)
 
 ### Bug Fixes
