@@ -1,3 +1,9 @@
+## [0.1.0-beta.12](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.11...v0.1.0-beta.12) (2025-01-23)
+
+### Bug Fixes
+
+* check for plain objects ([12233ba](https://github.com/SailfinIO/oidc/commit/12233baa291b102ad74348022e48bdd6eaaf3ca4))
+
 ## [0.1.0-beta.11](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.10...v0.1.0-beta.11) (2025-01-23)
 
 ### Bug Fixes
