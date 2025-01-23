@@ -15,24 +15,21 @@ import {
   ResponseEnd,
 } from '../interfaces';
 import { serialize as serializeCookie } from '../utils/Cookie';
-import { ServerResponse } from 'http';
+import { IncomingMessage, ServerResponse } from 'http';
 
-export class Response implements IResponse {
+export class Response
+  extends ServerResponse<IncomingMessage>
+  implements IResponse
+{
   private _headers: Map<string, HeaderValue>;
   private _status: ResponseStatus = StatusCode.OK;
   private _cookies: Map<string, string>;
   private _body: ResponseBody = null;
-  private _headersSent: boolean = false;
-  private _res: ServerResponse;
 
-  constructor(res: ServerResponse) {
-    this._res = res;
+  constructor(req: IncomingMessage) {
+    super(req);
     this._headers = new Map<string, HeaderValue>();
     this._cookies = new Map<string, string>();
-  }
-
-  public get headersSent(): boolean {
-    return this._headersSent || this._res.headersSent;
   }
 
   public get cookies(): ResponseCookies {
@@ -56,7 +53,7 @@ export class Response implements IResponse {
       throw new Error(`Invalid status code: ${code}`);
     }
     this._status = code;
-    this._res.statusCode = code;
+    this.statusCode = code;
     return this;
   }
 
@@ -67,19 +64,18 @@ export class Response implements IResponse {
 
     if (body instanceof Readable) {
       this._body = body;
-      body.pipe(this._res);
+      body.pipe(this);
     } else if (typeof body === 'object' && !Buffer.isBuffer(body)) {
       this.type(ContentType.JSON);
       this._body = JSON.stringify(body);
-      this._res.end(this._body);
+      this.end(this._body);
     } else {
       // Set Content-Type to text/plain for string or Buffer
       this.type(ContentType.TEXT);
       this._body = body;
-      this._res.end(this._body);
+      this.end(this._body);
     }
 
-    this._headersSent = true;
     return this;
   }
 
@@ -105,14 +101,14 @@ export class Response implements IResponse {
     if (this.headersSent) {
       throw new Error('Cannot set headers after they are sent to the client.');
     }
-    this._res.setHeader(name, value);
+    super.setHeader(name, value);
     this._headers.set(name.toLowerCase(), value);
     return this;
   }
 
   public getHeader(name: HeaderName): HeaderValue | undefined {
     const header =
-      this._headers.get(name.toLowerCase()) || this._res.getHeader(name);
+      this._headers.get(name.toLowerCase()) || super.getHeader(name);
     return typeof header === 'number' ? header.toString() : header;
   }
 
@@ -122,7 +118,7 @@ export class Response implements IResponse {
         'Cannot remove headers after they are sent to the client.',
       );
     }
-    this._res.removeHeader(name);
+    this.removeHeader(name); // Changed from super.removeHeader
     this._headers.delete(name.toLowerCase());
   }
 
@@ -139,10 +135,10 @@ export class Response implements IResponse {
       const newValue = Array.isArray(existing)
         ? [...existing, ...[].concat(value)]
         : [existing, ...[].concat(value)];
-      this._res.setHeader(name, newValue);
+      this.setHeader(name, newValue); // Changed from super.setHeader
       this._headers.set(key, newValue);
     } else {
-      this._res.setHeader(name, value);
+      this.setHeader(name, value); // Changed from super.setHeader
       this._headers.set(key, value);
     }
     return this;
@@ -192,7 +188,7 @@ export class Response implements IResponse {
     return this.setHeader('Location', url || '');
   }
 
-  public end(body?: ResponseEnd): void {
+  public end(body?: ResponseEnd): this {
     if (this.headersSent) {
       throw new Error('Cannot end response, headers already sent.');
     }
@@ -201,28 +197,27 @@ export class Response implements IResponse {
       this._body = body;
     }
     this.finalizeResponse();
+    return this;
   }
 
   protected finalizeResponse(): void {
-    if (this._headersSent) {
+    if (this.headersSent) {
       return;
     }
 
     // Set status code (already set in status method if called)
-    this._res.statusCode = this._status || StatusCode.OK;
+    this.statusCode = this._status || StatusCode.OK;
 
     // Send the body
     if (this._body !== null) {
       if (typeof this._body === 'string' || Buffer.isBuffer(this._body)) {
-        this._res.end(this._body);
+        super.end(this._body);
       } else {
         // For other types (e.g., streams), additional handling is needed
-        this._res.end(String(this._body));
+        super.end(String(this._body));
       }
     } else {
-      this._res.end();
+      super.end();
     }
-
-    this._headersSent = true;
   }
 }

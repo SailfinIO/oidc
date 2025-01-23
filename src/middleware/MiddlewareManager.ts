@@ -1,9 +1,14 @@
 // src/middleware/MiddlewareManager.ts
 
 import { NextFunction } from '../types';
-import { Request } from '../classes';
+import { IRequest, IResponse } from '../interfaces';
+import { IncomingMessage, ServerResponse } from 'http';
 
-export type Middleware = (req: Request, next: NextFunction) => Promise<void>;
+export type Middleware = (
+  req: IRequest,
+  res: IResponse,
+  next: NextFunction,
+) => Promise<void>;
 
 export class MiddlewareManager {
   private _middlewares: Middleware[] = [];
@@ -22,11 +27,10 @@ export class MiddlewareManager {
 
   /**
    * Executes all registered middleware in sequence.
-   * @param req - The Request instance to process.
+   * @param req - The IRequest instance to process.
    */
-  public async execute(req: Request): Promise<void> {
+  public async execute(req: IRequest, res: IResponse): Promise<void> {
     const { _middlewares } = this;
-
     let index = -1;
 
     const dispatch = async (i: number): Promise<void> => {
@@ -36,7 +40,7 @@ export class MiddlewareManager {
       index = i;
       const middleware = _middlewares[i];
       if (middleware) {
-        await middleware(req, () => dispatch(i + 1));
+        await middleware(req, res, () => dispatch(i + 1));
       }
     };
 

@@ -1,7 +1,10 @@
+// src/classes/Request.ts
+
 import { parseCookies } from '../utils';
 import { ContentType, RequestHeader, RequestMethod } from '../enums';
 import {
   IRequest,
+  IResponse,
   ISessionData,
   Method,
   RequestBody,
@@ -16,12 +19,16 @@ import {
   RequestUrl,
 } from '../interfaces';
 import { isIP } from 'net';
-import { TLSSocket } from 'tls';
 import { IncomingMessage } from 'http';
 import { URL } from 'url';
 import { Middleware, MiddlewareManager } from '../middleware/MiddlewareManager';
+import { Response } from './Response'; // Ensure correct import
+import { TLSSocket } from 'tls';
 
 export class Request implements IRequest {
+  // Encapsulated IncomingMessage
+  private _incomingMessage: IncomingMessage;
+
   // Properties
   private _method: Method = RequestMethod.GET;
   private _url: RequestUrl = 'http://localhost';
@@ -97,13 +104,16 @@ export class Request implements IRequest {
   }
 
   // Private constructor to enforce use of factory method
-  private constructor() {}
+  private constructor(req: IncomingMessage) {
+    this._incomingMessage = req;
+  }
 
   // Factory method for asynchronous initialization
   public static async fromIncomingMessage(
     req: IncomingMessage,
+    res: Response,
   ): Promise<Request> {
-    const request = new Request();
+    const request = new Request(req);
     const protocol = req.socket instanceof TLSSocket ? 'https' : 'http';
     const host = req.headers.host || 'localhost';
     const url = new URL(req.url || '', `${protocol}://${host}`);
@@ -129,10 +139,10 @@ export class Request implements IRequest {
     }
 
     // Await body parsing
-    await request.parseBody(req);
+    await request.parseBody();
 
     // Execute middleware
-    await request.processMiddleware();
+    await request.processMiddleware(res);
 
     return request;
   }
@@ -148,8 +158,8 @@ export class Request implements IRequest {
   /**
    * Processes the request through all registered middleware.
    */
-  public async processMiddleware(): Promise<void> {
-    await this.middlewareManager.execute(this);
+  public async processMiddleware(res?: Response): Promise<void> {
+    await this.middlewareManager.execute(this, res);
   }
 
   // Setters with validation
@@ -294,24 +304,25 @@ export class Request implements IRequest {
   }
 
   // Asynchronous Body Parsing
-  public async parseBody(req: IncomingMessage): Promise<this> {
+  public async parseBody(): Promise<this> {
     return new Promise((resolve, reject) => {
-      let data = '';
+      let data: Buffer[] = [];
 
-      req.on('data', (chunk) => {
-        data += chunk;
+      this._incomingMessage.on('data', (chunk: Buffer) => {
+        data.push(chunk);
       });
 
-      req.on('end', () => {
+      this._incomingMessage.on('end', () => {
         try {
-          this.setBody(data);
+          const bodyStr = Buffer.concat(data).toString();
+          this.setBody(bodyStr);
           resolve(this);
         } catch (error) {
           reject(error);
         }
       });
 
-      req.on('error', (error) => {
+      this._incomingMessage.on('error', (error) => {
         reject(error);
       });
     });
@@ -319,7 +330,7 @@ export class Request implements IRequest {
 
   // Cloning Method
   public clone(): this {
-    const clonedRequest = new Request();
+    const clonedRequest = new Request(this._incomingMessage);
 
     clonedRequest
       .setMethod(this._method)

@@ -11,7 +11,7 @@ import { SameSite, StatusCode } from '../enums';
 import { Cookie } from '../utils/Cookie';
 import { Request } from './Request';
 import { Response } from './Response';
-import { ServerResponse } from 'http';
+import { IncomingMessage, ServerResponse } from 'http';
 
 /**
  * Creates a mocked ServerResponse with jest.fn() for methods.
@@ -64,7 +64,7 @@ describe('CookieStore', () => {
   mockWriteHead = mocks.mockWriteHead;
 
   // Instantiate Response with the mocked ServerResponse
-  response = new Response(mockRes as ServerResponse);
+  response = new Response(mockRes as unknown as IncomingMessage);
 
   const mockUser: IUser = { sub: 'user123' };
   const mockCookie = {

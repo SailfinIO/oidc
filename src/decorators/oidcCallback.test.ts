@@ -5,7 +5,7 @@ import { Client } from '../classes/Client';
 import { IClientConfig, IRequest, IResponse } from '../interfaces';
 import { StatusCode, StorageMechanism } from '../enums';
 import { Request, Response } from '../classes';
-import { ServerResponse } from 'http';
+import { IncomingMessage, ServerResponse } from 'http';
 
 /**
  * Creates a mocked ServerResponse with jest.fn() for methods.
@@ -80,7 +80,7 @@ describe('OidcCallback Decorator', () => {
     mockWriteHead = mocks.mockWriteHead;
 
     // Instantiate Response with the mocked ServerResponse
-    response = new Response(mockRes as ServerResponse);
+    response = new Response(mockRes as unknown as IncomingMessage);
 
     mockResponse = response;
 

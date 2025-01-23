@@ -16,7 +16,7 @@ import {
 import { SessionMode, StatusCode } from '../enums';
 import { Request } from './Request';
 import { Response } from './Response';
-import { ServerResponse } from 'http';
+import { IncomingMessage, ServerResponse } from 'http';
 
 jest.useFakeTimers();
 jest.spyOn(global, 'setTimeout');
@@ -76,7 +76,7 @@ describe('Session', () => {
     mockWriteHead = mocks.mockWriteHead;
 
     // Instantiate Response with the mocked ServerResponse
-    response = new Response(mockRes as ServerResponse);
+    response = new Response(mockRes as unknown as IncomingMessage);
     config = {
       session: {
         useSilentRenew: true,
