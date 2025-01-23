@@ -1,3 +1,9 @@
+## [0.1.0-beta.14](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.13...v0.1.0-beta.14) (2025-01-23)
+
+### Bug Fixes
+
+* check for plain req ([142d604](https://github.com/SailfinIO/oidc/commit/142d604c8cbd470ee90f35c7543d085a488e3bd7))
+
 ## [0.1.0-beta.13](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.12...v0.1.0-beta.13) (2025-01-23)
 
 ### Bug Fixes
