@@ -33,6 +33,7 @@ export interface IMethodMetadata {
   requiresRefresh?: boolean;
   route?: {
     method: RequestMethod;
+    path: string;
   };
 }
 

@@ -6,11 +6,13 @@ import { Response } from './Response';
 import { Middleware, MiddlewareManager } from '../middleware/MiddlewareManager';
 import { pathToRegexp } from '../utils/pathToReg';
 import { HttpException } from '../errors/HttpExeption';
-import { StatusCode } from '../enums';
-import { IRequest, IResponse } from '../interfaces';
+import { RequestMethod, StatusCode } from '../enums';
+import { IMethodMetadata, IRequest, IResponse } from '../interfaces';
 import { Cache } from '../cache/Cache';
 import { ILogger } from '../interfaces';
 import { Logger } from '../utils/Logger';
+import { MetadataManager } from 'src/decorators';
+import { Container } from 'src/utils/Container';
 
 // define RouteHandler type
 type RouteHandler = (req: Request, res: Response) => Promise<void>;
@@ -150,5 +152,80 @@ export class App {
       }
     }
     return undefined; // No match found
+  }
+
+  public registerHandlers(...handlers: Function[]): void {
+    handlers.forEach((controller) => {
+      const classMetadata = MetadataManager.getClassMetadata(controller);
+      if (!classMetadata) {
+        this.logger.warn(
+          `No metadata found for controller: ${controller.name}`,
+        );
+        return;
+      }
+
+      const basePath = classMetadata.path || '';
+      const instance = this.resolveHandlerInstance(controller);
+
+      // Retrieve all method names excluding constructor
+      const methodNames = Object.getOwnPropertyNames(
+        controller.prototype,
+      ).filter(
+        (prop) =>
+          prop !== 'constructor' &&
+          typeof controller.prototype[prop] === 'function',
+      );
+
+      methodNames.forEach((methodName) => {
+        const methodMetadata = MetadataManager.getMethodMetadata(
+          controller,
+          methodName,
+        ) as IMethodMetadata;
+        if (!methodMetadata || !methodMetadata.route) return;
+
+        const { method, path } = methodMetadata.route;
+        const fullPath = this.normalizePath(`${basePath}${path}`);
+        const httpMethod = method || RequestMethod.GET;
+
+        // Bind the method to the instance to preserve 'this'
+        const handler = instance[methodName].bind(instance);
+
+        this.route(httpMethod, fullPath, handler);
+        this.logger.info(`Registered route: [${httpMethod}] ${fullPath}`);
+      });
+    });
+  }
+  /**
+   * Resolves an instance of the handler, handling dependency injection.
+   * @param handler The handler class constructor.
+   */
+  private resolveHandlerInstance(handler: Function): any {
+    const paramTypes: any[] =
+      Reflect.getMetadata('design:paramtypes', handler) || [];
+    const dependencies = paramTypes.map((param: any, index: number) => {
+      const injectMetadata = MetadataManager.getMethodMetadata(
+        handler,
+        'constructor',
+      )?.inject;
+      const token =
+        injectMetadata && injectMetadata[index] ? injectMetadata[index] : param;
+      return Container.resolve(token);
+    });
+
+    return new (handler as any)(...dependencies);
+  }
+
+  /**
+   * Normalizes the path to ensure it starts with a '/' and doesn't have trailing slashes.
+   * @param path The route path.
+   */
+  private normalizePath(path: string): string {
+    if (!path.startsWith('/')) {
+      path = `/${path}`;
+    }
+    if (path !== '/' && path.endsWith('/')) {
+      path = path.slice(0, -1);
+    }
+    return path;
   }
 }
