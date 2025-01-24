@@ -1,3 +1,9 @@
+## [0.1.0-beta.18](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.17...v0.1.0-beta.18) (2025-01-24)
+
+### Bug Fixes
+
+* add container class ([4b71e5b](https://github.com/SailfinIO/oidc/commit/4b71e5b442091ba871ecc134b43760c49bf62dba))
+
 ## [0.1.0-beta.17](https://github.com/SailfinIO/oidc/compare/v0.1.0-beta.16...v0.1.0-beta.17) (2025-01-23)
 
 ### Bug Fixes
