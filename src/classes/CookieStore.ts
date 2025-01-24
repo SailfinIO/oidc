@@ -60,7 +60,10 @@ export class CookieStore implements ISessionStore {
     this.logger = new Logger(CookieStore.name);
     this.cookieName = cookieName;
     this.cookieOptions = cookieOptions;
-    this.mutex = new Mutex();
+    this.mutex = new Mutex({
+      defaultTimeout: 5000,
+      backoff: { maxAttempts: 5, initialDelay: 10, factor: 2, maxDelay: 1000 },
+    });
     this.dataStore =
       dataStore || new MemoryStore(this.logger, cookieOptions.maxAge * 1000);
   }

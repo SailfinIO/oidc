@@ -4,9 +4,9 @@ import { constants, verify as cryptoVerify } from 'crypto';
 import { SignatureVerifier } from './SignatureVerifier';
 import { ClientError } from '../errors/ClientError';
 import { Jwks } from '.';
-import { ecDsaSignatureFromRaw } from '../utils/derEncoding';
-import { ecJwkToPem } from '../utils/ecKeyConverter';
-import { rsaJwkToPem } from '../utils/rsaKeyConverter';
+import { ecDsaSignatureFromRaw } from '../utils/derUtils';
+import { ecJwkToPem } from '../utils/ecKeyUtils';
+import { rsaJwkToPem } from '../utils/rsaKeyUtils';
 import { Algorithm } from '../enums';
 import { ClientMetadata, ILogger } from '../interfaces';
 import { base64UrlDecode } from '../utils/urlUtils';
@@ -19,15 +19,15 @@ jest.mock('crypto', () => ({
 
 jest.mock('./Jwks');
 
-jest.mock('../utils/rsaKeyConverter', () => ({
+jest.mock('../utils/rsaKeyUtils', () => ({
   rsaJwkToPem: jest.fn(),
 }));
 
-jest.mock('../utils/ecKeyConverter', () => ({
+jest.mock('../utils/ecKeyUtils', () => ({
   ecJwkToPem: jest.fn(),
 }));
 
-jest.mock('../utils/derEncoding', () => ({
+jest.mock('../utils/derUtils', () => ({
   ecDsaSignatureFromRaw: jest.fn(),
 }));
 

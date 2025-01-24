@@ -73,4 +73,26 @@ export interface ILogoutUrlParams {
    * ```
    */
   state?: string;
+
+  /**
+   * An optional hint to the identity provider about the user's preferred logout behavior.
+   *
+   * @type {string | undefined}
+   * @example
+   * ```typescript
+   * const params: ILogoutUrlParams = { logoutHint: 'logout' };
+   * ```
+   */
+  logoutHint?: string;
+
+  /**
+   * An optional prompt parameter to control the user's interaction during logout.
+   *
+   * @type {string | undefined}
+   * @example
+   * ```typescript
+   * const params: ILogoutUrlParams = { prompt: 'login' };
+   * ```
+   */
+  uiLocales?: string;
 }

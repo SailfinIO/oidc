@@ -7,16 +7,64 @@ import {
   IResponse,
   IRequest,
 } from '../interfaces';
-import { SameSite } from '../enums';
+import { SameSite, StatusCode } from '../enums';
 import { Cookie } from '../utils/Cookie';
 import { Request } from './Request';
 import { Response } from './Response';
+import { IncomingMessage, ServerResponse } from 'http';
+
+/**
+ * Creates a mocked ServerResponse with jest.fn() for methods.
+ */
+export const createMockServerResponse = () => {
+  const mockSetHeader = jest.fn();
+  const mockGetHeader = jest.fn();
+  const mockRemoveHeader = jest.fn();
+  const mockEnd = jest.fn();
+  const mockWriteHead = jest.fn();
+
+  const mockRes: Partial<ServerResponse> = {
+    setHeader: mockSetHeader,
+    getHeader: mockGetHeader,
+    removeHeader: mockRemoveHeader,
+    end: mockEnd,
+    writeHead: mockWriteHead,
+    headersSent: false,
+    statusCode: StatusCode.OK,
+  };
+
+  return {
+    mockRes,
+    mockSetHeader,
+    mockGetHeader,
+    mockRemoveHeader,
+    mockEnd,
+    mockWriteHead,
+  };
+};
 
 describe('CookieStore', () => {
   let cookieStore: CookieStore;
   let context: IStoreContext;
   let mockRequest: IRequest;
   let mockResponse: IResponse;
+  let response: IResponse;
+  let mockRes: Partial<ServerResponse>;
+  let mockSetHeader: jest.Mock;
+  let mockGetHeader: jest.Mock;
+  let mockRemoveHeader: jest.Mock;
+  let mockEnd: jest.Mock;
+  let mockWriteHead: jest.Mock;
+  const mocks = createMockServerResponse();
+  mockRes = mocks.mockRes;
+  mockSetHeader = mocks.mockSetHeader;
+  mockGetHeader = mocks.mockGetHeader;
+  mockRemoveHeader = mocks.mockRemoveHeader;
+  mockEnd = mocks.mockEnd;
+  mockWriteHead = mocks.mockWriteHead;
+
+  // Instantiate Response with the mocked ServerResponse
+  response = new Response(mockRes as unknown as IncomingMessage);
 
   const mockUser: IUser = { sub: 'user123' };
   const mockCookie = {
@@ -25,6 +73,7 @@ describe('CookieStore', () => {
     expires_in: 3600,
     token_type: 'Bearer',
   };
+  //@ts-ignore
   mockRequest = new Request()
     .setUrl('http://localhost')
     .setHeaders({
@@ -46,7 +95,7 @@ describe('CookieStore', () => {
       token_type: 'Bearer',
     });
 
-  mockResponse = new Response();
+  mockResponse = response;
 
   beforeEach(() => {
     const memoryStore = new MemoryStore();
@@ -110,6 +159,7 @@ describe('CookieStore', () => {
     const sid = await cookieStore.set(data, context);
 
     // Create a new request that includes the correct cookie name and value
+    //@ts-ignore
     const newRequest = new Request()
       .setUrl('http://localhost')
       .setHeaders({

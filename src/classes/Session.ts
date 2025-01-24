@@ -18,6 +18,18 @@ import { parseCookies } from '../utils';
 import { SameSite, SessionMode, StorageMechanism } from '../enums';
 import { randomBytes } from 'crypto';
 
+function isExpressRequest(req: any): boolean {
+  return req && typeof req === 'object' && typeof req.cookies === 'object';
+}
+
+function isExpressResponse(res: any): boolean {
+  return (
+    res &&
+    typeof res.cookie === 'function' &&
+    typeof res.clearCookie === 'function'
+  );
+}
+
 export class Session implements ISession {
   private readonly config: IClientConfig;
   private readonly logger: ILogger;
@@ -155,7 +167,9 @@ export class Session implements ISession {
   }
 
   private exposeTokensToClient(context: IStoreContext, tokens: TokenSet): void {
-    if (!context.response || context.response.headersSent) {
+    const { response } = context;
+
+    if (!response || response.headersSent) {
       this.logger.warn(
         'Response already sent or not available, skipping token exposure.',
       );
@@ -168,14 +182,19 @@ export class Session implements ISession {
       options: CookieOptions,
     ): void => {
       try {
-        if (context.response && !context.response.headersSent) {
-          context.response.cookie(cookieName, cookieVal, options);
+        if (isExpressResponse(response)) {
+          // Express-style response
+          response.cookie(cookieName, cookieVal, options);
           this.logger.debug(`Cookie set successfully`, { cookieName, options });
-        } else {
-          this.logger.warn(
-            'Response headers already sent. Skipping setting cookie:',
-            cookieName,
+        } else if (response.headers) {
+          // Plain object response (manually set cookies in headers)
+          const serializedCookie = `${cookieName}=${cookieVal}; Path=${options.path || '/'}; HttpOnly=${options.httpOnly || false}; Secure=${options.secure || false}; SameSite=${options.sameSite || 'Lax'}; Max-Age=${options.maxAge || 3600}`;
+          response.headers.set('Set-Cookie', serializedCookie);
+          this.logger.debug(
+            `Cookie manually added to headers: ${serializedCookie}`,
           );
+        } else {
+          this.logger.warn('Unsupported response type for setting cookies.');
         }
       } catch (error) {
         this.logger.error(
@@ -218,17 +237,32 @@ export class Session implements ISession {
   }
 
   private clearSessionCookie(context: IStoreContext): void {
-    const sessionCookieName = this.config.session?.cookie?.name || 'sid';
+    const sessionCookieName =
+      this.config.session?.cookie?.name || 'sailfin.sid';
 
     try {
-      context.response?.clearCookie(sessionCookieName, {
-        httpOnly: this.config.session?.cookie?.options?.httpOnly ?? true,
-        secure: this.config.session?.cookie?.options?.secure ?? true,
-        sameSite:
-          this.config.session?.cookie?.options?.sameSite ?? SameSite.STRICT,
-        path: this.config.session?.cookie?.options?.path ?? '/',
-      });
-      this.logger.debug(`Cleared session cookie: ${sessionCookieName}`);
+      if (isExpressResponse(context.response)) {
+        // Express-style response
+        context.response.clearCookie(sessionCookieName, {
+          httpOnly: this.config.session?.cookie?.options?.httpOnly ?? true,
+          secure: this.config.session?.cookie?.options?.secure ?? true,
+          sameSite:
+            this.config.session?.cookie?.options?.sameSite ?? SameSite.STRICT,
+          path: this.config.session?.cookie?.options?.path ?? '/',
+        });
+        this.logger.debug(`Cleared session cookie: ${sessionCookieName}`);
+      } else if (context.response?.headers) {
+        // Plain object response (manually remove cookie in headers)
+        context.response.headers.set(
+          'Set-Cookie',
+          `${sessionCookieName}=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Strict`,
+        );
+        this.logger.debug(
+          `Cleared session cookie manually in headers: ${sessionCookieName}`,
+        );
+      } else {
+        this.logger.warn('Unsupported response type for clearing cookies.');
+      }
     } catch (error) {
       this.logger.error(
         `Failed to clear session cookie ${sessionCookieName}. Error: ${error.message}`,
@@ -258,9 +292,14 @@ export class Session implements ISession {
       });
     }
 
+    // Generate CSRF token first
+    const csrfToken = randomBytes(32).toString('hex');
+
+    // Include csrfToken in sessionData
     const sessionData: ISessionData = {
       cookie: tokens,
       user: userInfo || undefined,
+      csrfToken, // Added csrfToken here
     };
 
     // Try/catch around store.set
@@ -318,11 +357,7 @@ export class Session implements ISession {
       );
     }
 
-    // Generate CSRF token
-    const csrfToken = randomBytes(32).toString('hex');
-    context.request.session.csrfToken = csrfToken;
-
-    // Set CSRF token in a separate cookie
+    // Set CSRF token in a separate cookie if needed
     try {
       context.response?.cookie('csrf_token', csrfToken, {
         httpOnly: this.config.session?.cookie?.options?.httpOnly ?? true,
@@ -521,7 +556,10 @@ export class Session implements ISession {
   public async save(context: IStoreContext, tokens: TokenSet): Promise<void> {
     // 1) Check if we have an existing session ID (sid) from cookies
     const sessionCookieName = this.config.session?.cookie?.name || 'sid';
-    const sid = context.request.cookies[sessionCookieName];
+
+    // should now use .setCookie instead of directly accessing headers
+    // const sid = context.request.cookies[sessionCookieName];
+    const sid = this.getSidFromCookies(context);
 
     if (!sid) {
       this.logger.debug('No existing SID found; creating a new server session');

@@ -106,7 +106,7 @@ export class MetadataManager {
   /**
    * Attach (merge) metadata to a method (by property name).
    * @param {Function} targetConstructor - The constructor function.
-   * @param {string} propertyKey - The method name.
+   * @param {string | symbol} propertyKey - The method name.
    * @param {Partial<IMethodMetadata>} metadata - The metadata to attach.
    * @throws {TypeError} If targetConstructor is not a constructor function.
    * @throws {TypeError} If propertyKey is not a string.
@@ -114,7 +114,7 @@ export class MetadataManager {
    */
   public static setMethodMetadata(
     targetConstructor: Function,
-    propertyKey: string,
+    propertyKey: string | symbol,
     metadata: Partial<IMethodMetadata>,
   ): void {
     if (typeof targetConstructor !== 'function') {
@@ -122,14 +122,16 @@ export class MetadataManager {
         'setMethodMetadata expects a constructor function as the targetConstructor.',
       );
     }
-    if (typeof propertyKey !== 'string') {
+    if (typeof propertyKey !== 'string' && typeof propertyKey !== 'symbol') {
       throw new TypeError(
-        'setMethodMetadata expects a string as the propertyKey.',
+        'setMethodMetadata expects a string or symbol as the propertyKey.',
       );
     }
 
+    const key =
+      typeof propertyKey === 'symbol' ? propertyKey.toString() : propertyKey;
     const ctorKey = KeyFactory.getKeyForFunction(targetConstructor);
-    const cacheKey = `method:${ctorKey}:${propertyKey}`;
+    const cacheKey = `method:${ctorKey}:${key}`;
     const existing = this.methodMetadataCache.get(cacheKey) || {};
     const merged = { ...existing, ...metadata };
     this.methodMetadataCache.set(cacheKey, merged);
@@ -138,28 +140,30 @@ export class MetadataManager {
   /**
    * Retrieve metadata attached to a specific method on a class constructor.
    * @param {Function} targetConstructor - The constructor function.
-   * @param {string} propertyKey - The method name.
+   * @param {string | symbol} propertyKey - The method name.
    * @throws {TypeError} If targetConstructor is not a constructor function.
    * @throws {TypeError} If propertyKey is not a string.
    * @returns {IMethodMetadata | undefined} The metadata attached to the method.
    */
   public static getMethodMetadata(
     targetConstructor: Function,
-    propertyKey: string,
+    propertyKey: string | symbol,
   ): IMethodMetadata | undefined {
     if (typeof targetConstructor !== 'function') {
       throw new TypeError(
         'getMethodMetadata expects a constructor function as the targetConstructor.',
       );
     }
-    if (typeof propertyKey !== 'string') {
+    if (typeof propertyKey !== 'string' && typeof propertyKey !== 'symbol') {
       throw new TypeError(
-        'getMethodMetadata expects a string as the propertyKey.',
+        'getMethodMetadata expects a string or symbol as the propertyKey.',
       );
     }
 
+    const key =
+      typeof propertyKey === 'symbol' ? propertyKey.toString() : propertyKey;
     const ctorKey = KeyFactory.getKeyForFunction(targetConstructor);
-    const cacheKey = `method:${ctorKey}:${propertyKey}`;
+    const cacheKey = `method:${ctorKey}:${key}`;
     return this.methodMetadataCache.get(cacheKey);
   }
 
@@ -203,6 +207,11 @@ export class MetadataManager {
     method: string,
     path: string,
   ): IRouteMetadata | undefined {
+    // Skip static files
+    if (/\.(js|css|map|ico|png|jpg|jpeg|gif|svg)$/.test(path)) {
+      return undefined;
+    }
+
     if (typeof method !== 'string') {
       throw new TypeError(
         `getRouteMetadata expects 'method' to be a string, received ${typeof method}.`,

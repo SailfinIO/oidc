@@ -27,6 +27,7 @@ import EventEmitter from 'events';
 import { defaultMutexOptions } from '../constants/defaultMutexOptions';
 import { MaxHeap } from '../utils/MaxHeap';
 import { MutexRegistry } from './MutexRegistry';
+import { deepMerge } from './deepMerge';
 
 /**
  * Represents a mutex (mutual exclusion) utility for controlling access to asynchronous resources.
@@ -64,8 +65,12 @@ export class Mutex<MutexOwner extends Owner = Owner>
    */
   constructor(options: MutexOptions = defaultMutexOptions) {
     super();
-    this.options = { ...defaultMutexOptions, ...options };
-    this.logger = this.options.logger!;
+    this.options = deepMerge(defaultMutexOptions, options) as MutexOptions;
+    if (!this.options.logger) {
+      this.options.logger = defaultMutexOptions.logger;
+    }
+
+    this.logger = this.options.logger;
     this.timer = this.options.timer!;
 
     this.registry = MutexRegistry.instance;

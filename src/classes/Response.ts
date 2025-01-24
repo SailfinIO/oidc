@@ -1,12 +1,11 @@
+// Import necessary modules and types
+import { Readable } from 'stream';
 import { ContentType, StatusCode } from '../enums';
 import {
   CookieOptions,
   HeaderName,
   HeaderValue,
   IResponse,
-} from '../interfaces';
-import { serialize as serializeCookie } from '../utils/Cookie';
-import {
   ResponseBody,
   ResponseHeaders,
   ResponseCookies,
@@ -15,29 +14,29 @@ import {
   ResponseRedirect,
   ResponseEnd,
 } from '../interfaces';
+import { serialize as serializeCookie } from '../utils/Cookie';
+import { IncomingMessage, ServerResponse } from 'http';
 
-export class Response implements IResponse {
-  private _headers: ResponseHeaders | null = null;
+export class Response
+  extends ServerResponse<IncomingMessage>
+  implements IResponse
+{
+  private _headers: Map<string, HeaderValue>;
   private _status: ResponseStatus = StatusCode.OK;
-  private _cookies: ResponseCookies | null = null;
+  private _cookies: Map<string, string>;
   private _body: ResponseBody = null;
-  private _headersSent: boolean = false;
 
-  public get headersSent(): boolean {
-    return this._headersSent;
+  constructor(req: IncomingMessage) {
+    super(req);
+    this._headers = new Map<string, HeaderValue>();
+    this._cookies = new Map<string, string>();
   }
 
   public get cookies(): ResponseCookies {
-    if (!this._cookies) {
-      this._cookies = new Map<string, string>();
-    }
     return this._cookies;
   }
 
   public get headers(): ResponseHeaders {
-    if (!this._headers) {
-      this._headers = new Map<string, string | string[]>();
-    }
     return this._headers;
   }
 
@@ -54,17 +53,29 @@ export class Response implements IResponse {
       throw new Error(`Invalid status code: ${code}`);
     }
     this._status = code;
+    this.statusCode = code;
     return this;
   }
 
   public send(body: ResponseBody): this {
-    if (typeof body === 'object' && !Buffer.isBuffer(body)) {
+    if (this.headersSent) {
+      throw new Error('Cannot send response, headers already sent.');
+    }
+
+    if (body instanceof Readable) {
+      this._body = body;
+      body.pipe(this);
+    } else if (typeof body === 'object' && !Buffer.isBuffer(body)) {
       this.type(ContentType.JSON);
       this._body = JSON.stringify(body);
+      this.end(this._body);
     } else {
+      // Set Content-Type to text/plain for string or Buffer
+      this.type(ContentType.TEXT);
       this._body = body;
+      this.end(this._body);
     }
-    this.finalizeResponse();
+
     return this;
   }
 
@@ -87,34 +98,47 @@ export class Response implements IResponse {
   }
 
   public setHeader(name: HeaderName, value: HeaderValue): this {
-    if (!this._headers) {
-      this._headers = new Map<string, HeaderValue>();
+    if (this.headersSent) {
+      throw new Error('Cannot set headers after they are sent to the client.');
     }
+    super.setHeader(name, value);
     this._headers.set(name.toLowerCase(), value);
     return this;
   }
 
   public getHeader(name: HeaderName): HeaderValue | undefined {
-    return this._headers?.get(name.toLowerCase());
+    const header =
+      this._headers.get(name.toLowerCase()) || super.getHeader(name);
+    return typeof header === 'number' ? header.toString() : header;
   }
 
   public removeHeader(name: HeaderName): void {
-    this._headers?.delete(name.toLowerCase());
+    if (this.headersSent) {
+      throw new Error(
+        'Cannot remove headers after they are sent to the client.',
+      );
+    }
+    this.removeHeader(name); // Changed from super.removeHeader
+    this._headers.delete(name.toLowerCase());
   }
 
   public append(name: HeaderName, value: HeaderValue): this {
-    if (!this._headers) {
-      this._headers = new Map<string, HeaderValue>();
+    if (this.headersSent) {
+      throw new Error(
+        'Cannot append headers after they are sent to the client.',
+      );
     }
     const key = name.toLowerCase();
     const existing = this._headers.get(key);
+
     if (existing) {
-      if (Array.isArray(existing)) {
-        this._headers.set(key, existing.concat(value));
-      } else {
-        this._headers.set(key, [existing, value].flat());
-      }
+      const newValue = Array.isArray(existing)
+        ? [...existing, ...[].concat(value)]
+        : [existing, ...[].concat(value)];
+      this.setHeader(name, newValue); // Changed from super.setHeader
+      this._headers.set(key, newValue);
     } else {
+      this.setHeader(name, value); // Changed from super.setHeader
       this._headers.set(key, value);
     }
     return this;
@@ -125,8 +149,10 @@ export class Response implements IResponse {
     value: string,
     options: CookieOptions = {},
   ): this {
-    if (!this._cookies) {
-      this._cookies = new Map<string, string>();
+    if (this.headersSent) {
+      throw new Error(
+        'Cannot set cookies after headers are sent to the client.',
+      );
     }
 
     // Update the internal cookies map
@@ -140,8 +166,10 @@ export class Response implements IResponse {
   }
 
   public clearCookie(name: string, options: CookieOptions = {}): this {
-    if (!this._cookies) {
-      this._cookies = new Map<string, string>();
+    if (this.headersSent) {
+      throw new Error(
+        'Cannot clear cookies after headers are sent to the client.',
+      );
     }
 
     // Remove from the internal cookies map
@@ -153,27 +181,43 @@ export class Response implements IResponse {
   }
 
   public type(contentType: ContentType): this {
-    this.setHeader('Content-Type', contentType);
-    return this;
+    return this.setHeader('Content-Type', contentType);
   }
 
   public location(url: ResponseLocation): this {
-    this.setHeader('Location', url || '');
-    return this;
+    return this.setHeader('Location', url || '');
   }
 
-  public end(body?: ResponseEnd): void {
+  public end(body?: ResponseEnd): this {
+    if (this.headersSent) {
+      throw new Error('Cannot end response, headers already sent.');
+    }
+
     if (body !== undefined) {
       this._body = body;
     }
     this.finalizeResponse();
+    return this;
   }
 
-  protected async finalizeResponse(): Promise<void> {
-    console.log('Finalizing response...');
-    console.log(`Status: ${this._status}`);
-    console.log(`Headers:`, Object.fromEntries(this.headers));
-    console.log(`Cookies:`, Object.fromEntries(this.cookies));
-    console.log(`Body:`, this.body);
+  protected finalizeResponse(): void {
+    if (this.headersSent) {
+      return;
+    }
+
+    // Set status code (already set in status method if called)
+    this.statusCode = this._status || StatusCode.OK;
+
+    // Send the body
+    if (this._body !== null) {
+      if (typeof this._body === 'string' || Buffer.isBuffer(this._body)) {
+        super.end(this._body);
+      } else {
+        // For other types (e.g., streams), additional handling is needed
+        super.end(String(this._body));
+      }
+    } else {
+      super.end();
+    }
   }
 }

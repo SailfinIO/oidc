@@ -13,13 +13,41 @@ import {
   IRequest,
   IStoreContext,
 } from '../interfaces';
-import { SessionMode } from '../enums';
+import { SessionMode, StatusCode } from '../enums';
 import { Request } from './Request';
 import { Response } from './Response';
+import { IncomingMessage, ServerResponse } from 'http';
 
 jest.useFakeTimers();
 jest.spyOn(global, 'setTimeout');
 jest.spyOn(global, 'clearTimeout');
+
+const createMockServerResponse = () => {
+  const mockSetHeader = jest.fn();
+  const mockGetHeader = jest.fn();
+  const mockRemoveHeader = jest.fn();
+  const mockEnd = jest.fn();
+  const mockWriteHead = jest.fn();
+
+  const mockRes: Partial<ServerResponse> = {
+    setHeader: mockSetHeader,
+    getHeader: mockGetHeader,
+    removeHeader: mockRemoveHeader,
+    end: mockEnd,
+    writeHead: mockWriteHead,
+    headersSent: false,
+    statusCode: StatusCode.OK,
+  };
+
+  return {
+    mockRes,
+    mockSetHeader,
+    mockGetHeader,
+    mockRemoveHeader,
+    mockEnd,
+    mockWriteHead,
+  };
+};
 
 describe('Session', () => {
   let config: Partial<IClientConfig>;
@@ -30,8 +58,25 @@ describe('Session', () => {
   let session: ISession;
   let mockRequest: IRequest;
   let mockResponse: IResponse;
+  let response: IResponse;
+  let mockRes: Partial<ServerResponse>;
+  let mockSetHeader: jest.Mock;
+  let mockGetHeader: jest.Mock;
+  let mockRemoveHeader: jest.Mock;
+  let mockEnd: jest.Mock;
+  let mockWriteHead: jest.Mock;
 
   beforeEach(() => {
+    const mocks = createMockServerResponse();
+    mockRes = mocks.mockRes;
+    mockSetHeader = mocks.mockSetHeader;
+    mockGetHeader = mocks.mockGetHeader;
+    mockRemoveHeader = mocks.mockRemoveHeader;
+    mockEnd = mocks.mockEnd;
+    mockWriteHead = mocks.mockWriteHead;
+
+    // Instantiate Response with the mocked ServerResponse
+    response = new Response(mockRes as unknown as IncomingMessage);
     config = {
       session: {
         useSilentRenew: true,
@@ -75,7 +120,7 @@ describe('Session', () => {
       userInfoClient,
       sessionStore,
     );
-
+    //@ts-ignore
     mockRequest = new Request()
       .setUrl('http://localhost')
       .setHeaders({
@@ -90,7 +135,7 @@ describe('Session', () => {
       .setIps(['127.0.0.1'])
       .setCookies({ sid: 'mock-sid' });
 
-    mockResponse = new Response();
+    mockResponse = response;
   });
 
   afterEach(() => {
@@ -156,6 +201,7 @@ describe('Session', () => {
       (sessionStore.set as jest.Mock).mockResolvedValue('new-mock-sid');
 
       // Mock request and response objects with empty cookie
+      //@ts-ignore
       const mockRequest = new Request()
         .setUrl('http://localhost')
         .setHeaders({
@@ -208,6 +254,7 @@ describe('Session', () => {
       (tokenClient.getTokens as jest.Mock).mockReturnValue(null);
 
       // Mock request and response objects
+      //@ts-ignore
       const mockRequest = new Request()
         .setUrl('http://localhost')
         .setHeaders({
@@ -221,7 +268,6 @@ describe('Session', () => {
         .setIps(['127.0.0.1'])
         .setCookies({ sid: 'mock-sid' });
 
-      const mockResponse = new Response();
       const context = { request: mockRequest, response: mockResponse };
 
       // Act & Assert
@@ -255,6 +301,7 @@ describe('Session', () => {
       (sessionStore.set as jest.Mock).mockResolvedValue('new-mock-sid');
 
       // Mock request and response objects
+      //@ts-ignore
       const mockRequest = new Request()
         .setUrl('http://localhost')
         .setHeaders({
@@ -267,8 +314,6 @@ describe('Session', () => {
         .setIp('127.0.0.1')
         .setIps(['127.0.0.1'])
         .setCookies({ sid: 'mock-sid' });
-
-      const mockResponse = new Response();
 
       const context = { request: mockRequest, response: mockResponse };
 
@@ -300,7 +345,6 @@ describe('Session', () => {
     it('should throw an error if request is missing in context', async () => {
       // Arrange
 
-      const mockResponse = new Response();
       const context = { request: undefined, response: mockResponse };
 
       // Act & Assert
@@ -770,6 +814,7 @@ describe('Session', () => {
       (tokenClient.getTokens as jest.Mock).mockResolvedValue(null);
 
       // Mock request and response objects
+      //@ts-ignore
       const mockRequest = new Request()
         .setUrl('http://localhost')
         .setHeaders({
@@ -783,8 +828,6 @@ describe('Session', () => {
         .setIp('127.0.0.1')
         .setIps(['127.0.0.1'])
         .setCookies({ sid: 'mock-sid' });
-
-      const mockResponse = new Response();
 
       const context = { request: mockRequest, response: mockResponse };
 
@@ -828,6 +871,7 @@ describe('Session', () => {
       // Mock sessionStore.touch to simulate updating session
       (sessionStore.touch as jest.Mock).mockResolvedValue(undefined);
       // Mock request and response objects
+      //@ts-ignore
       const mockRequest = new Request()
         .setUrl('http://localhost')
         .setHeaders({
@@ -841,8 +885,6 @@ describe('Session', () => {
         .setIp('127.0.0.1')
         .setIps(['127.0.0.1'])
         .setCookies({ sid: 'mock-sid' });
-
-      const mockResponse = new Response();
 
       const context = { request: mockRequest, response: mockResponse };
 
@@ -1024,6 +1066,7 @@ describe('Session', () => {
     let mockResponse: IResponse;
 
     beforeEach(() => {
+      //@ts-ignore
       const mockRequest = new Request()
         .setUrl('http://localhost')
         .setHeaders({
@@ -1043,6 +1086,7 @@ describe('Session', () => {
 
     it('should create a new session if no sid cookie is present', async () => {
       // Arrange
+      //@ts-ignore
       mockRequest = new Request()
         .setUrl('http://localhost')
         .setHeaders({

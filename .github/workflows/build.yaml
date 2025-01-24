@@ -53,12 +53,12 @@ jobs:
           name: coverage
           path: coverage/lcov.info
 
-      - name: Upload TypeDoc to Pages Artifact
-        if: success()
-        uses: actions/upload-pages-artifact@v1
-        with:
-          name: github-pages
-          path: docs
+      # - name: Upload TypeDoc to Pages Artifact
+      #   if: success()
+      #   uses: actions/upload-pages-artifact@v1
+      #   with:
+      #     name: github-pages
+      #     path: docs
 
   sonarcloud:
     name: SonarCloud

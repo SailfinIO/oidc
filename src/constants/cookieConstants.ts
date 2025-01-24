@@ -4,7 +4,7 @@
  * These constants follow the specifications outlined in RFC 6265 and related standards.
  * Each regular expression ensures compliance with the rules for cookie names, values, domains, and paths.
  *
- * @module src/constants/cookie-constants
+ * @module src/constants/cookieConstants
  */
 
 /**

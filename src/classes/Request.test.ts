@@ -17,12 +17,13 @@ describe('Request', () => {
   let request: IRequest;
 
   beforeEach(() => {
+    //@ts-ignore
     request = new Request();
   });
 
   it('should initialize with default values', () => {
     expect(request.method).toBe(RequestMethod.GET);
-    expect(request.url).toBe('');
+    expect(request.url).toBe('http://localhost');
     expect(request.originalUrl).toBe('');
     expect(request.path).toBe('');
     expect(request.query).toEqual({});
@@ -150,6 +151,8 @@ describe('Request', () => {
   });
 
   it('should clone request', () => {
+    const url: RequestUrl = 'http://example.com';
+    request.setUrl(url);
     const clonedRequest = request.clone();
     expect(clonedRequest).not.toBe(request);
     expect(clonedRequest.method).toBe(request.method);

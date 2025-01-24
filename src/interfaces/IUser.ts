@@ -234,4 +234,48 @@ export interface IUser {
    * ```
    */
   address?: Address<ExtendedAddress>;
+
+  /**
+   * The Authentication Context Class Reference (ACR) value.
+   * This field indicates the method used to authenticate the user.
+   * @type {string | undefined}
+   * @example
+   * ```typescript
+   * const userInfo: IUser = { sub: '123', acr: 'urn:mace:incommon:iap:silver' };
+   * ```
+   */
+  acr?: string;
+
+  /**
+   * The user's preferred language.
+   * This field can be used to customize the user interface or content for the user.
+   * @type {string | undefined}
+   * @example
+   * ```typescript
+   * const userInfo: IUser = { sub: '123', lang: 'en-US' };
+   * ```
+   */
+  lang?: string;
+
+  /**
+   * The user's preferred time zone.
+   * This field can be used to customize the user experience based on the user's local time.
+   * @type {string | undefined}
+   * @example
+   * ```typescript
+   * const userInfo: IUser = { sub: '123', zone: 'America/New_York' };
+   * ```
+   */
+  zone?: string;
+
+  /**
+   * Additional user claims not covered by the standard claims.
+   * This field can include custom or proprietary claims.
+   * @type {Record<string, any> | undefined}
+   * @example
+   * ```typescript
+   * const userInfo: IUser = { sub: '123', ext: { customClaim: 'value' } };
+   * ```
+   * */
+  ext?: Record<string, any>;
 }

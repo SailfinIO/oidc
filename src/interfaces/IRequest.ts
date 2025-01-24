@@ -34,16 +34,16 @@ export interface IRequest {
   setProtocol(protocol: RequestProtocol): this;
 
   // Utilities
-  get(header: string): string | undefined;
+  get(header: string): string | string[] | undefined;
   is(type: string): boolean;
   hasHeader(header: string): boolean;
   accepts(types: string | string[]): string | false;
-  clone(): IRequest;
+  clone(): this;
 }
 
 // Supporting Types
 export type RequestBody = string | object | Buffer | null;
-export type RequestHeaders = Readonly<Map<string, string>>;
+export type RequestHeaders = Readonly<Map<string, string | string[]>>;
 export type RequestParams = Readonly<Record<string, any>>;
 export type RequestQuery = Readonly<Record<string, any>>;
 export type RequestCookies = Readonly<Record<string, string>>;

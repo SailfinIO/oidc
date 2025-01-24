@@ -100,6 +100,7 @@ describe('OidcLogin Decorator', () => {
 
   it('should redirect to the authorization URL when session is enabled', async () => {
     // Arrange
+    const statusCode = 302;
     const authorizationUrl = 'https://auth.example.com/authorize';
 
     mockClient.getAuthorizationUrl.mockResolvedValue({
@@ -115,11 +116,15 @@ describe('OidcLogin Decorator', () => {
 
     // Assert
     expect(mockClient.getAuthorizationUrl).toHaveBeenCalledTimes(1);
-    expect(mockResponse.redirect).toHaveBeenCalledWith(authorizationUrl);
+    expect(mockResponse.redirect).toHaveBeenCalledWith(
+      statusCode,
+      authorizationUrl,
+    );
   });
 
   it('should redirect to the authorization URL when codeVerifier is null', async () => {
     // Arrange
+    const statusCode = 302;
     const authorizationUrl = 'https://auth.example.com/authorize';
 
     mockClient.getAuthorizationUrl.mockResolvedValue({
@@ -135,12 +140,16 @@ describe('OidcLogin Decorator', () => {
 
     // Assert
     expect(mockClient.getAuthorizationUrl).toHaveBeenCalledTimes(1);
-    expect(mockResponse.redirect).toHaveBeenCalledWith(authorizationUrl);
+    expect(mockResponse.redirect).toHaveBeenCalledWith(
+      statusCode,
+      authorizationUrl,
+    );
   });
 
   it('should handle the case when session is not present gracefully', async () => {
     // Arrange
     // Since the decorator no longer manipulates session, we don't need to initialize it
+    const statusCode = 302;
     const authorizationUrl = 'https://auth.example.com/authorize';
 
     mockClient.getAuthorizationUrl.mockResolvedValue({
@@ -156,7 +165,10 @@ describe('OidcLogin Decorator', () => {
 
     // Assert
     expect(mockClient.getAuthorizationUrl).toHaveBeenCalledTimes(1);
-    expect(mockResponse.redirect).toHaveBeenCalledWith(authorizationUrl);
+    expect(mockResponse.redirect).toHaveBeenCalledWith(
+      statusCode,
+      authorizationUrl,
+    );
   });
 
   it('should redirect to the authorization URL without modifying session when session is disabled', async () => {
@@ -171,6 +183,7 @@ describe('OidcLogin Decorator', () => {
     // Initialize mockRequest without session
     mockRequest.session = undefined;
 
+    const statusCode = 302;
     const authorizationUrl = 'https://auth.example.com/authorize';
 
     mockClient.getAuthorizationUrl.mockResolvedValue({
@@ -185,7 +198,10 @@ describe('OidcLogin Decorator', () => {
     // Assert
     expect(mockClient.getAuthorizationUrl).toHaveBeenCalledTimes(1);
     expect(mockRequest.session).toBeUndefined(); // No session to modify
-    expect(mockResponse.redirect).toHaveBeenCalledWith(authorizationUrl);
+    expect(mockResponse.redirect).toHaveBeenCalledWith(
+      statusCode,
+      authorizationUrl,
+    );
   });
 
   it('should call the custom onError handler when getAuthorizationUrl throws an error', async () => {
@@ -229,6 +245,7 @@ describe('OidcLogin Decorator', () => {
 
   it('should not set codeVerifier in session if it is not provided (set to null)', async () => {
     // Arrange
+    const statusCode = 302;
     const authorizationUrl = 'https://auth.example.com/authorize';
 
     mockClient.getAuthorizationUrl.mockResolvedValue({
@@ -245,7 +262,10 @@ describe('OidcLogin Decorator', () => {
     // Assert
     expect(mockClient.getAuthorizationUrl).toHaveBeenCalledTimes(1);
     // Since decorator doesn't set session, we don't assert on session.state
-    expect(mockResponse.redirect).toHaveBeenCalledWith(authorizationUrl);
+    expect(mockResponse.redirect).toHaveBeenCalledWith(
+      statusCode,
+      authorizationUrl,
+    );
   });
 
   it('should attach metadata indicating this method is an OIDC login handler', () => {

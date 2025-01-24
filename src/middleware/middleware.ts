@@ -58,7 +58,7 @@ export const middleware = (client: Client) => {
 
         const sessionStore = client.getSessionStore();
         const sessionCookieName =
-          client.getConfig().session?.cookie?.name || 'sid';
+          client.getConfig().session?.cookie?.name || 'sailfin.sid';
         let sid = req.cookies[sessionCookieName] || null;
         let sessionData: ISessionData | null = null;
 
@@ -68,7 +68,13 @@ export const middleware = (client: Client) => {
             response: res,
           });
           if (sessionData) {
-            req.setSession(sessionData);
+            if (typeof req.setSession === 'function') {
+              req.setSession(sessionData);
+            } else {
+              // Fallback assignment if setSession isn't available
+              // @ts-ignore - Allow direct assignment since it's a fallback
+              req.session = sessionData;
+            }
             client.getLogger().debug('Session loaded', { sid, sessionData });
           } else {
             client.getLogger().warn('Invalid sid, clearing session', { sid });
@@ -81,8 +87,14 @@ export const middleware = (client: Client) => {
 
         try {
           const host =
-            (req.headers.get && req.headers.get('host')) || 'localhost';
+            typeof req.headers.get === 'function'
+              ? req.headers.get('host') || 'localhost'
+              : Array.isArray(req.headers['host'])
+                ? req.headers['host'][0] || 'localhost'
+                : req.headers['host'] || 'localhost';
+
           const baseUrl = `http://${host}`;
+          pathname = new URL(url || '', baseUrl).pathname;
           pathname = new URL(url || '', baseUrl).pathname;
         } catch (error) {
           client.getLogger().error('Invalid URL', { url, error });
@@ -205,19 +217,52 @@ const handleLogin = async (client: Client, req: IRequest, res: IResponse) => {
 
   // Initialize session if it doesn't exist
   if (!req.session) {
-    req.setSession({ state: {}, user: undefined });
+    if (typeof req.setSession === 'function') {
+      req.setSession({ state: {}, user: undefined });
+    } else {
+      // @ts-ignore - Allow direct assignment since it's a fallback
+      req.session = { state: {}, user: undefined };
+    }
   }
+
+  // Ensure the session has a `state` object
   if (!req.session.state) {
-    req.session.state = {};
+    if (typeof req.setSession === 'function') {
+      req.setSession({ ...req.session, state: {} });
+    } else {
+      req.session.state = {};
+    }
   }
 
-  // Store state and codeVerifier in session
-  req.setSession({ state: req.session.state, user: req.session.user });
-  req.session.state[state] = { codeVerifier, createdAt: Date.now() };
+  // Update session with state and codeVerifier
+  if (typeof req.setSession === 'function') {
+    req.setSession({
+      ...req.session,
+      state: {
+        ...req.session.state,
+        [state]: { codeVerifier, createdAt: Date.now() },
+      },
+    });
+  } else {
+    req.session.state[state] = { codeVerifier, createdAt: Date.now() };
+  }
 
-  res.redirect(authUrl);
+  // Redirect to the authorization URL
+  if (typeof res.redirect === 'function') {
+    res.redirect(authUrl);
+  } else if (res && typeof res === 'object') {
+    // @ts-ignore - Allow direct assignment since it's a fallback
+    res.statusCode = 302;
 
-  return;
+    // @ts-ignore - Allow direct assignment since it's a fallback
+    res.headers = {
+      ...res.headers,
+      Location: authUrl,
+    };
+    res.end();
+  } else {
+    throw new Error('Unable to redirect due to unsupported response object');
+  }
 };
 
 /**
@@ -235,7 +280,6 @@ const handleCallback = async (
   req: IRequest,
   res: IResponse,
   metadata: IRouteMetadata,
-  // next: NextFunction,
   context: IStoreContext,
 ) => {
   const host = Array.isArray(req.headers['host'])
@@ -251,13 +295,51 @@ const handleCallback = async (
 
   await client.handleRedirect(code, state, context);
 
+  // Remove the state from the session after handling it
+  if (req.session && req.session.state) {
+    delete req.session.state[state]; // Delete the specific state entry
+
+    // If `state` is now empty, clear it completely or set it to an empty object
+    if (Object.keys(req.session.state).length === 0) {
+      req.session.state = {}; // You could also set this to `undefined` if preferred
+    }
+  }
+
   const user = await client.getUserInfo();
   if (client.getConfig().session) {
     context.user = user;
-    req.setSession({
-      ...req.session,
-      user,
-    });
+    if (typeof req.setSession === 'function') {
+      // Clone session data
+      const updatedSession = {
+        ...req.session,
+        user,
+      };
+
+      // Ensure `state` is set to `{}` if it's empty
+      if (
+        updatedSession.state &&
+        Object.keys(updatedSession.state).length === 0
+      ) {
+        updatedSession.state = {};
+      }
+
+      req.setSession(updatedSession);
+    } else if (typeof req.session === 'object' && req.session !== null) {
+      // @ts-ignore - Allow direct assignment since it's a fallback
+      req.session = {
+        ...req.session,
+        user,
+      };
+
+      if (req.session.state && Object.keys(req.session.state).length === 0) {
+        req.session.state = {};
+      }
+    } else {
+      console.warn('Session management not supported in current environment');
+      throw new Error(
+        'Unable to set session data due to unsupported request object',
+      );
+    }
   }
 
   res.redirect(metadata.postLoginRedirectUri || '/');
@@ -282,9 +364,28 @@ const handleProtected = async (
   context: IStoreContext,
 ) => {
   const accessToken = await client.getAccessToken();
+
   if (!accessToken) {
     const authUrl = (await client.getAuthorizationUrl()).url;
-    res.redirect(authUrl);
+
+    // Check if res.redirect exists (e.g., in an Express environment)
+    if (typeof res.redirect === 'function') {
+      res.redirect(authUrl);
+    } else if (typeof res === 'object' && res !== null) {
+      // For non-Express environments, handle redirection
+      // @ts-ignore - Allow direct assignment since it's a fallback
+      res.statusCode = 302;
+      // @ts-ignore - Allow direct assignment since it's a fallback
+      res.headers = {
+        ...res.headers,
+        Location: authUrl,
+      };
+      res.end();
+    } else {
+      throw new Error(
+        'Unable to handle redirect due to unsupported response object',
+      );
+    }
     return;
   }
 
@@ -294,14 +395,38 @@ const handleProtected = async (
   // Optionally validate specific claims
   validateSpecificClaims(claims, metadata.requiredClaims);
 
+  // Retrieve user info and update the session
   const user = await client.getUserInfo();
   context.user = user;
-  req.setSession({
-    ...req.session,
-    user,
-  });
 
-  await next();
+  // Update the session
+  if (typeof req.setSession === 'function') {
+    req.setSession({
+      ...req.session,
+      user,
+    });
+  } else if (typeof req.session === 'object' && req.session !== null) {
+    // @ts-ignore - Allow direct assignment since it's a fallback
+    req.session = {
+      ...req.session,
+      user,
+    };
+  } else {
+    console.warn('Session management not supported in current environment');
+    throw new Error(
+      'Unable to set session data due to unsupported request object',
+    );
+  }
+
+  // Call next middleware if available
+  if (typeof next === 'function') {
+    await next();
+  } else {
+    console.warn('Next function not available in current environment');
+    throw new Error(
+      'Unable to proceed to next middleware due to unsupported context',
+    );
+  }
 };
 
 /**
@@ -393,8 +518,12 @@ export const csrfMiddleware = (client: Client) => {
     // --------------------------------------------
     // 1. Extract CSRF token from request headers
     // --------------------------------------------
-    // Given IRequest.headers is a Map<string, string>, we can directly retrieve the token.
-    const csrfToken = req.headers.get('x-csrf-token') || undefined;
+    const csrfToken =
+      typeof req.headers.get === 'function'
+        ? req.headers.get('x-csrf-token') || undefined
+        : Array.isArray(req.headers['x-csrf-token'])
+          ? req.headers['x-csrf-token'][0]
+          : req.headers['x-csrf-token'] || undefined;
 
     // --------------------------------------------
     // 2. Compare extracted token to stored token

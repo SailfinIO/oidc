@@ -91,7 +91,9 @@ export interface IAuth {
    * // Store `state` to validate upon redirect
    * ```
    */
-  getAuthorizationUrl(): Promise<IAuthorizationUrlResponse>;
+  getAuthorizationUrl(
+    additionalParams?: Record<string, string>,
+  ): Promise<IAuthorizationUrlResponse>;
 
   /**
    * Handles the redirect callback from the authorization server for authorization code flow.

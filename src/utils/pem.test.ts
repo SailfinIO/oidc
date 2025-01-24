@@ -1,6 +1,7 @@
 // src/utils/pem.test.ts
 
-import { wrapPem } from './pem';
+import { BinaryToTextEncoding } from '../enums';
+import { wrapPem, unwrapPem, derToPem } from './pem';
 
 describe('wrapPem', () => {
   it('should wrap a short Base64 string in PEM format with a given label', () => {
@@ -10,6 +11,7 @@ describe('wrapPem', () => {
 YWJjMTIz
 -----END TEST LABEL-----`;
 
+    //@ts-ignore expects CertificateLabel
     const result = wrapPem(input, label);
     expect(result).toBe(expected);
   });
@@ -24,6 +26,7 @@ YWJjMTIz
     expect(extendedInput.length).toBe(130);
 
     const label = 'LONG TEST';
+    //@ts-ignore expects CertificateLabel
     const result = wrapPem(extendedInput, label);
 
     // Split the result to verify line structure
@@ -52,6 +55,7 @@ YWJjMTIz
 
 -----END EMPTY-----`;
 
+    //@ts-ignore expects CertificateLabel
     const result = wrapPem(input, label);
     expect(result).toBe(expected);
   });
@@ -63,7 +67,102 @@ YWJjMTIz
 YQ==
 -----END MY LABEL 123!@#-----`;
 
+    //@ts-ignore expects CertificateLabel
     const result = wrapPem(input, label);
     expect(result).toBe(expected);
   });
 });
+
+describe('unwrapPem', () => {
+  it('should unwrap a PEM-formatted string and return the Base64 content', () => {
+    const input = `-----BEGIN TEST LABEL-----
+YWJjMTIz
+-----END TEST LABEL-----`;
+    const expected = 'YWJjMTIz';
+
+    const result = unwrapPem(input);
+    expect(result).toBe(expected);
+  });
+
+  it('should handle PEM strings with multiple lines of Base64 content', () => {
+    const input = `-----BEGIN TEST LABEL-----
+ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/
+ABCDEFGHIJKLMNOPQRSTUVWXYZ
+-----END TEST LABEL-----`;
+    const expected =
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+    const result = unwrapPem(input);
+    expect(result).toBe(expected);
+  });
+
+  it('should handle PEM strings with extra whitespace', () => {
+    const input = `   -----BEGIN TEST LABEL-----
+YWJjMTIz
+-----END TEST LABEL-----   `;
+    const expected = 'YWJjMTIz';
+
+    const result = unwrapPem(input);
+    expect(result).toBe(expected);
+  });
+
+  it('should handle an empty PEM string gracefully', () => {
+    const input = `-----BEGIN EMPTY-----
+
+-----END EMPTY-----`;
+    const expected = '';
+
+    const result = unwrapPem(input);
+    expect(result).toBe(expected);
+  });
+
+  it('should handle labels with spaces and special characters', () => {
+    const input = `-----BEGIN MY LABEL 123!@#-----
+YQ==
+-----END MY LABEL 123!@#-----`;
+    const expected = 'YQ==';
+
+    const result = unwrapPem(input);
+    expect(result).toBe(expected);
+  });
+});
+
+describe('derToPem', () => {
+  it('should convert a DER-encoded buffer to PEM format with a given label', () => {
+    const derBuffer = Buffer.from('YWJjMTIz', BinaryToTextEncoding.BASE_64); // DER-encoded buffer for "abc123"
+    const label = 'TEST LABEL';
+    const expected = `-----BEGIN TEST LABEL-----
+YWJjMTIz
+-----END TEST LABEL-----`;
+
+    //@ts-ignore expects CertificateLabel
+    const result = derToPem(derBuffer, label);
+    expect(result).toBe(expected);
+  });
+
+  it('should handle an empty DER buffer gracefully', () => {
+    const derBuffer = Buffer.from('', 'base64');
+    const label = 'EMPTY';
+    const expected = `-----BEGIN EMPTY-----
+
+-----END EMPTY-----`;
+
+    //@ts-ignore expects CertificateLabel
+    const result = derToPem(derBuffer, label);
+    expect(result).toBe(expected);
+  });
+
+  it('should handle labels with spaces and special characters', () => {
+    const derBuffer = Buffer.from('YQ==', 'base64'); // DER-encoded buffer for "a"
+    const label = 'MY LABEL 123!@#';
+    const expected = `-----BEGIN MY LABEL 123!@#-----
+YQ==
+-----END MY LABEL 123!@#-----`;
+
+    //@ts-ignore expects CertificateLabel
+    const result = derToPem(derBuffer, label);
+    expect(result).toBe(expected);
+  });
+});
+
+describe('pemToDer', () => {});

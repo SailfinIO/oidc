@@ -30,3 +30,15 @@ export const capitalize = (s: string): string =>
  */
 export const camelToKebab = (s: string): string =>
   s.replace(/([A-Z])/g, '-$1').toLowerCase();
+
+/**
+ * Checks the environment to determinem, i.e. production or development.
+ *
+ * @returns {boolean} True if the environment is production, false otherwise.
+ */
+export const isProduction = (): boolean => {
+  // create a new RegExp object to match the environment
+  const prodRegExp = new RegExp(/production|prod|PROD|Prod|PRODUCTION|prd/);
+  // return the result of the match
+  return prodRegExp.test(process.env.NODE_ENV);
+};

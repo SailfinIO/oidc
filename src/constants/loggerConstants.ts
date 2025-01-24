@@ -1,5 +1,3 @@
-// src/utils/COLOR_CODES.ts
-
 import { KeyValue } from '../types';
 import { LogLevel } from '../enums';
 

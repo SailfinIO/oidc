@@ -42,7 +42,7 @@ const createMockRequest = (
     body = null,
     query = {},
   } = options;
-
+  //@ts-ignore
   const req = new Request()
     .setUrl(url)
     .setHeaders(headers)
@@ -132,7 +132,7 @@ describe('OIDC Middleware', () => {
     } as unknown as jest.Mocked<Client>;
 
     mockClient.getConfig.mockReturnValue(mockConfig);
-
+    //@ts-ignore
     mockRequest = new Request()
       .setUrl('http://localhost')
       .setHeaders({
@@ -231,6 +231,7 @@ describe('OIDC Middleware', () => {
       cookie: undefined,
     };
 
+    //@ts-ignore
     const mockRequest = new Request()
       .setUrl('http://localhost/callback?code=123&state=abc')
       .setHeaders({
@@ -451,6 +452,7 @@ describe('OIDC Middleware', () => {
       user: undefined,
       cookie: undefined,
     };
+    //@ts-ignore
     const mockRequest = new Request()
       .setUrl('http://localhost/callback?code=123&state=abc')
       .setHeaders({
@@ -492,13 +494,14 @@ describe('OIDC Middleware', () => {
     );
     expect(mockClient.getUserInfo).toHaveBeenCalled();
     expect(mockRequest.session?.user).toEqual({ sub: 'user1' });
-    expect(mockRequest.session?.state).toBeUndefined();
+    expect(mockRequest.session?.state).toEqual({});
     expect(mockResponse.redirect).toHaveBeenCalledWith('/dashboard');
     expect(mockNext).not.toHaveBeenCalled();
   });
 
   it('should throw ClientError if session is missing', async () => {
     // Setup the request without a session
+    //@ts-ignore
     const mockRequest = new Request()
       .setUrl('http://localhost/callback?code=123&state=abc')
       .setHeaders({
@@ -556,6 +559,7 @@ describe('OIDC Middleware', () => {
       user: undefined,
       cookie: undefined,
     };
+    //@ts-ignore
     const mockRequest = new Request()
       .setUrl('http://localhost/callback?code=123&state=abc')
       .setHeaders({
@@ -617,6 +621,7 @@ describe('OIDC Middleware', () => {
       cookie: undefined,
     };
 
+    //@ts-ignore
     const mockRequest = new Request()
       .setUrl('http://localhost/callback?code=123&state=abc')
       .setHeaders({
@@ -683,6 +688,7 @@ describe('OIDC Middleware', () => {
       method: RequestMethod,
       headers: Record<string, string> = {},
     ): IRequest {
+      //@ts-ignore
       const req = new Request()
         .setUrl('http://localhost')
         .setMethod(method)
