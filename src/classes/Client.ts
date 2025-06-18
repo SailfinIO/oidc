@@ -2,7 +2,7 @@
 
 import { Auth } from './Auth';
 import { UserInfo } from './UserInfo';
-import { Logger } from '../utils';
+import { Logger, deepMerge } from '../utils';
 import {
   GrantType,
   LogLevel,
@@ -45,18 +45,29 @@ export class Client {
   private session: ISession | null = null;
 
   constructor(userConfig: Partial<IClientConfig>) {
-    // Merge userConfig with defaultClientConfig
-    this.config = { ...defaultClientConfig, ...userConfig } as IClientConfig;
-
-    // Initialize logger **before** validation
+    this.config = deepMerge(defaultClientConfig, userConfig) as IClientConfig;
+    // Ensure logging is always defined
     const envLogLevel = process.env.OIDC_CLIENT_LOG_LEVEL as LogLevel;
-    this.logger =
-      this.config.logging?.logger ||
-      new Logger(
+    if (
+      !this.config.logging?.logger ||
+      typeof this.config.logging.logger.debug !== 'function'
+    ) {
+      this.logger = new Logger(
         Client.name,
         this.config.logging?.logLevel || envLogLevel || LogLevel.INFO,
         true,
       );
+      this.config.logging.logger = this.logger;
+    } else {
+      // Initialize logger **before** validation
+      this.logger =
+        this.config.logging?.logger ||
+        new Logger(
+          Client.name,
+          this.config.logging?.logLevel || envLogLevel || LogLevel.INFO,
+          true,
+        );
+    }
 
     this.validateConfig(this.config);
 
@@ -131,6 +142,8 @@ export class Client {
   /**
    * Centralized config validation.
    */
+  // src/classes/Client.ts
+
   private validateConfig(config: IClientConfig): void {
     const missingRequiredFields: (keyof IClientConfig)[] = [];
 
@@ -151,12 +164,25 @@ export class Client {
       throw new ClientError('At least one scope is required', 'CONFIG_ERROR');
     }
 
-    // Assign defaults for optional fields
+    // Assign defaults for optional fields if not already set
     if (!config.grantType) {
       this.logger.debug(
         'No grantType specified, defaulting to authorization_code',
       );
       config.grantType = GrantType.AuthorizationCode;
+    }
+
+    // Validate session.cookie.secret in production
+    const isProd =
+      process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
+    if (isProd) {
+      const secret = config.session?.cookie?.secret;
+      if (!secret || secret === 'default-secret') {
+        throw new ClientError(
+          'A secure session cookie secret must be provided in production environments.',
+          'CONFIG_ERROR',
+        );
+      }
     }
   }
 
@@ -170,9 +196,11 @@ export class Client {
     this.logger.setLogLevel(level);
   }
 
-  public async getAuthorizationUrl(): Promise<IAuthorizationUrlResponse> {
+  public async getAuthorizationUrl(
+    additionalParams?: Record<string, string>,
+  ): Promise<IAuthorizationUrlResponse> {
     await this.ensureInitialized();
-    return this.auth.getAuthorizationUrl();
+    return this.auth.getAuthorizationUrl(additionalParams);
   }
 
   public async handleRedirect(

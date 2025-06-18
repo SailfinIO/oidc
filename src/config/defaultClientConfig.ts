@@ -7,6 +7,7 @@
  * @module src/config/defaultClientConfig
  */
 
+import { isProduction } from '../utils/helpers';
 import {
   LogLevel,
   GrantType,
@@ -21,7 +22,7 @@ import {
   SessionMode,
 } from '../enums';
 import { IClientConfig } from '../interfaces';
-import { Logger } from '../utils';
+import { Logger } from '../utils/Logger';
 
 /**
  * Default configuration for the OAuth/OIDC client.
@@ -59,12 +60,12 @@ export const defaultClientConfig: Partial<IClientConfig> = {
     store: undefined, // No custom session store by default
     ttl: 3600000, // Session TTL of 1 hour (in milliseconds)
     cookie: {
-      name: 'sid', // Default session ID cookie name
-      secret: 'default-secret', // Replace with a secure secret in production
+      name: 'sailfin.sid', // Default session ID cookie name
+      secret: process.env.SESSION_SECRET || 'default-secret', // Replace with a secure secret in production
       options: {
-        secure: true, // Restrict cookies to HTTPS
-        httpOnly: true, // Prevent JavaScript access to cookies
-        sameSite: SameSite.STRICT, // Use Strict SameSite for CSRF protection
+        secure: isProduction(), // Use secure cookies in production
+        httpOnly: isProduction(), // Use HTTP-only cookies in production
+        sameSite: isProduction() ? SameSite.NONE : SameSite.LAX,
         path: '/', // Default cookie path
         maxAge: 3600, // Cookie expiration in seconds (1 hour)
         domain: undefined, // No specific domain by default

@@ -1,6 +1,6 @@
 // src/utils/rsaKeyConverter.test.ts
 
-import { rsaJwkToPem } from './rsaKeyConverter';
+import { rsaJwkToPem } from './rsaKeyUtils';
 import { BinaryToTextEncoding } from '../enums';
 import { base64UrlDecode } from './urlUtils';
 

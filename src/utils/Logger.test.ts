@@ -2,7 +2,7 @@
 
 import { Logger } from './Logger';
 import { LogLevel } from '../enums';
-import { COLOR_CODES } from '../constants/logger-constants';
+import { COLOR_CODES } from '../constants/loggerConstants';
 
 describe('Logger', () => {
   let logger: Logger;

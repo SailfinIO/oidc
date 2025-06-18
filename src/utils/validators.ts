@@ -5,7 +5,7 @@ import {
   COOKIE_VALUE_REG_EXP,
   DOMAIN_VALUE_REG_EXP,
   PATH_VALUE_REG_EXP,
-} from '../constants/cookie-constants';
+} from '../constants/cookieConstants';
 import { CookieError } from '../errors/CookieError';
 
 /**

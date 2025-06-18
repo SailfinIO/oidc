@@ -1,6 +1,8 @@
 import { Protected } from './protected';
 import { MetadataManager } from './MetadataManager';
-import { Claims, RequestMethod, RouteAction } from '../enums';
+import { Claims } from '../enums';
+import { IRequest, IResponse } from '../interfaces';
+import { Client } from '../classes/Client';
 
 jest.mock('./MetadataManager');
 
@@ -9,7 +11,7 @@ describe('Protected Decorator', () => {
     jest.resetAllMocks();
   });
 
-  it('should set default method and route metadata', () => {
+  it('should set method metadata without specific claims', () => {
     class TestController {
       @Protected()
       testMethod() {}
@@ -18,6 +20,7 @@ describe('Protected Decorator', () => {
     const methodMetadataCalls = (MetadataManager.setMethodMetadata as jest.Mock)
       .mock.calls;
     expect(methodMetadataCalls).toHaveLength(1);
+
     const [targetCtor, methodName, methodMetadata] = methodMetadataCalls[0];
     expect(targetCtor).toBe(TestController);
     expect(methodName).toBe('testMethod');
@@ -26,28 +29,22 @@ describe('Protected Decorator', () => {
       requiredClaims: undefined,
     });
 
+    // Verify no route metadata was set
     const routeMetadataCalls = (MetadataManager.setRouteMetadata as jest.Mock)
       .mock.calls;
-    expect(routeMetadataCalls).toHaveLength(1);
-    const [reqMethod, path, routeMetadata] = routeMetadataCalls[0];
-    expect(reqMethod).toBe(RequestMethod.GET);
-    expect(path).toBe('/testMethod');
-    expect(routeMetadata).toEqual({
-      requiresAuth: true,
-      requiredClaims: undefined,
-      action: RouteAction.Protected,
-    });
+    expect(routeMetadataCalls).toHaveLength(0);
   });
 
-  it('should set method and route metadata with specific claims', () => {
+  it('should set method metadata with specific claims', () => {
     class TestController {
-      @Protected(RequestMethod.GET, [Claims.Profile, Claims.Email])
+      @Protected([Claims.Profile, Claims.Email])
       anotherMethod() {}
     }
 
     const methodMetadataCalls = (MetadataManager.setMethodMetadata as jest.Mock)
       .mock.calls;
     expect(methodMetadataCalls).toHaveLength(1);
+
     const [targetCtor, methodName, methodMetadata] = methodMetadataCalls[0];
     expect(targetCtor).toBe(TestController);
     expect(methodName).toBe('anotherMethod');
@@ -56,16 +53,67 @@ describe('Protected Decorator', () => {
       requiredClaims: [Claims.Profile, Claims.Email],
     });
 
+    // Verify no route metadata was set
     const routeMetadataCalls = (MetadataManager.setRouteMetadata as jest.Mock)
       .mock.calls;
-    expect(routeMetadataCalls).toHaveLength(1);
-    const [reqMethod, path, routeMetadata] = routeMetadataCalls[0];
-    expect(reqMethod).toBe(RequestMethod.GET);
-    expect(path).toBe('/anotherMethod');
-    expect(routeMetadata).toEqual({
-      requiresAuth: true,
-      requiredClaims: [Claims.Profile, Claims.Email],
-      action: RouteAction.Protected,
-    });
+    expect(routeMetadataCalls).toHaveLength(0);
+  });
+
+  it('should wrap the original method with session and claims checks', async () => {
+    // Mock getClaims to simulate user having required claims
+    const mockGetClaims = jest.fn().mockResolvedValue({ email: true });
+
+    // Create a fake Client instance with the mocked methods
+    const fakeClient = {
+      getClaims: mockGetClaims,
+      introspectToken: jest.fn().mockResolvedValue(true), // Mock token introspection
+      getLogger: jest.fn().mockReturnValue(console),
+      getSessionStore: jest.fn().mockReturnValue({
+        destroy: jest.fn().mockResolvedValue(undefined),
+      }),
+      getConfig: jest.fn().mockReturnValue({
+        session: {
+          cookie: {
+            name: 'sid',
+          },
+        },
+      }),
+      logout: jest.fn().mockResolvedValue('http://logout.url'),
+    } as unknown as Client;
+
+    // Create dummy request and response objects with a valid session and access token
+    const req = {
+      session: {
+        user: { sub: '123' },
+        cookie: { access_token: 'valid-access-token' }, // Correctly nested token
+      },
+    } as IRequest;
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      send: jest.fn(),
+    } as unknown as IResponse;
+
+    let originalCalled = false;
+
+    class TestController {
+      client = fakeClient;
+
+      @Protected([Claims.Email])
+      async protectedMethod(_req: IRequest, _res: IResponse) {
+        originalCalled = true;
+      }
+    }
+
+    const controller = new TestController();
+
+    // Manually invoke the decorated method
+    await controller.protectedMethod(req, res);
+
+    // Check that getClaims was called and the original method executed
+    expect(fakeClient.introspectToken).toHaveBeenCalledWith(
+      'valid-access-token',
+    );
+    expect(mockGetClaims).toHaveBeenCalled();
+    expect(originalCalled).toBe(true);
   });
 });

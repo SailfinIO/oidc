@@ -40,4 +40,46 @@ export enum BinaryToTextEncoding {
    * @member {string} BinaryToTextEncoding.HEX
    */
   HEX = 'hex',
+
+  /**
+   * ASCII encoding, which maps each byte to a printable ASCII character.
+   *
+   * @member {string} BinaryToTextEncoding.ASCII
+   */
+  ASCII = 'ascii',
+
+  /**
+   * UTF-8 encoding, which represents binary data as a UTF-8-encoded string.
+   *
+   * @member {string} BinaryToTextEncoding.UTF8
+   */
+  UTF_8 = 'utf8',
+
+  /**
+   * UTF-16 encoding, which represents binary data as a UTF-16-encoded string.
+   *
+   * @member {string} BinaryToTextEncoding.UTF16
+   */
+  UTF16 = 'utf16',
+
+  /**
+   * UTF-16LE encoding, which represents binary data as a little-endian UTF-16-encoded string.
+   *
+   * @member {string} BinaryToTextEncoding.UTF16LE
+   */
+  UTF16LE = 'utf16le',
+
+  /**
+   * UTF-16BE encoding, which represents binary data as a big-endian UTF-16-encoded string.
+   *
+   * @member {string} BinaryToTextEncoding.UTF16BE
+   */
+  UTF16BE = 'utf16be',
+
+  /**
+   * Latin1 encoding, which represents binary data as a Latin-1-encoded string.
+   *
+   * @member {string} BinaryToTextEncoding.LATIN1
+   */
+  LATIN1 = 'latin1',
 }

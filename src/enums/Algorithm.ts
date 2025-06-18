@@ -129,4 +129,10 @@ export enum Algorithm {
    * @member {string} Algorithm.SHA512
    */
   SHA512 = 'SHA512',
+
+  MD5 = 'MD5',
+
+  EC_PUBLIC_KEY = 'EC_PUBLIC_KEY',
+
+  RSA_PUBLIC_KEY = 'RSA_PUBLIC_KEY',
 }

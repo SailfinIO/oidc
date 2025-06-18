@@ -17,3 +17,4 @@ export * from './MemoryStore';
 export * from './CookieStore';
 export * from './Response';
 export * from './Request';
+export * from './SailfinClientModule';

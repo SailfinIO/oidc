@@ -7,3 +7,5 @@ export * from './Address';
 export * from './KnownKeys';
 export * from './NextFunction';
 export * from './ClaimsRecord';
+export * from './Provider';
+export * from './HttpExceptionBodyMessage';

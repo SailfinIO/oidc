@@ -2,7 +2,7 @@
 
 import { ILogger } from '../interfaces';
 import { LogLevel } from '../enums';
-import { COLOR_CODES, RESET_CODE } from '../constants/logger-constants';
+import { COLOR_CODES, RESET_CODE } from '../constants/loggerConstants';
 
 /**
  * A simple, customizable logger class for logging messages at various log levels.

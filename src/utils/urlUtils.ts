@@ -196,11 +196,12 @@ export const buildLogoutUrl = (params: ILogoutUrlParams): string => {
       searchParams.append('state', params.state);
     }
 
-    // Add any additional parameters as needed
-    // e.g., logout_hint, ui_locales, etc.
-    // if (params.logoutHint) {
-    //   searchParams.append('logout_hint', params.logoutHint);
-    // }
+    if (params.logoutHint) {
+      searchParams.append('logout_hint', params.logoutHint);
+    }
+    if (params.uiLocales) {
+      searchParams.append('ui_locales', params.uiLocales);
+    }
 
     url.search = searchParams.toString();
     return url.toString();

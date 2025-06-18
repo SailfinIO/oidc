@@ -45,7 +45,11 @@ export class MemoryStore implements IStore {
     };
     this.ttl = ttl || this.ttl;
     this.cache = new Cache<ISessionData>(this.logger, this.ttl);
-    this.mutex = new Mutex({ logger: this.logger });
+    this.mutex = new Mutex({
+      logger: this.logger,
+      defaultTimeout: 5000,
+      backoff: { maxAttempts: 5, initialDelay: 10, factor: 2, maxDelay: 1000 },
+    });
   }
 
   /**

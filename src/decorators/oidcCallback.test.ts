@@ -5,6 +5,37 @@ import { Client } from '../classes/Client';
 import { IClientConfig, IRequest, IResponse } from '../interfaces';
 import { StatusCode, StorageMechanism } from '../enums';
 import { Request, Response } from '../classes';
+import { IncomingMessage, ServerResponse } from 'http';
+
+/**
+ * Creates a mocked ServerResponse with jest.fn() for methods.
+ */
+export const createMockServerResponse = () => {
+  const mockSetHeader = jest.fn();
+  const mockGetHeader = jest.fn();
+  const mockRemoveHeader = jest.fn();
+  const mockEnd = jest.fn();
+  const mockWriteHead = jest.fn();
+
+  const mockRes: Partial<ServerResponse> = {
+    setHeader: mockSetHeader,
+    getHeader: mockGetHeader,
+    removeHeader: mockRemoveHeader,
+    end: mockEnd,
+    writeHead: mockWriteHead,
+    headersSent: false,
+    statusCode: StatusCode.OK,
+  };
+
+  return {
+    mockRes,
+    mockSetHeader,
+    mockGetHeader,
+    mockRemoveHeader,
+    mockEnd,
+    mockWriteHead,
+  };
+};
 
 // Dummy class to apply the decorator
 class DummyController {
@@ -26,11 +57,32 @@ describe('OidcCallback Decorator', () => {
   let mockResponse: IResponse;
   let dummyController: DummyController;
   let originalConsoleError: typeof console.error;
+  let response: IResponse;
+  let mockRes: Partial<ServerResponse>;
+  let mockSetHeader: jest.Mock;
+  let mockGetHeader: jest.Mock;
+  let mockRemoveHeader: jest.Mock;
+  let mockEnd: jest.Mock;
+  let mockWriteHead: jest.Mock;
 
   beforeEach(() => {
     // Mock console.error to prevent actual logging during tests
     originalConsoleError = console.error;
     console.error = jest.fn();
+
+    // Create a mocked ServerResponse
+    const mocks = createMockServerResponse();
+    mockRes = mocks.mockRes;
+    mockSetHeader = mocks.mockSetHeader;
+    mockGetHeader = mocks.mockGetHeader;
+    mockRemoveHeader = mocks.mockRemoveHeader;
+    mockEnd = mocks.mockEnd;
+    mockWriteHead = mocks.mockWriteHead;
+
+    // Instantiate Response with the mocked ServerResponse
+    response = new Response(mockRes as unknown as IncomingMessage);
+
+    mockResponse = response;
 
     // Mock the Client methods used in oidcCallback
     mockClient = {
@@ -68,6 +120,7 @@ describe('OidcCallback Decorator', () => {
     const userInfo = { sub: 'user123', name: 'John Doe' };
 
     // Initialize mockRequest with query parameters and other properties
+    //@ts-ignore
     mockRequest = new Request()
       .setUrl('http://localhost')
       .setHeaders({
@@ -83,7 +136,7 @@ describe('OidcCallback Decorator', () => {
       .setCookies({ sid: 'mock-sid' });
 
     // Initialize mockResponse and spy on its redirect method
-    mockResponse = new Response();
+
     const redirectSpy = jest.spyOn(mockResponse, 'redirect');
 
     // Initialize session on the request
@@ -138,6 +191,7 @@ describe('OidcCallback Decorator', () => {
     const userInfo = { sub: 'user456', name: 'Jane Smith' };
 
     // Initialize mockRequest with query parameters and other properties
+    //@ts-ignore
     mockRequest = new Request()
       .setUrl('http://localhost')
       .setHeaders({
@@ -153,7 +207,7 @@ describe('OidcCallback Decorator', () => {
       .setCookies({ sid: 'mock-sid' });
 
     // Initialize mockResponse and spy on its redirect method
-    mockResponse = new Response();
+
     const redirectSpy = jest.spyOn(mockResponse, 'redirect');
 
     // Initialize session on the request
@@ -208,8 +262,8 @@ describe('OidcCallback Decorator', () => {
 
   it('should respond with 400 if code and state is missing', async () => {
     // Arrange: Create a new Request without setting query
+    //@ts-ignore
     mockRequest = new Request();
-    mockResponse = new Response();
 
     const statusSpy = jest.spyOn(mockResponse, 'status');
     const sendSpy = jest.spyOn(mockResponse, 'send');
@@ -238,6 +292,7 @@ describe('OidcCallback Decorator', () => {
     const postLoginRedirectUri = '/home';
     const userInfo = { sub: 'user789', name: 'Alice Johnson' };
 
+    //@ts-ignore
     mockRequest = new Request()
       .setUrl('http://localhost')
       .setHeaders({
@@ -261,7 +316,6 @@ describe('OidcCallback Decorator', () => {
     }
     dummyController = new StatelessController(mockClient);
 
-    mockResponse = new Response();
     const redirectSpy = jest.spyOn(mockResponse, 'redirect');
 
     mockClient.handleRedirect.mockResolvedValue();
@@ -289,8 +343,8 @@ describe('OidcCallback Decorator', () => {
   it('should respond with 400 if code is missing', async () => {
     // Arrange
     const state = 'stateMissingCode';
+    //@ts-ignore
     mockRequest = new Request(); // create a new Request
-    mockResponse = new Response();
 
     // Create spies on status and send
     const statusSpy = jest
@@ -322,8 +376,8 @@ describe('OidcCallback Decorator', () => {
   it('should respond with 400 if state is missing', async () => {
     // Arrange
     const authorizationCode = 'authCodeMissingState';
+    //@ts-ignore
     mockRequest = new Request(); // create a new Request
-    mockResponse = new Response();
 
     // Create spies on status and send
     const statusSpy = jest
@@ -359,6 +413,7 @@ describe('OidcCallback Decorator', () => {
     const storedState = 'storedState';
     const error = new Error('State mismatch');
 
+    //@ts-ignore
     mockRequest = new Request()
       .setUrl('http://localhost')
       .setHeaders({
@@ -374,7 +429,7 @@ describe('OidcCallback Decorator', () => {
       .setCookies({ sid: 'mock-sid' });
 
     // Initialize response and spies if needed
-    mockResponse = new Response();
+
     const statusSpy = jest
       .spyOn(mockResponse, 'status')
       .mockReturnValue(mockResponse);
@@ -420,6 +475,7 @@ describe('OidcCallback Decorator', () => {
     const error = new Error('Code verifier missing');
 
     // Set up request query parameters
+    //@ts-ignore
     mockRequest = new Request()
       .setUrl('http://localhost')
       .setHeaders({
@@ -480,6 +536,7 @@ describe('OidcCallback Decorator', () => {
     const error = new Error('handleRedirect failed');
 
     // Set up request query parameters
+    //@ts-ignore
     mockRequest = new Request()
       .setUrl('http://localhost')
       .setHeaders({
@@ -541,6 +598,7 @@ describe('OidcCallback Decorator', () => {
     const error = new Error('handleRedirect failed');
 
     // Set up request query parameters
+    //@ts-ignore
     mockRequest = new Request()
       .setUrl('http://localhost')
       .setHeaders({
@@ -596,6 +654,7 @@ describe('OidcCallback Decorator', () => {
     const error = new Error('getUserInfo failed');
 
     // Set up request query parameters
+    //@ts-ignore
     mockRequest = new Request()
       .setUrl('http://localhost')
       .setHeaders({
@@ -684,6 +743,7 @@ describe('OidcCallback Decorator', () => {
     const error = new Error('getUserInfo failed');
 
     // Set up request query parameters
+    //@ts-ignore
     mockRequest = new Request()
       .setUrl('http://localhost')
       .setHeaders({
@@ -764,7 +824,7 @@ describe('OidcCallback Decorator', () => {
 
   it('should respond with 400 if request is missing', async () => {
     // Arrange
-    mockResponse = new Response();
+
     const statusSpy = jest
       .spyOn(mockResponse, 'status')
       .mockReturnValue(mockResponse);
@@ -797,6 +857,7 @@ describe('OidcCallback Decorator', () => {
     const userInfo = { sub: 'userNoSession', name: 'No Session User' };
 
     // Set up request query parameters
+    //@ts-ignore
     mockRequest = new Request()
       .setUrl('http://localhost')
       .setHeaders({
@@ -825,7 +886,7 @@ describe('OidcCallback Decorator', () => {
     dummyController = new NoSessionController(mockClient);
 
     // Initialize mockResponse and create a spy for the redirect method
-    mockResponse = new Response();
+
     const redirectSpy = jest.spyOn(mockResponse, 'redirect');
 
     // Mock client.handleRedirect and getUserInfo
